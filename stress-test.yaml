@@ -1,0 +1,19 @@
+services:
+  stress-test:
+    env_file:
+      - .env
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: stress-test
+    volumes:
+      - "./app:/app/app"
+    environment:
+      - PYTHONUNBUFFERED=1
+    working_dir: /app
+    command: uv run app/stress-test.py
+    networks: ["tts-network"]
+
+networks:
+  tts-network:
+    external: true
