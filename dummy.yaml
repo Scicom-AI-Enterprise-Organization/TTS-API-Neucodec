@@ -1,0 +1,14 @@
+services:
+  nvidia-smi:
+    image: nvidia/cuda:12.9.0-base-ubuntu22.04
+    ipc: host
+    shm_size: 10.24gb
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["1"]
+              capabilities: [gpu]
+    container_name: nvidia-smi
+    command: nvidia-smi

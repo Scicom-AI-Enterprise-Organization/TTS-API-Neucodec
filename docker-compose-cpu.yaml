@@ -1,0 +1,23 @@
+services:
+  tts-api:
+    env_file:
+      - .env
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: tts-api
+    ports:
+      - "9091:9091"
+    volumes:
+      - "~/.cache/huggingface:/root/.cache/huggingface"
+      - "./app:/app/app"
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    working_dir: /app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 9091 --workers 1 --reload --reload-dir ./app
+    networks: ["tts-network"]
+
+networks:
+  tts-network:
+    external: true
