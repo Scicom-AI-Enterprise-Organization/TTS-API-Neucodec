@@ -1,7 +1,5 @@
 services:
   tts-engine:
-    env_file:
-      - .env_vllm
     image: vllm/vllm-openai:v0.11.0
     ipc: host
     shm_size: 10.24gb
@@ -10,14 +8,27 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ["1"]
+              device_ids: ["0"]
               capabilities: [gpu]
     container_name: tts-engine
-    command: --dtype bfloat16 --port 9090 --gpu-memory-utilization 0.9 --model Scicom-intl/Multilingual-TTS-1.7B-v0.1 --served-model-name scicom-ai-enterprise/TTS-1.7B-Stage2-english --max-model-len 4096 -O.cudagraph_mode=FULL_AND_PIECEWISE
+    command:
+      - --dtype 
+      - bfloat16
+      - --model
+      - ${STT_MODEL:-Scicom-intl/Multilingual-TTS-1.7B-Base}
+      - --port
+      - "9093"
+      - --gpu-memory-utilization 
+      - ${GPU_MEM_UTIL:-0.7}
+      - --max-model-len
+      - "4096"
+      - -O.cudagraph_mode=FULL_AND_PIECEWISE
+      - --served-model-name 
+      - TTS-model
     volumes:
       - "~/.cache/huggingface:/root/.cache/huggingface"
     ports:
-      - "9090:9090"
+      - "9093:9093"
     networks: ["tts-network"]
 
 networks:
