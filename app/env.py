@@ -1,13 +1,13 @@
 import os
 import logging
 
-TTS_API = os.environ.get('TTS_API', 'http://tts-engine:9090')
+TTS_API = os.environ.get('TTS_API', 'http://tts-engine:9093')
 if '/v1/completions' not in TTS_API:
     TTS_API = TTS_API + '/v1/completions'
-MODEL_NAME = os.environ.get('MODEL_NAME', 'Scicom-intl/Multilingual-TTS-1.7B-v0.1')
+MODEL_NAME = os.environ.get('MODEL_NAME', 'TTS-model')
 DEFAULT_SPEAKER = os.environ.get('DEFAULT_SPEAKER', 'husein')
 SPEAKERS = os.environ.get('SPEAKERS', 'husein,idayu,jenny')
-DEFAULT_TEMPERATURE = float(os.environ.get('DEFAULT_TEMPERATURE', '0.6'))
+DEFAULT_TEMPERATURE = float(os.environ.get('DEFAULT_TEMPERATURE', '0.7'))
 DEFAULT_REPETITION_PENALTY = float(os.environ.get('DEFAULT_REPETITION_PENALTY', '1.15'))
 DEFAULT_MAX_TOKENS = int(os.environ.get('DEFAULT_MAX_TOKENS', '3072'))
 DEFAULT_PLAYBACK_SPEED = float(os.environ.get('DEFAULT_PLAYBACK_SPEED', '1.5'))

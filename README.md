@@ -1,63 +1,148 @@
 # Streamable TTS API
 
-## How to vLLM
+Streaming Text-to-Speech and Voice Conversion API with dynamic batching, CUDA Graphs, and torch.compile support.
 
-1. run vLLM in background,
+## Setup
+
+### 1. Start vLLM backend
 
 ```bash
+STT_MODEL=Scicom-intl/Multilingual-TTS-1.7B-Base GPU_MEM_UTIL=0.7 \
 docker compose -f vllm.yaml up --detach
 ```
 
-You can use direct vLLM API access for `TTS_API`, set `TTS_API=http://tts-engine:9090` in [.env](.env).
+Set `TTS_API=http://tts-engine:9093` in your [.env](.env) to point to the vLLM backend.
 
-## API
+### 2. Configure environment
 
-1. Add `.env`, follow [.env_example](.env_example)
+Copy [.env_example](.env_example) to `.env` and adjust as needed. See [app/env.py](app/env.py) for all available variables:
 
-You can add more variables based on [app/main.py](app/main.py).
+| Variable | Default | Description |
+|---|---|---|
+| `TTS_API` | `http://tts-engine:9093` | vLLM backend URL |
+| `MODEL_NAME` | `TTS-model` | Model identifier |
+| `DEFAULT_SPEAKER` | `husein` | Default voice |
+| `SPEAKERS` | `husein,idayu,jenny` | Available voices |
+| `DEFAULT_TEMPERATURE` | `0.6` | Sampling temperature |
+| `DEFAULT_REPETITION_PENALTY` | `1.15` | Repetition penalty |
+| `DEFAULT_MAX_TOKENS` | `3072` | Max output tokens |
+| `DEFAULT_PLAYBACK_SPEED` | `1.5` | Playback speed multiplier |
+| `DEFAULT_PLAYBACK_OVERLAP_SPEED` | `0.2` | Overlap speed for crossfading |
+| `DYNAMIC_BATCHING` | `false` | Enable dynamic batching |
+| `MICROSLEEP` | `1e-4` | Batch collection interval (seconds) |
+| `MAX_BATCH_SIZE` | `16` | Max requests per batch |
+| `CUDA_GRAPH_BATCH` | `[]` | CUDA graph bucket sizes, e.g. `[0.1, 0.2, 0.5, 1.0, 1.5, 2.0, 3.0, 10.0]` |
+| `TORCH_COMPILE` | `false` | Use torch.compile instead of CUDA Graphs |
+| `DEBUG_AUDIO` | `false` | Save intermediate audio chunks to disk |
+| `SENTRY_DSN` | ` ` | Sentry DSN for error tracking |
 
-### Default run in GPU
+### 3. Run the API
+
+**GPU:**
 
 ```bash
 docker compose up --build
 ```
 
-### Default run in CPU
+**CPU:**
 
 ```bash
 docker compose -f docker-compose-cpu.yaml up --build
 ```
 
-### Streaming to file
+## API Endpoints
+
+### `GET /v1/audio/speaker`
+
+Returns the list of available speaker voices.
+
+### `POST /v1/audio/speech` — Text-to-Speech
+
+Accepts JSON body.
+
+**Parameters:**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `input` | string | required | Text to synthesize |
+| `voice` | string | `husein` | Speaker voice |
+| `model` | string | `TTS-model` | Model name |
+| `response_format` | `pcm` \| `wav` | `pcm` | Output audio format |
+| `temperature` | float | `0.6` | Sampling temperature |
+| `repetition_penalty` | float | `1.15` | Repetition penalty |
+| `max_tokens` | int | `3072` | Max output tokens |
+| `stream` | bool | `true` | Stream audio response |
+| `playback_speed` | float | `1.5` | Playback speed |
+| `playback_overlap_speed` | float | `0.2` | Overlap for crossfading |
+| `normalize_malaysian` | bool | `true` | Apply Malaysian text normalization |
+
+**Example:**
 
 ```bash
-curl -X POST \
-  'http://localhost:9091/v1/audio/speech' \
-  -H 'accept: audio/wav' \
+curl -X POST 'http://localhost:9091/v1/audio/speech' \
   -H 'Content-Type: application/json' \
   -d '{
     "input": "Hello! How can I help you? can I get your passport number sir.",
     "voice": "husein",
-    "model": "Scicom-intl/Multilingual-TTS-1.7B-v0.1",
+    "model": "TTS-model",
     "response_format": "wav",
     "temperature": 0.7,
     "stream": true,
     "playback_speed": 0.5,
     "playback_overlap_speed": 0.1,
-    "normalize": true
+    "normalize_malaysian": true
   }' \
   --output output.wav
 ```
 
-## Stress test
+### `POST /v1/audio/vc` — Voice Conversion
 
-This will stress test current worker size based on [docker-compose.yaml](docker-compose.yaml), to stress test is simple,
+Accepts multipart form data. Clones the reference voice and generates speech for new text.
+
+**Parameters:**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `reference_audio` | file | required | Reference audio file |
+| `reference_text` | string | required | Transcript of the reference audio |
+| `generate_text` | string | required | Text to generate in the cloned voice |
+| `model` | string | `TTS-model` | Model name |
+| `response_format` | `pcm` \| `wav` | `pcm` | Output audio format |
+| `temperature` | float | `0.6` | Sampling temperature |
+| `repetition_penalty` | float | `1.15` | Repetition penalty |
+| `max_tokens` | int | `3072` | Max output tokens |
+| `stream` | bool | `true` | Stream audio response |
+| `playback_speed` | float | `1.5` | Playback speed |
+| `playback_overlap_speed` | float | `0.2` | Overlap for crossfading |
+
+**Example:**
+
+```bash
+curl -X POST 'http://localhost:9091/v1/audio/vc' \
+  -H 'Content-Type: multipart/form-data' \
+  --form 'reference_audio=@jenny.wav' \
+  --form 'reference_text=I wonder if I shall ever be happy enough to have real lace on my clothes and bows on my caps.' \
+  --form 'generate_text=Ye encik, apa yang saya boleh tolong?' \
+  --form 'model=TTS-model' \
+  --form 'response_format=wav' \
+  --form 'temperature=0.7' \
+  --form 'repetition_penalty=1.15' \
+  --form 'max_tokens=3072' \
+  --form 'stream=true' \
+  --form 'playback_speed=1.5' \
+  --form 'playback_overlap_speed=0.2' \
+  --output vc.wav
+```
+
+## Stress Test
+
+Run the stress test against the current worker configuration defined in [docker-compose.yaml](docker-compose.yaml):
 
 ```bash
 docker compose -f stress-test.yaml up --build
 ```
 
-This will use default parameter from [app/env.py](app.py).
+Uses default parameters from [app/env.py](app/env.py).
 
 ### H100 NVL
 
@@ -75,10 +160,10 @@ stress-test  | P50 (Median): 2.568s
 stress-test  | P90: 3.431s
 stress-test  | P95: 3.474s
 stress-test  | P99: 3.510s
-stress-test  | 
+stress-test  |
 stress-test  | === AUDIO & REAL-TIME FACTOR (RTF) REPORT ===
 stress-test  | Avg Audio Duration: 5.702s
-stress-test  | 
+stress-test  |
 stress-test  | --- RTF Percentiles ---
 stress-test  | Min RTF: 0.294s
 stress-test  | Max RTF: 0.591s
@@ -102,10 +187,10 @@ stress-test  | P50 (Median): 2.198s
 stress-test  | P90: 2.286s
 stress-test  | P95: 2.290s
 stress-test  | P99: 2.295s
-stress-test  | 
+stress-test  |
 stress-test  | === AUDIO & REAL-TIME FACTOR (RTF) REPORT ===
 stress-test  | Avg Audio Duration: 5.573s
-stress-test  | 
+stress-test  |
 stress-test  | --- RTF Percentiles ---
 stress-test  | Min RTF: 0.329s
 stress-test  | Max RTF: 0.554s
@@ -133,10 +218,10 @@ stress-test  | P50 (Median): 6.424s
 stress-test  | P90: 6.530s
 stress-test  | P95: 6.543s
 stress-test  | P99: 6.544s
-stress-test  | 
+stress-test  |
 stress-test  | === AUDIO & REAL-TIME FACTOR (RTF) REPORT ===
 stress-test  | Avg Audio Duration: 5.759s
-stress-test  | 
+stress-test  |
 stress-test  | --- RTF Percentiles ---
 stress-test  | Min RTF: 0.966s
 stress-test  | Max RTF: 1.702s
@@ -162,10 +247,10 @@ stress-test  | P50 (Median): 6.273s
 stress-test  | P90: 6.313s
 stress-test  | P95: 6.322s
 stress-test  | P99: 6.322s
-stress-test  | 
+stress-test  |
 stress-test  | === AUDIO & REAL-TIME FACTOR (RTF) REPORT ===
 stress-test  | Avg Audio Duration: 5.731s
-stress-test  | 
+stress-test  |
 stress-test  | --- RTF Percentiles ---
 stress-test  | Min RTF: 0.983s
 stress-test  | Max RTF: 1.701s
@@ -179,7 +264,7 @@ stress-test  | ==========================
 
 #### Without dynamic batching
 
-Use [.env_dynamicbatching](.env_nodynamicbatching).
+Use [.env_nodynamicbatching](.env_nodynamicbatching).
 
 ```
 stress-test  | === SLO LATENCY REPORT ===
@@ -191,10 +276,10 @@ stress-test  | P50 (Median): 7.291s
 stress-test  | P90: 7.637s
 stress-test  | P95: 7.667s
 stress-test  | P99: 7.710s
-stress-test  | 
+stress-test  |
 stress-test  | === AUDIO & REAL-TIME FACTOR (RTF) REPORT ===
 stress-test  | Avg Audio Duration: 5.630s
-stress-test  | 
+stress-test  |
 stress-test  | --- RTF Percentiles ---
 stress-test  | Min RTF: 1.228s
 stress-test  | Max RTF: 1.282s
