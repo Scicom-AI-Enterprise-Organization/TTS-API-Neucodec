@@ -130,18 +130,18 @@ def choose_bucket_len(max_len):
 def compute_thread_fn(loop):
     while True:
         uuid_str, padded_token, padded_token_len, futures = compute_queue.get()
-        logging.info(f'{uuid_str}, enter compute_thread_fn')
+        logging.debug(f'{uuid_str}, enter compute_thread_fn')
         shapes = padded_token.shape
 
         with torch.no_grad():
             with cuda.stream(compute_stream):
                 compute_stream.wait_stream(h2d_stream)
                 if shapes in buckets:
-                    logging.info(f'{uuid_str}, Hit compute shape {shapes}')
+                    logging.debug(f'{uuid_str}, Hit compute shape {shapes}')
                     recon = buckets[shapes](padded_token)
                 else:
                     recon = fn(padded_token)
-                logging.info(f'{uuid_str}, done compute shape {shapes}')
+                logging.debug(f'{uuid_str}, done compute shape {shapes}')
 
                 ys = recon.cpu()
             compute_stream.synchronize()
@@ -153,7 +153,7 @@ def compute_thread_fn(loop):
 def batch_thread_fn():
     while True:
         uuid_str, batch = batch_queue.get()
-        logging.info(f'{uuid_str}, enter batch_thread_fn')
+        logging.debug(f'{uuid_str}, enter batch_thread_fn')
         futures, tokens = zip(*[(b[0], b[1]) for b in batch])
 
         padded_token_len = [len(t) for t in tokens]
@@ -161,7 +161,7 @@ def batch_thread_fn():
         target_T = choose_bucket_len(max_len)
         padded_token = make_pinned_batch(tokens, target_T)
         shapes = padded_token.shape
-        logging.info(f'{uuid_str}, batch shape {shapes} cpu')
+        logging.debug(f'{uuid_str}, batch shape {shapes} cpu')
 
         with cuda.stream(h2d_stream):
             padded_token_gpu = padded_token.to(device, non_blocking=True)
@@ -187,13 +187,13 @@ async def dynamic_batching():
             continue
 
         uuid_str = str(uuid.uuid4())
-        logging.info(f'{uuid_str}, dynamic batching size {len(batch)}')
+        logging.debug(f'{uuid_str}, dynamic batching size {len(batch)}')
         batch_queue.put((uuid_str, batch))
 
 def vc_compute_thread_fn(loop):
     while True:
         uuid_str, ys, futures = vc_compute_queue.get()
-        logging.info(f'{uuid_str}, enter vc_compute_thread_fn, batch size {len(ys)}')
+        logging.debug(f'{uuid_str}, enter vc_compute_thread_fn, batch size {len(ys)}')
         try:
             tokens = batch_encode(ys)
             for i, fut in enumerate(futures):
@@ -205,7 +205,7 @@ def vc_compute_thread_fn(loop):
 def vc_batch_thread_fn(loop):
     while True:
         uuid_str, batch = vc_batch_queue.get()
-        logging.info(f'{uuid_str}, enter vc_batch_thread_fn, batch size {len(batch)}')
+        logging.debug(f'{uuid_str}, enter vc_batch_thread_fn, batch size {len(batch)}')
         futures, ys = zip(*[(b[0], b[1]) for b in batch])
         vc_compute_queue.put((uuid_str, list(ys), futures))
 
@@ -229,7 +229,7 @@ async def vc_dynamic_batching():
             continue
 
         uuid_str = str(uuid.uuid4())
-        logging.info(f'{uuid_str}, vc dynamic batching size {len(batch)}')
+        logging.debug(f'{uuid_str}, vc dynamic batching size {len(batch)}')
         vc_batch_queue.put((uuid_str, batch))
 
 async def encode_audio(y):
@@ -446,7 +446,7 @@ async def tts_stream(data: TTSRequest, request: Request = None):
     speaker = data.voice
 
     s = data.input
-    logging.debug(f'input: {s}')
+    logging.info(f'input: {s}')
     if data.normalize_malaysian:
 
         s = s.replace('\n', ' ')
@@ -482,22 +482,35 @@ async def tts_stream(data: TTSRequest, request: Request = None):
             new_s.append(splitted)
         s = ' '.join(new_s)
 
-        logging.debug(f'out from internal normalizer: {s}')
-        
-        string = normalizer.normalize(
-            s, 
-            normalize_hingga = False, 
-            normalize_text = False, 
-            normalize_word_rules = False, 
-            normalize_time = True, 
-            normalize_cardinal = False,
-            normalize_ordinal = False,
-            normalize_url = True,
-            normalize_email = True,
-            normalize_in_english=normalize_in_english,
-        )
-        s = string['normalize']
-        logging.debug(f'out from malaya normalizer: {s}')
+        logging.info(f'out from internal normalizer: {s}')
+
+        # Split into Tamil-word segments and non-Tamil segments.
+        # re.split with a capturing group keeps the delimiters in the result list,
+        # so segments alternate: [non_tamil, tamil, non_tamil, tamil, ...]
+        segments = re.split(r'(\S*[^\x00-\x7F]\S*)', s)
+        normalized_parts = []
+        for seg in segments:
+            if re.search(r'[^\x00-\x7F]', seg):
+                normalized_parts.append(seg)
+            elif seg.strip():
+                result = normalizer.normalize(
+                    seg,
+                    normalize_hingga = False,
+                    normalize_text = False,
+                    normalize_word_rules = False,
+                    normalize_time = True,
+                    normalize_cardinal = False,
+                    normalize_ordinal = False,
+                    normalize_url = True,
+                    normalize_email = True,
+                    normalize_in_english=normalize_in_english,
+                )
+                normalized_parts.append(result['normalize'])
+            else:
+                normalized_parts.append(seg)
+        s = ''.join(normalized_parts)
+
+        logging.info(f'out from malaya normalizer: {s}')
 
         for k, v in replace_mapping.items():
             s = s.replace(k, v)
@@ -505,14 +518,14 @@ async def tts_stream(data: TTSRequest, request: Request = None):
         original_s = s
         s = apply_pronunciation_replacements(s)
         if s != original_s:
-            logging.debug(f'Pronunciation replacements applied: "{original_s}" -> "{s}"')
+            logging.info(f'Pronunciation replacements applied: "{original_s}" -> "{s}"')
 
     if not s.endswith('.'):
         s = s + '.'
     s = re.sub(r'[ ]+', ' ', s).strip()
 
     prompt = f'<|im_start|>{speaker}: {s}<|speech_start|>'
-    logging.debug(f'prompt: {prompt}')
+    logging.info(f'prompt: {prompt}')
 
     return await stream_speech(
         prompt=prompt,
