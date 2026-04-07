@@ -1,0 +1,7 @@
+FROM pytorch/pytorch:2.9.1-cuda12.8-cudnn9-runtime AS deps-resolver
+
+RUN pip install vllm==0.16.0
+
+RUN apt update
+
+RUN apt install build-essential -y

@@ -506,8 +506,10 @@ async def tts_stream(data: TTSRequest, request: Request = None):
         s = apply_pronunciation_replacements(s)
         if s != original_s:
             logging.debug(f'Pronunciation replacements applied: "{original_s}" -> "{s}"')
-        
-        s = re.sub(r'[ ]+', ' ', s).strip()
+
+    if not s.endswith('.'):
+        s = s + '.'
+    s = re.sub(r'[ ]+', ' ', s).strip()
 
     prompt = f'<|im_start|>{speaker}: {s}<|speech_start|>'
     logging.debug(f'prompt: {prompt}')

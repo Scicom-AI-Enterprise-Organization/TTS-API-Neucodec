@@ -63,6 +63,7 @@ before_replace_mapping = {
     '–': ' ',
     ';': ',',
     '’': "'",
+    '!': ',',
 }
 
 replace_mapping = {
