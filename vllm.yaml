@@ -1,6 +1,8 @@
 services:
   tts-engine:
-    image: vllm/vllm-openai:v0.11.0
+    build:
+      context: .
+      dockerfile: Dockerfile_vllm
     ipc: host
     shm_size: 10.24gb
     deploy:
@@ -12,17 +14,17 @@ services:
               capabilities: [gpu]
     container_name: tts-engine
     command:
+      - vllm
+      - serve
+      - ${STT_MODEL:-Scicom-intl/Multilingual-TTS-1.7B-Base}
       - --dtype 
       - bfloat16
-      - --model
-      - ${STT_MODEL:-Scicom-intl/Multilingual-TTS-1.7B-Base}
       - --port
       - "9093"
       - --gpu-memory-utilization 
       - ${GPU_MEM_UTIL:-0.7}
       - --max-model-len
       - "4096"
-      - -O.cudagraph_mode=FULL_AND_PIECEWISE
       - --served-model-name 
       - TTS-model
     volumes:

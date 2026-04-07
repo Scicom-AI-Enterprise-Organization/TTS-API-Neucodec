@@ -24,6 +24,6 @@ uvicorn>=0.35.0
 vector-quantize-pytorch==1.17.8
 wandb>=0.21.0
 distilcodec @ git+https://github.com/mesolitica/DistilCodec
-fastapi-loki-tempo @ git+https://github.com/huseinzol05/fastapi-loki-tempo
+fastapi-loki-tempo @ git+https://github.com/huseinzol05/fastapi-loki-tempo@95d4bf45138abf59704c92cf7a0633b33218d7a2
 malaya @ git+https://github.com/mesolitica/malaya@ddbfe3ba6e2e7e57fc845cb69226a4395b44f7d0
 neucodec @ git+https://github.com/Scicom-AI-Enterprise-Organization/neucodec

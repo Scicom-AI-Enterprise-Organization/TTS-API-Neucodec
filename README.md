@@ -7,7 +7,7 @@ Streaming Text-to-Speech and Voice Conversion API with dynamic batching, CUDA Gr
 ### 1. Start vLLM backend
 
 ```bash
-STT_MODEL=Scicom-intl/Multilingual-TTS-1.7B-Base GPU_MEM_UTIL=0.7 \
+STT_MODEL=Scicom-intl/Multilingual-Expressive-TTS-1.7B GPU_MEM_UTIL=0.7 \
 docker compose -f vllm.yaml up --detach
 ```
 
