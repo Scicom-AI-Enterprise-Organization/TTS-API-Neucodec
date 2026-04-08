@@ -324,10 +324,22 @@ async def stream_speech(
     overlap_chunk = int((overlap / codebook_size) * sr)
     fade_len = int(sr * 0.002)
 
+    def snap_to_zero_crossing(y_, margin=256):
+        """Find nearest zero crossing near the end of the chunk and trim there."""
+        if len(y_) < margin * 2:
+            return y_
+        search_region = y_[-margin:]
+        zero_crossings = np.where(np.diff(np.signbit(search_region)))[0]
+        if len(zero_crossings) > 0:
+            cut = len(y_) - margin + zero_crossings[-1]
+            return y_[:cut]
+        return y_
+
     async def audio_stream():
         buffer = []
         to_yield = 0
         count = 0
+        leftover = np.array([], dtype=np.float64)
 
         while True:
             try:
@@ -350,13 +362,14 @@ async def stream_speech(
                 _, y = await decode_speech_token("".join(buffer))
                 y_ = y[to_yield : -overlap_chunk]
                 y_ = np.clip(y_, -1.0, 1.0)
-                if len(y_) > fade_len:
-                    y_[-fade_len:] *= np.linspace(1, 0, fade_len)
+                y_ = np.concatenate([leftover, y_]) if len(leftover) else y_
+                trimmed = snap_to_zero_crossing(y_)
+                leftover = y_[len(trimmed):]
 
                 if DEBUG_AUDIO:
-                    sf.write(f'/app/app/{count}.wav', y_, sr)
+                    sf.write(f'/app/app/{count}.wav', trimmed, sr)
 
-                yield (y_ * 32767).astype(np.int16).tobytes()
+                yield (trimmed * 32767).astype(np.int16).tobytes()
                 await asyncio.sleep(0)
 
                 if to_yield == 0:
@@ -369,16 +382,22 @@ async def stream_speech(
             _, y = await decode_speech_token("".join(buffer))
             y_ = y[to_yield :]
             y_ = np.clip(y_, -1.0, 1.0)
-            if len(y_) > fade_len:
-                y_[-fade_len:] *= np.linspace(1, 0, fade_len)
+            y_ = np.concatenate([leftover, y_]) if len(leftover) else y_
 
             if DEBUG_AUDIO:
                 sf.write(f'/app/app/{count}.wav', y_, sr)
 
             yield (y_ * 32767).astype(np.int16).tobytes()
             await asyncio.sleep(0)
+        elif len(leftover):
+            yield (leftover * 32767).astype(np.int16).tobytes()
+            await asyncio.sleep(0)
 
     func = audio_stream()
+    stream_headers = {
+        'Cache-Control': 'no-cache, no-store',
+        'X-Accel-Buffering': 'no',
+    }
     if stream:
         if response_format == 'wav':
             async def wav_stream():
@@ -389,9 +408,12 @@ async def stream_speech(
                 yield wav_header
                 async for chunk in func:
                     yield chunk
-            return StreamingResponse(wav_stream(), media_type="audio/wav")
+            return StreamingResponse(wav_stream(), media_type="audio/wav", headers=stream_headers)
         else:
-            return StreamingResponse(func, media_type="audio/pcm")
+            stream_headers['X-Audio-Sample-Rate'] = str(sr)
+            stream_headers['X-Audio-Channels'] = '1'
+            stream_headers['X-Audio-Bit-Depth'] = '16'
+            return StreamingResponse(func, media_type="audio/pcm", headers=stream_headers)
     else:
         ys = []
         async for y_ in func:
