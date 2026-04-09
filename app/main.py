@@ -106,7 +106,10 @@ vc_batch_queue = thread_queue.Queue()
 vc_dynamic_batch_queue = asyncio.Queue()
 
 def thread_safe_set_result(loop, future, value):
-    loop.call_soon_threadsafe(future.set_result, value)
+    def _safe_set():
+        if not future.done():
+            future.set_result(value)
+    loop.call_soon_threadsafe(_safe_set)
 
 def make_pinned_batch(tokens, target_T, dtype=torch.long):
     B = len(tokens)
@@ -148,7 +151,7 @@ def compute_thread_fn(loop):
             for i, fut in enumerate(futures):
                 out_len = padded_token_len[i] * 480
                 ys_ = ys[i:i+1, :, :out_len]
-                loop.call_soon_threadsafe(fut.set_result, ys_)
+                thread_safe_set_result(loop, fut, ys_)
 
 def batch_thread_fn():
     while True:
@@ -197,10 +200,13 @@ def vc_compute_thread_fn(loop):
         try:
             tokens = batch_encode(ys)
             for i, fut in enumerate(futures):
-                loop.call_soon_threadsafe(fut.set_result, tokens[i])
+                thread_safe_set_result(loop, fut, tokens[i])
         except Exception as e:
             for fut in futures:
-                loop.call_soon_threadsafe(fut.set_exception, e)
+                def _safe_set_exc(f=fut, ex=e):
+                    if not f.done():
+                        f.set_exception(ex)
+                loop.call_soon_threadsafe(_safe_set_exc)
 
 def vc_batch_thread_fn(loop):
     while True:
@@ -457,7 +463,7 @@ class TTSRequest(BaseModel):
     stream: bool = True
     playback_speed: float = DEFAULT_PLAYBACK_SPEED
     playback_overlap_speed: float = DEFAULT_PLAYBACK_OVERLAP_SPEED
-    normalize_malaysian: bool = True
+    normalize_malaysian: bool = False
 
 @app.get('/v1/audio/speaker')
 async def speaker():
@@ -515,8 +521,10 @@ async def tts_stream(data: TTSRequest, request: Request = None):
             if re.search(r'[^\x00-\x7F]', seg):
                 normalized_parts.append(seg)
             elif seg.strip():
+                leading_ws = seg[:len(seg) - len(seg.lstrip())]
+                trailing_ws = seg[len(seg.rstrip()):]
                 result = normalizer.normalize(
-                    seg,
+                    seg.strip(),
                     normalize_hingga = False,
                     normalize_text = False,
                     normalize_word_rules = False,
@@ -527,7 +535,7 @@ async def tts_stream(data: TTSRequest, request: Request = None):
                     normalize_email = True,
                     normalize_in_english=normalize_in_english,
                 )
-                normalized_parts.append(result['normalize'])
+                normalized_parts.append(leading_ws + result['normalize'] + trailing_ws)
             else:
                 normalized_parts.append(seg)
         s = ''.join(normalized_parts)
