@@ -16,7 +16,7 @@ services:
     command:
       - vllm
       - serve
-      - ${STT_MODEL:-Scicom-intl/Multilingual-TTS-1.7B-Base}
+      - ${TTS_MODEL:-Scicom-intl/Multilingual-TTS-1.7B-Base}
       - --dtype 
       - bfloat16
       - --port
