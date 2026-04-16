@@ -1,5 +1,7 @@
 services:
   tts-engine:
+    env_file:
+      - .env
     build:
       context: .
       dockerfile: Dockerfile_vllm

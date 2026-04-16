@@ -102,6 +102,38 @@ def apply_pronunciation_replacements(text):
         logging.error(f"Error applying pronunciation replacements: {e}")
         return text
 
+def sanitize_markdown(text: str) -> str:
+    """Remove markdown formatting from text so TTS doesn't speak markup."""
+    # code blocks (fenced)
+    text = re.sub(r'```[\s\S]*?```', '', text)
+    # inline code
+    text = re.sub(r'`([^`]*)`', r'\1', text)
+    # images
+    text = re.sub(r'!\[([^\]]*)\]\([^)]*\)', r'\1', text)
+    # links
+    text = re.sub(r'\[([^\]]*)\]\([^)]*\)', r'\1', text)
+    # headings
+    text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+    # bold/italic (order matters: bold before italic)
+    text = re.sub(r'\*\*\*(.+?)\*\*\*', r'\1', text)
+    text = re.sub(r'___(.+?)___', r'\1', text)
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+    text = re.sub(r'__(.+?)__', r'\1', text)
+    text = re.sub(r'\*(.+?)\*', r'\1', text)
+    text = re.sub(r'_(.+?)_', r'\1', text)
+    # strikethrough
+    text = re.sub(r'~~(.+?)~~', r'\1', text)
+    # blockquotes
+    text = re.sub(r'^>\s+', '', text, flags=re.MULTILINE)
+    # horizontal rules
+    text = re.sub(r'^[-*_]{3,}\s*$', '', text, flags=re.MULTILINE)
+    # unordered list markers
+    text = re.sub(r'^[\s]*[-*+]\s+', '', text, flags=re.MULTILINE)
+    # ordered list markers
+    text = re.sub(r'^[\s]*\d+\.\s+', '', text, flags=re.MULTILINE)
+    return text
+
+
 def expand_contractions(text: str) -> str:
     pattern = re.compile(r'\b(' + '|'.join(re.escape(k) for k in contractions.keys()) + r')\b', flags=re.IGNORECASE)
     
