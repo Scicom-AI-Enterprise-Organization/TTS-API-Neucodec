@@ -19,7 +19,7 @@ from fastapi import FastAPI, Request, HTTPException, File, Form
 from fastapi.responses import StreamingResponse, FileResponse, Response
 from pydantic import BaseModel
 from huggingface_hub import hf_hub_download
-from malaya.text.normalization import to_cardinal
+from app.normalizer import load as load_normalizer, to_cardinal
 import torch.cuda as cuda
 import uuid
 import bisect
@@ -31,7 +31,6 @@ import numpy as np
 import librosa
 import aiohttp
 import sentry_sdk
-import malaya
 import fasttext
 import fastapi_loki_tempo
 from app.rules import *
@@ -57,7 +56,7 @@ filename = hf_hub_download(
     filename="fasttext.ftz"
 )
 lang_model = fasttext.load_model(filename)
-normalizer = malaya.normalize.normalizer()
+normalizer = load_normalizer()
 
 logging.info('loading audio encoder')
 
@@ -465,26 +464,18 @@ class TTSRequest(BaseModel):
     playback_overlap_speed: float = DEFAULT_PLAYBACK_OVERLAP_SPEED
     normalize_malaysian: bool = False
 
-@app.get('/v1/audio/speaker')
-async def speaker():
-    return SPEAKERS
-
-@app.post('/v1/audio/speech')
-async def tts_stream(data: TTSRequest, request: Request = None):
-    speaker = data.voice
-
-    s = data.input
-    logging.info(f'before markdown sanitization: {s}')
+def normalize_malaysian_text(s, normalize_malaysian=False):
     s = sanitize_markdown(s)
-    logging.info(f'after markdown sanitization: {s}')
-    if data.normalize_malaysian:
+    s = s.replace('\n', ' ')
+    s = re.sub(r'[ ]+', ' ', s).strip()
 
-        s = s.replace('\n', ' ')
-        s = re.sub(r'[ ]+', ' ', s).strip()
-        
+    for k, v in before_replace_mapping.items():
+        s = s.replace(k, v)
+
+    if normalize_malaysian:
         lang = lang_model.predict(s, k = 3)[0][0]
         normalize_in_english = 'english' in lang
-        
+
         def replace_range(match):
             num1 = int(match.group(1))
             num2 = int(match.group(2))
@@ -497,9 +488,6 @@ async def tts_stream(data: TTSRequest, request: Request = None):
                 to = 'hingga'
             return f"{words1} {to} {words2} {phrase}"
 
-        for k, v in before_replace_mapping.items():
-            s = s.replace(k, v)
-        
         s = expand_contractions(s)
         s = pattern_range.sub(replace_range, s)
         new_s = []
@@ -514,9 +502,6 @@ async def tts_stream(data: TTSRequest, request: Request = None):
 
         logging.info(f'out from internal normalizer: {s}')
 
-        # Split into Tamil-word segments and non-Tamil segments.
-        # re.split with a capturing group keeps the delimiters in the result list,
-        # so segments alternate: [non_tamil, tamil, non_tamil, tamil, ...]
         segments = re.split(r'(\S*[^\x00-\x7F]\S*)', s)
         normalized_parts = []
         for seg in segments:
@@ -544,17 +529,43 @@ async def tts_stream(data: TTSRequest, request: Request = None):
 
         logging.info(f'out from malaya normalizer: {s}')
 
-        for k, v in replace_mapping.items():
-            s = s.replace(k, v)
-        
         original_s = s
         s = apply_pronunciation_replacements(s)
         if s != original_s:
             logging.info(f'Pronunciation replacements applied: "{original_s}" -> "{s}"')
 
+    for k, v in replace_mapping.items():
+        s = s.replace(k, v)
+
     if not s.endswith('.'):
         s = s + '.'
+
     s = re.sub(r'[ ]+', ' ', s).strip()
+
+    return s
+
+
+class NormalizeRequest(BaseModel):
+    input: str = "Hello! How can I help you?"
+    normalize_malaysian: bool = False
+
+
+@app.post('/v1/audio/normalize')
+async def normalize_text(data: NormalizeRequest):
+    s = normalize_malaysian_text(data.input, normalize_malaysian=data.normalize_malaysian)
+    return {'output': s}
+
+
+@app.get('/v1/audio/speaker')
+async def speaker():
+    return SPEAKERS
+
+@app.post('/v1/audio/speech')
+async def tts_stream(data: TTSRequest, request: Request = None):
+    speaker = data.voice
+
+    s = normalize_malaysian_text(data.input, normalize_malaysian=data.normalize_malaysian)
+    logging.info(f'normalized: {s}')
 
     prompt = f'<|im_start|>{speaker}: {s}<|speech_start|>'
     logging.info(f'prompt: {prompt}')

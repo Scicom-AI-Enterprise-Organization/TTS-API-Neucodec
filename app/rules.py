@@ -103,7 +103,7 @@ def apply_pronunciation_replacements(text):
         return text
 
 def sanitize_markdown(text: str) -> str:
-    """Remove markdown formatting from text so TTS doesn't speak markup."""
+    """Remove markdown formatting and HTML tags from text so TTS doesn't speak markup."""
     # code blocks (fenced)
     text = re.sub(r'```[\s\S]*?```', '', text)
     # inline code
@@ -114,23 +114,25 @@ def sanitize_markdown(text: str) -> str:
     text = re.sub(r'\[([^\]]*)\]\([^)]*\)', r'\1', text)
     # headings
     text = re.sub(r'^#{1,6}\s+', '', text, flags=re.MULTILINE)
+    # horizontal rules (must be before bold/italic to avoid partial matching)
+    text = re.sub(r'^[-*_]{3,}\s*$', '', text, flags=re.MULTILINE)
     # bold/italic (order matters: bold before italic)
     text = re.sub(r'\*\*\*(.+?)\*\*\*', r'\1', text)
     text = re.sub(r'___(.+?)___', r'\1', text)
     text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
     text = re.sub(r'__(.+?)__', r'\1', text)
     text = re.sub(r'\*(.+?)\*', r'\1', text)
-    text = re.sub(r'_(.+?)_', r'\1', text)
+    text = re.sub(r'(?<![a-zA-Z0-9])_(.+?)_(?![a-zA-Z0-9])', r'\1', text)
     # strikethrough
     text = re.sub(r'~~(.+?)~~', r'\1', text)
     # blockquotes
     text = re.sub(r'^>\s+', '', text, flags=re.MULTILINE)
-    # horizontal rules
-    text = re.sub(r'^[-*_]{3,}\s*$', '', text, flags=re.MULTILINE)
     # unordered list markers
     text = re.sub(r'^[\s]*[-*+]\s+', '', text, flags=re.MULTILINE)
     # ordered list markers
     text = re.sub(r'^[\s]*\d+\.\s+', '', text, flags=re.MULTILINE)
+    # HTML tags (with or without attributes, self-closing)
+    text = re.sub(r'<[^>]+>', '', text)
     return text
 
 
