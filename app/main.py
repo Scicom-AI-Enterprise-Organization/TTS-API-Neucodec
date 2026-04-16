@@ -474,7 +474,9 @@ async def tts_stream(data: TTSRequest, request: Request = None):
     speaker = data.voice
 
     s = data.input
-    logging.info(f'input: {s}')
+    logging.info(f'before markdown sanitization: {s}')
+    s = sanitize_markdown(s)
+    logging.info(f'after markdown sanitization: {s}')
     if data.normalize_malaysian:
 
         s = s.replace('\n', ' ')
@@ -619,6 +621,9 @@ async def vc_stream(
     y, _ = librosa.load(file_like, sr=16000)
 
     codes = await encode_audio(y)
+
+    reference_text = sanitize_markdown(reference_text)
+    generate_text = sanitize_markdown(generate_text)
 
     tokens = ''.join([f'<|s_{i}|>' for i in codes])
     prompt = f"<|im_start|>{reference_text}<|speech_start|>{tokens}<|im_end|><|im_start|>{generate_text}<|speech_start|>"
