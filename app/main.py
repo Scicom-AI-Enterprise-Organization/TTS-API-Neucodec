@@ -135,6 +135,13 @@ def compute_thread_fn(loop):
         logging.debug(f'{uuid_str}, enter compute_thread_fn')
         shapes = padded_token.shape
 
+        if shapes[1] == 0:
+            logging.warning(f'{uuid_str}, skipping empty token batch with shape {shapes}')
+            empty = torch.zeros((shapes[0], 1, 0), dtype=torch.float32)
+            for i, fut in enumerate(futures):
+                thread_safe_set_result(loop, fut, empty[i:i+1])
+            continue
+
         with torch.no_grad():
             with cuda.stream(compute_stream):
                 compute_stream.wait_stream(h2d_stream)
@@ -250,6 +257,9 @@ async def encode_audio(y):
 async def decode_speech_token(speech_token):
     numbers = re.findall(r's_(\d+)', speech_token)
     d = list(map(int, numbers))
+    if not d:
+        logging.warning(f'decode_speech_token received empty tokens from: {speech_token[:100]}')
+        return (sr, np.array([], dtype=np.float64))
     if DYNAMIC_BATCHING:
         future = asyncio.Future()
         await dynamic_batch_queue.put((future, d))
@@ -365,6 +375,8 @@ async def stream_speech(
 
             if len(buffer) % chunk_size == 0:
                 _, y = await decode_speech_token("".join(buffer))
+                if len(y) == 0:
+                    continue
                 y_ = y[to_yield : -overlap_chunk]
                 y_ = np.clip(y_, -1.0, 1.0)
                 y_ = np.concatenate([leftover, y_]) if len(leftover) else y_
@@ -385,6 +397,12 @@ async def stream_speech(
 
         if len(buffer):
             _, y = await decode_speech_token("".join(buffer))
+            if len(y) == 0 and len(leftover):
+                yield (leftover * 32767).astype(np.int16).tobytes()
+                await asyncio.sleep(0)
+                return
+            elif len(y) == 0:
+                return
             y_ = y[to_yield :]
             y_ = np.clip(y_, -1.0, 1.0)
             y_ = np.concatenate([leftover, y_]) if len(leftover) else y_
@@ -515,9 +533,9 @@ def normalize_malaysian_text(s, normalize_malaysian=False):
                     normalize_hingga = False,
                     normalize_text = False,
                     normalize_word_rules = False,
-                    normalize_time = True,
                     normalize_cardinal = False,
                     normalize_ordinal = False,
+                    normalize_time = True,
                     normalize_url = True,
                     normalize_email = True,
                     normalize_in_english=normalize_in_english,
