@@ -1,3 +1,4 @@
 .env
 .env_vllm
 *__pycache__
+.pytest_cache
