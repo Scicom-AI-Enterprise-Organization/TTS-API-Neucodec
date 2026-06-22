@@ -1,0 +1,104 @@
+{
+  "label": "opt1_cudagraph",
+  "stream": false,
+  "max_tokens": 1024,
+  "temperature": 0.6,
+  "levels": [
+    {
+      "concurrency": 1,
+      "requests": 24,
+      "errors": 0,
+      "error_sample": [],
+      "wall_s": 14.039,
+      "throughput_req_s": 1.71,
+      "throughput_audio_s_per_s": 7.798,
+      "latency_s": {
+        "avg": 0.585,
+        "p50": 0.476,
+        "p90": 0.997,
+        "p95": 1.048,
+        "p99": 1.085,
+        "max": 1.085
+      },
+      "ttfb_s": null,
+      "rtf": {
+        "avg": 0.129,
+        "p50": 0.128,
+        "p90": 0.135
+      },
+      "avg_audio_dur_s": 4.562
+    },
+    {
+      "concurrency": 4,
+      "requests": 24,
+      "errors": 0,
+      "error_sample": [],
+      "wall_s": 4.174,
+      "throughput_req_s": 5.749,
+      "throughput_audio_s_per_s": 26.284,
+      "latency_s": {
+        "avg": 0.655,
+        "p50": 0.578,
+        "p90": 1.149,
+        "p95": 1.159,
+        "p99": 1.212,
+        "max": 1.212
+      },
+      "ttfb_s": null,
+      "rtf": {
+        "avg": 0.145,
+        "p50": 0.145,
+        "p90": 0.154
+      },
+      "avg_audio_dur_s": 4.572
+    },
+    {
+      "concurrency": 16,
+      "requests": 64,
+      "errors": 0,
+      "error_sample": [],
+      "wall_s": 10.008,
+      "throughput_req_s": 6.395,
+      "throughput_audio_s_per_s": 31.812,
+      "latency_s": {
+        "avg": 2.422,
+        "p50": 2.236,
+        "p90": 3.937,
+        "p95": 5.375,
+        "p99": 5.642,
+        "max": 5.642
+      },
+      "ttfb_s": null,
+      "rtf": {
+        "avg": 0.515,
+        "p50": 0.463,
+        "p90": 0.705
+      },
+      "avg_audio_dur_s": 4.975
+    },
+    {
+      "concurrency": 50,
+      "requests": 200,
+      "errors": 0,
+      "error_sample": [],
+      "wall_s": 33.189,
+      "throughput_req_s": 6.026,
+      "throughput_audio_s_per_s": 28.715,
+      "latency_s": {
+        "avg": 8.141,
+        "p50": 6.3,
+        "p90": 12.492,
+        "p95": 14.886,
+        "p99": 19.215,
+        "max": 27.048
+      },
+      "ttfb_s": null,
+      "rtf": {
+        "avg": 1.83,
+        "p50": 1.91,
+        "p90": 2.278
+      },
+      "avg_audio_dur_s": 4.765
+    }
+  ]
+}

@@ -20,7 +20,7 @@ tensorboard>=2.20.0
 torch==2.9.1
 torchaudio==2.9.1
 transformers>=4.55.0
-uvicorn>=0.35.0
+uvicorn>=0.35.0,<0.36
 vector-quantize-pytorch==1.17.8
 wandb>=0.21.0
 distilcodec @ git+https://github.com/mesolitica/DistilCodec
