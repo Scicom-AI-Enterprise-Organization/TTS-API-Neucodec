@@ -1,0 +1,127 @@
+{
+  "description": "Optimized stack (dynamic batching + CUDA graphs + 4 uvicorn workers under NVIDIA MPS, bf16) on RunPod secure cloud, colocated vLLM 0.16.0 (Qwen3-1.7B TTS) + vendored NeuCodec. torch 2.9.1/CUDA 12.8. bench.py non-streaming, conc 1/4/16/50, per-conc-mult 5, temp 0.6, max_tokens 1024. Eval set ~4.5-4.9s audio/request.",
+  "gpus": {
+    "H100": {
+      "name": "NVIDIA H100 80GB HBM3 (SXM)",
+      "vram_gb": 80,
+      "driver": "580.126.09",
+      "gpu_mem_util_vllm": 0.4,
+      "runs": 5,
+      "by_concurrency": {
+        "1": {
+          "throughput_audio_s_per_s_median": 6.694,
+          "throughput_audio_s_per_s_runs": [
+            6.72,
+            6.59,
+            6.69,
+            6.68,
+            6.72
+          ],
+          "latency_avg_s_median": 0.688,
+          "latency_p99_s_median": 1.246,
+          "rtf_p50_median": 0.149
+        },
+        "4": {
+          "throughput_audio_s_per_s_median": 25.204,
+          "throughput_audio_s_per_s_runs": [
+            25.21,
+            25.2,
+            25.66,
+            25.19,
+            24.86
+          ],
+          "latency_avg_s_median": 0.693,
+          "latency_p99_s_median": 1.266,
+          "rtf_p50_median": 0.151
+        },
+        "16": {
+          "throughput_audio_s_per_s_median": 43.973,
+          "throughput_audio_s_per_s_runs": [
+            32.38,
+            60.35,
+            43.97,
+            32.44,
+            45.53
+          ],
+          "latency_avg_s_median": 1.643,
+          "latency_p99_s_median": 4.519,
+          "rtf_p50_median": 0.398
+        },
+        "50": {
+          "throughput_audio_s_per_s_median": 101.927,
+          "throughput_audio_s_per_s_runs": [
+            94.83,
+            116.13,
+            101.93,
+            103.94,
+            97.69
+          ],
+          "latency_avg_s_median": 2.106,
+          "latency_p99_s_median": 6.442,
+          "rtf_p50_median": 0.367
+        }
+      }
+    },
+    "H200": {
+      "name": "NVIDIA H200 (SXM)",
+      "vram_gb": 141,
+      "driver": "550.127.05",
+      "gpu_mem_util_vllm": 0.4,
+      "runs": 5,
+      "by_concurrency": {
+        "1": {
+          "throughput_audio_s_per_s_median": 8.388,
+          "throughput_audio_s_per_s_runs": [
+            8.38,
+            8.65,
+            8.38,
+            8.39,
+            8.39
+          ],
+          "latency_avg_s_median": 0.549,
+          "latency_p99_s_median": 1.015,
+          "rtf_p50_median": 0.119
+        },
+        "4": {
+          "throughput_audio_s_per_s_median": 29.156,
+          "throughput_audio_s_per_s_runs": [
+            28.62,
+            29.2,
+            29.15,
+            29.19,
+            29.16
+          ],
+          "latency_avg_s_median": 0.603,
+          "latency_p99_s_median": 1.136,
+          "rtf_p50_median": 0.132
+        },
+        "16": {
+          "throughput_audio_s_per_s_median": 81.898,
+          "throughput_audio_s_per_s_runs": [
+            80.2,
+            81.86,
+            83.55,
+            82.07,
+            81.9
+          ],
+          "latency_avg_s_median": 0.787,
+          "latency_p99_s_median": 1.771,
+          "rtf_p50_median": 0.168
+        },
+        "50": {
+          "throughput_audio_s_per_s_median": 143.835,
+          "throughput_audio_s_per_s_runs": [
+            143.84,
+            143.74,
+            144.7,
+            144.99,
+            141.02
+          ],
+          "latency_avg_s_median": 1.489,
+          "latency_p99_s_median": 3.441,
+          "rtf_p50_median": 0.322
+        }
+      }
+    }
+  }
+}

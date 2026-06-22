@@ -201,6 +201,53 @@ python -m pytest tests/test_normalize_api.py -v
 | `tests/test_tts_vc_api.py` | 43 | Live API (`TTS_TEST_URL`, default `http://localhost:9091`) | Integration tests for TTS (`POST /v1/audio/speech`) and VC (`POST /v1/audio/vc`) endpoints. **TTS tests** (24): WAV/PCM format validation (sample rate 24000, mono, 16-bit), streaming vs buffered, all speakers (husein/jenny/idayu), speaker list endpoint, markdown/HTML/link sanitization, Malaysian normalization with numbers, temperature/speed/max_tokens parameters, short/long/English/multilingual text. **VC tests** (19): uses `jenny.wav` with reference text, WAV/PCM format validation, streaming vs buffered, Malay/English/long/short generate text, markdown/HTML/link/code sanitization in both reference_text and generate_text, temperature/speed/max_tokens parameters. Auto-skipped when the API is not reachable. |
 | `tests/test_normalize_api.py` | 31 | In-process app import (GPU/models) | Integration tests for `POST /v1/audio/normalize` endpoint. Auto-skipped when the app cannot be imported. Tests both `normalize_malaysian=false` (sanitize only) and `normalize_malaysian=true` (full normalization). |
 
+## Benchmark — H100 SXM vs H200 SXM
+
+End-to-end throughput/latency of the **optimized stack** on a single GPU, measured on RunPod secure cloud
+(June 2026). Both pods run the same colocated layout — vLLM `0.16.0` serving the Qwen3-1.7B TTS LM plus the
+vendored NeuCodec decoder on one GPU — with the optimized configuration: **dynamic batching + CUDA graphs +
+4 `uvicorn` workers under NVIDIA MPS**, bf16 throughout (no quantization), torch `2.9.1` / CUDA `12.8`.
+vLLM `--gpu-memory-utilization 0.4 --max-num-seqs 64`. Driver 580.126.09 (H100) / 550.127.05 (H200).
+
+Load generator: [`bench/bench.py`](bench/bench.py), **non-streaming**, concurrency 1/4/16/50, `per-conc-mult 5`,
+`temperature 0.6`, `max_tokens 1024`, over the fixed 16-sentence eval set (~4.5–4.9 s audio/request; English,
+Malay, code-switch). **Median of 5 runs per level; 0 request errors at every level.** Throughput is the
+meaningful TTS metric: **audio-seconds produced per wall-second** (values > the eval clip length mean the
+server emits audio faster than real time in aggregate).
+
+### Throughput (audio-seconds produced per wall-second)
+
+| Concurrency | H100 SXM 80GB | H200 SXM 141GB | H200 advantage |
+|---|---|---|---|
+| 1  | 6.7   | 8.4   | 1.25× |
+| 4  | 25.2  | 29.2  | 1.16× |
+| 16 | 44.0  | 81.9  | **1.86×** |
+| 50 | 101.9 | 143.8 | **1.41×** |
+
+### Latency & real-time factor (RTF)
+
+| Metric | H100 @1 | H200 @1 | H100 @50 | H200 @50 |
+|---|---|---|---|---|
+| Mean latency (s) | 0.69 | 0.55 | 2.11 | 1.49 |
+| p99 latency (s)  | 1.25 | 1.01 | 6.44 | 3.44 |
+| RTF p50          | 0.15 | 0.12 | 0.37 | 0.32 |
+
+**Takeaways**
+
+- **H200 wins at every concurrency**, with the largest margins under load — **1.86× at C=16** and **1.41×
+  at C=50** — where the bandwidth-bound NeuCodec decode dominates. The H200's higher HBM bandwidth (≈4.8 TB/s
+  vs ≈3.35 TB/s) and 141 GB capacity give the colocated vLLM + 4 codec workers more headroom.
+- **Both run faster than real time at all concurrencies** (RTF p50 < 1). Single-request latency is ~0.6 s
+  (H100) / ~0.5 s (H200) for ~4.5 s of audio (RTF ≈ 0.15 / 0.12).
+- **H200 is also far more stable.** Across the 5 runs the H200 throughput was tight (C=16: 80.2–83.5; C=50:
+  141–145), while the H100 showed large run-to-run swings at high concurrency (C=16: 32–60; C=50: 95–116) —
+  transient MPS/codec contention stalls that the H200's extra bandwidth and memory absorb. The table reports
+  medians; raw per-run JSON is in [`bench/results/runpod_h100_h200.json`](bench/results/runpod_h100_h200.json).
+
+The full optimization writeup (baseline → CUDA graphs → multi-worker + MPS, and a documented negative result
+on source-level micro-optimizations) is in [`bench/OPTIMIZATION.md`](bench/OPTIMIZATION.md). To reproduce, see
+the ready scripts in [`bench/deploy/`](bench/deploy) (`setup_pod.sh`, `start_vllm.sh`, `start_app.sh`).
+
 ## Stress Test
 
 Run the stress test against the current worker configuration defined in [docker-compose.yaml](docker-compose.yaml):
