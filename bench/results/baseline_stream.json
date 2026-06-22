@@ -1,0 +1,64 @@
+{
+  "label": "baseline_stream",
+  "stream": true,
+  "max_tokens": 1024,
+  "temperature": 0.6,
+  "levels": [
+    {
+      "concurrency": 1,
+      "requests": 24,
+      "errors": 0,
+      "error_sample": [],
+      "wall_s": 14.634,
+      "throughput_req_s": 1.64,
+      "throughput_audio_s_per_s": 73375.312,
+      "latency_s": {
+        "avg": 0.609,
+        "p50": 0.531,
+        "p90": 0.889,
+        "p95": 1.09,
+        "p99": 1.094,
+        "max": 1.094
+      },
+      "ttfb_s": {
+        "avg": 0.005,
+        "p50": 0.004,
+        "p90": 0.008
+      },
+      "rtf": {
+        "avg": 0.0,
+        "p50": 0.0,
+        "p90": 0.0
+      },
+      "avg_audio_dur_s": 44739.242
+    },
+    {
+      "concurrency": 16,
+      "requests": 64,
+      "errors": 0,
+      "error_sample": [],
+      "wall_s": 16.857,
+      "throughput_req_s": 3.797,
+      "throughput_audio_s_per_s": 169861.099,
+      "latency_s": {
+        "avg": 4.172,
+        "p50": 3.477,
+        "p90": 6.275,
+        "p95": 7.935,
+        "p99": 14.41,
+        "max": 14.41
+      },
+      "ttfb_s": {
+        "avg": 0.024,
+        "p50": 0.009,
+        "p90": 0.07
+      },
+      "rtf": {
+        "avg": 0.0,
+        "p50": 0.0,
+        "p90": 0.0
+      },
+      "avg_audio_dur_s": 44739.242
+    }
+  ]
+}

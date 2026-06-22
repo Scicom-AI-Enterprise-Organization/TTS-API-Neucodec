@@ -1,0 +1,20 @@
+# Shared fixed evaluation set for benchmarking + CER. English & Malay (Whisper-reliable),
+# plus code-switch sentences matching the app's real use-case. Kept stable across configs.
+EVAL_SET = [
+    ("en_short_1", "husein", "Hello there, how can I help you today?"),
+    ("en_short_2", "husein", "Your appointment is confirmed for tomorrow morning."),
+    ("en_med_1",   "husein", "Thank you for calling our support line. Please tell me your account number and I will look into the issue right away."),
+    ("en_med_2",   "husein", "The weather today is sunny with a gentle breeze, and the temperature should reach around thirty degrees by the afternoon."),
+    ("en_long_1",  "husein", "Artificial intelligence is transforming the way we live and work, from the way we search for information to how we drive our cars and manage our homes every single day."),
+    ("ms_short_1", "husein", "Selamat pagi, apa yang boleh saya bantu encik hari ini?"),
+    ("ms_short_2", "husein", "Terima kasih kerana menghubungi kami, sila tunggu sebentar."),
+    ("ms_med_1",   "husein", "Untuk membuat tempahan, sila berikan nama penuh anda, nombor telefon, dan tarikh yang anda inginkan untuk kami semak ketersediaan."),
+    ("ms_med_2",   "husein", "Pejabat kami dibuka dari pukul sembilan pagi hingga lima petang, dari hari Isnin sehingga hari Jumaat setiap minggu."),
+    ("cs_1",       "husein", "Okay encik, your booking is confirmed, nanti saya hantar details melalui email ya."),
+    ("cs_2",       "husein", "Sorry to keep you waiting, sekejap ya, saya tengah check dalam system sekarang."),
+    ("en_short_3", "idayu",  "Please hold while I transfer your call to the right department."),
+    ("ms_short_3", "idayu",  "Baiklah, saya sudah kemaskini maklumat anda di dalam sistem."),
+    ("en_med_3",   "arissa", "We appreciate your patience and we want to make sure that every customer receives the best possible service from our team."),
+    ("ms_med_3",   "arissa", "Sekiranya anda mempunyai sebarang pertanyaan lanjut, jangan teragak agak untuk menghubungi kami semula pada bila bila masa."),
+    ("en_med_4",   "haiqal", "I have updated your delivery address and your package should arrive within three to five working days from now."),
+]
