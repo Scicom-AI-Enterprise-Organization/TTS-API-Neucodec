@@ -6,7 +6,7 @@ if '/v1/completions' not in TTS_API:
     TTS_API = TTS_API + '/v1/completions'
 MODEL_NAME = os.environ.get('MODEL_NAME', 'TTS-model')
 DEFAULT_SPEAKER = os.environ.get('DEFAULT_SPEAKER', 'husein')
-SPEAKERS = os.environ.get('SPEAKERS', 'husein,idayu,jenny')
+SPEAKERS = TM_Mandarin,TM_English
 DEFAULT_TEMPERATURE = float(os.environ.get('DEFAULT_TEMPERATURE', '0.7'))
 DEFAULT_REPETITION_PENALTY = float(os.environ.get('DEFAULT_REPETITION_PENALTY', '1.15'))
 DEFAULT_MAX_TOKENS = int(os.environ.get('DEFAULT_MAX_TOKENS', '3072'))
