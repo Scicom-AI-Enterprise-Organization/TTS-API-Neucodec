@@ -13,18 +13,22 @@ services:
               device_ids: ["0"]
               capabilities: [gpu]
     container_name: tts-api
-    ports:
-      - "9091:9091"
+    # Host networking: the vLLM backend (tts-engine) now runs as a bare process
+    # on the SAME node at 127.0.0.1:9093, not as a docker service on tts-network.
+    # Host mode is required for the container to reach the host's 127.0.0.1:9093;
+    # it also publishes :9091 directly on the host (so the old ports mapping and
+    # the external tts-network are no longer needed).
+    network_mode: host
     volumes:
       - "~/.cache/huggingface:/root/.cache/huggingface"
       - "./app:/app/app"
     environment:
       - PYTHONUNBUFFERED=1
+      # Don't write .pyc into the bind-mounted ./app as root — that left
+      # root-owned __pycache__ which broke the next run's user-level `rm -rf`.
+      - PYTHONDONTWRITEBYTECODE=1
+      # Pin the backend here so it wins over any stale value in the gitignored .env.
+      - TTS_API=http://127.0.0.1:9093
     restart: unless-stopped
     working_dir: /app
     command: uvicorn app.main:app --host 0.0.0.0 --port 9091 --workers 1 --reload --reload-dir ./app
-    networks: ["tts-network"]
-
-networks:
-  tts-network:
-    external: true
