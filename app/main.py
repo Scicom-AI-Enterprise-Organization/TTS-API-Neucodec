@@ -8,6 +8,7 @@ torch.set_float32_matmul_precision('high')
 from typing import Literal
 import re
 import json
+import base64
 import struct
 import asyncio
 import io
@@ -281,6 +282,7 @@ async def stream_speech(
     response_format,
     stream,
     request,
+    stream_format="audio",
 ):
     headers = {
         'accept': 'application/json',
@@ -421,6 +423,33 @@ async def stream_speech(
         'Cache-Control': 'no-cache, no-store',
         'X-Accel-Buffering': 'no',
     }
+
+    # OpenAI-compatible SSE streaming (stream_format="sse"). The livekit
+    # openai TTS plugin (>=1.x) requests this and parses speech.audio.delta /
+    # speech.audio.done events; it cannot consume the raw audio/pcm stream.
+    # Each delta carries base64(int16 PCM @ {sr}Hz mono) — exactly what the
+    # plugin decodes and pushes (mime audio/pcm, sample_rate {sr}).
+    if stream and stream_format == 'sse':
+        async def sse_stream():
+            try:
+                async for chunk in func:
+                    audio_b64 = base64.b64encode(chunk).decode('ascii')
+                    evt = json.dumps({'type': 'speech.audio.delta', 'audio': audio_b64})
+                    yield f'data: {evt}\n\n'
+                    await asyncio.sleep(0)
+            finally:
+                done = json.dumps({
+                    'type': 'speech.audio.done',
+                    'usage': {'input_tokens': 0, 'output_tokens': 0},
+                })
+                yield f'data: {done}\n\n'
+                yield 'data: [DONE]\n\n'
+        return StreamingResponse(
+            sse_stream(),
+            media_type='text/event-stream',
+            headers=stream_headers,
+        )
+
     if stream:
         if response_format == 'wav':
             async def wav_stream():
@@ -474,6 +503,9 @@ class TTSRequest(BaseModel):
     voice: str = DEFAULT_SPEAKER
     model: str = MODEL_NAME
     response_format: Literal["pcm", "wav"] = "pcm"
+    # "audio" = raw audio bytes (default, back-compat); "sse" = OpenAI-style
+    # Server-Sent Events with base64 PCM deltas (required by livekit openai TTS plugin).
+    stream_format: Literal["audio", "sse"] = "audio"
     temperature: float = DEFAULT_TEMPERATURE
     repetition_penalty: float = DEFAULT_REPETITION_PENALTY
     max_tokens: int = DEFAULT_MAX_TOKENS
@@ -599,8 +631,9 @@ async def tts_stream(data: TTSRequest, request: Request = None):
         response_format=data.response_format,
         stream=data.stream,
         request=request,
+        stream_format=data.stream_format,
     )
-    
+
 def batch_encode(ys):
     with torch.no_grad():
         ys_pt = [codec._prepare_audio(torch.tensor(ys[i])[None, None])[0, 0] for i in range(len(ys))]
