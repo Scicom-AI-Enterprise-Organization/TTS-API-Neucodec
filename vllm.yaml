@@ -2,6 +2,9 @@ services:
   tts-engine:
     env_file:
       - .env
+    environment:
+      HF_ENDPOINT: ${HF_ENDPOINT}
+      HF_TOKEN: ${HF_TOKEN}
     build:
       context: .
       dockerfile: Dockerfile_vllm
@@ -18,8 +21,8 @@ services:
     command:
       - vllm
       - serve
-      - ${TTS_MODEL:-Scicom-intl/Multilingual-TTS-1.7B-Base}
-      - --dtype 
+      - ${TTS_MODEL:-TM/TTS-English-Mandarin}
+      - --dtype
       - bfloat16
       - --port
       - "9093"
