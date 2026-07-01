@@ -22,6 +22,7 @@ warnings.filterwarnings('ignore', category=FutureWarning)
 import pytest
 from app.rules import sanitize_markdown
 from app.normalizer import load
+from app.normalizer.chinese import normalize_chinese, is_chinese_dominant, CJK_RE, KANA_RE
 
 normalizer = load()
 
@@ -31,15 +32,24 @@ def pipeline(s, english=False):
     s = sanitize_markdown(s)
     s = s.replace('\n', ' ')
     s = re.sub(r'[ ]+', ' ', s).strip()
+    chinese_dominant = is_chinese_dominant(s)
 
     segments = re.split(r'(\S*[^\x00-\x7F]\S*)', s)
     normalized_parts = []
     for seg in segments:
         if re.search(r'[^\x00-\x7F]', seg):
-            normalized_parts.append(seg)
+            if CJK_RE.search(seg) and not KANA_RE.search(seg):
+                normalized_parts.append(normalize_chinese(seg))
+            else:
+                normalized_parts.append(seg)
         elif seg.strip():
             leading_ws = seg[:len(seg) - len(seg.lstrip())]
             trailing_ws = seg[len(seg.rstrip()):]
+            if chinese_dominant:
+                converted = normalize_chinese(seg.strip())
+                if converted != seg.strip():
+                    normalized_parts.append(leading_ws + converted + trailing_ws)
+                    continue
             result = normalizer.normalize(
                 seg.strip(),
                 normalize_hingga=False, normalize_text=False,
@@ -67,7 +77,7 @@ class TestChinese:
     def test_chinese_with_money(self):
         out = pipeline('价格是 RM500')
         assert '价格是' in out
-        assert 'lima ratus ringgit' in out
+        assert '五百令吉' in out
 
     def test_chinese_with_email(self):
         out = pipeline('请联系 test@mail.com')
@@ -77,17 +87,18 @@ class TestChinese:
     def test_chinese_with_phone(self):
         out = pipeline('电话 012-1234567')
         assert '电话' in out
-        assert 'kosong satu dua' in out
+        assert '零一二一二三四五六七' in out
 
     def test_chinese_with_temperature(self):
         out = pipeline('今天温度是 36.5c')
         assert '今天温度是' in out
-        assert 'celsius' in out
+        assert '摄氏三十六点五度' in out
 
     def test_chinese_with_url(self):
         out = pipeline('访问 https://www.google.com')
         assert '访问' in out
         assert 'HTTPS' in out
+        assert 'WWW' in out
         assert 'dot' in out
 
     def test_chinese_mixed_english(self):
@@ -103,21 +114,21 @@ class TestChinese:
         assert '世界' in out
 
     def test_chinese_number_attached(self):
-        # When number is attached to CJK, the whole token is non-ASCII => pass through raw
+        # Numbers glued directly to Hanzi (the normal way to write Chinese) are now verbalized too.
         out = pipeline('价格是RM500')
-        assert '价格是RM500' in out
+        assert '价格是五百令吉' in out
 
     def test_chinese_number_spaced(self):
-        # When separated by space, normalization works
+        # Separated by a space, still Chinese wording since the sentence is Chinese-dominant.
         out = pipeline('价格是 RM500')
-        assert 'ringgit' in out
+        assert '令吉' in out
 
     def test_chinese_sentence_complex(self):
         out = pipeline('中文 email test@mail.com 电话 012-1234567')
         assert '中文' in out
         assert 'TEST di MAIL dot COM' in out
         assert '电话' in out
-        assert 'kosong satu dua' in out
+        assert '零一二一二三四五六七' in out
 
 
 # ---------------------------------------------------------------------------
@@ -439,22 +450,23 @@ class TestMixedMultilingual:
 # Non-ASCII attached to ASCII (edge cases)
 # ---------------------------------------------------------------------------
 class TestNonASCIIAttached:
-    """When non-ASCII chars are attached to ASCII without spaces,
-    the whole token is treated as non-ASCII and passes through raw."""
+    """When non-ASCII chars are attached to ASCII without spaces, the whole token is treated as
+    non-ASCII. For most scripts that means it passes through raw; Chinese is the exception, since
+    normalize_chinese() verbalizes numbers/currency embedded in it instead of leaving them raw."""
 
     def test_chinese_rm_attached(self):
-        # No space between CJK and RM500 => whole token is non-ASCII
+        # No space between CJK and RM500 => whole token is non-ASCII, but Chinese still verbalizes it
         out = pipeline('价格是RM500')
-        assert '价格是RM500' in out
+        assert '价格是五百令吉' in out
 
     def test_chinese_number_attached(self):
         out = pipeline('温度是36.5c')
-        assert '温度是36.5c' in out
+        assert '温度是摄氏三十六点五度' in out
 
     def test_chinese_rm_spaced(self):
-        # With space => normalization works
+        # With space => still Chinese wording (sentence is Chinese-dominant)
         out = pipeline('价格是 RM500')
-        assert 'ringgit' in out
+        assert '令吉' in out
 
     def test_korean_number_attached(self):
         out = pipeline('가격RM100')
