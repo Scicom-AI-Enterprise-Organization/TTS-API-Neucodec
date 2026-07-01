@@ -20,6 +20,7 @@ from fastapi.responses import StreamingResponse, FileResponse, Response
 from pydantic import BaseModel
 from huggingface_hub import hf_hub_download
 from app.normalizer import load as load_normalizer, to_cardinal
+from app.normalizer.chinese import normalize_chinese, is_chinese_dominant, CJK_RE, KANA_RE
 import torch.cuda as cuda
 import uuid
 import bisect
@@ -493,6 +494,7 @@ def normalize_malaysian_text(s, normalize_malaysian=False):
     if normalize_malaysian:
         lang = lang_model.predict(s, k = 3)[0][0]
         normalize_in_english = 'english' in lang
+        chinese_dominant = is_chinese_dominant(s)
 
         def replace_range(match):
             num1 = int(match.group(1))
@@ -508,15 +510,18 @@ def normalize_malaysian_text(s, normalize_malaysian=False):
 
         s = expand_contractions(s)
         s = pattern_range.sub(replace_range, s)
-        new_s = []
-        for w in s.split():
-            splitted = split_alpha_num(w).split()
-            for i in range(len(splitted)):
-                if len(splitted[i]) == 1:
-                    splitted[i] = splitted[i].upper()
-            splitted = ' '.join(splitted)
-            new_s.append(splitted)
-        s = ' '.join(new_s)
+        if not chinese_dominant:
+            # letter/digit splitting is meant for Malay/English word-level tokenization; for Chinese
+            # it would insert spaces inside glued tokens like "RM500" and break Chinese verbalization below.
+            new_s = []
+            for w in s.split():
+                splitted = split_alpha_num(w).split()
+                for i in range(len(splitted)):
+                    if len(splitted[i]) == 1:
+                        splitted[i] = splitted[i].upper()
+                splitted = ' '.join(splitted)
+                new_s.append(splitted)
+            s = ' '.join(new_s)
 
         logging.info(f'out from internal normalizer: {s}')
 
@@ -524,10 +529,18 @@ def normalize_malaysian_text(s, normalize_malaysian=False):
         normalized_parts = []
         for seg in segments:
             if re.search(r'[^\x00-\x7F]', seg):
-                normalized_parts.append(seg)
+                if CJK_RE.search(seg) and not KANA_RE.search(seg):
+                    normalized_parts.append(normalize_chinese(seg))
+                else:
+                    normalized_parts.append(seg)
             elif seg.strip():
                 leading_ws = seg[:len(seg) - len(seg.lstrip())]
                 trailing_ws = seg[len(seg.rstrip()):]
+                if chinese_dominant:
+                    converted = normalize_chinese(seg.strip())
+                    if converted != seg.strip():
+                        normalized_parts.append(leading_ws + converted + trailing_ws)
+                        continue
                 result = normalizer.normalize(
                     seg.strip(),
                     normalize_hingga = False,
