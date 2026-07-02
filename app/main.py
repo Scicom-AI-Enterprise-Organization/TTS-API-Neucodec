@@ -334,13 +334,28 @@ async def stream_speech(
 
     asyncio.create_task(generate_audio_stream())
 
-    chunk_size = int(playback_speed * codebook_size)
-    overlap = int(playback_overlap_speed * codebook_size)
-    overlap_chunk = int((overlap / codebook_size) * sr)
-    fade_len = int(sr * 0.002)
+    samples_per_token = sr // codebook_size                  # 480 samples / speech token
+    chunk_size = int(playback_speed * codebook_size)         # tokens finalized per step (hop)
+    overlap = int(playback_overlap_speed * codebook_size)    # neighbour-context tokens / side
+    overlap_chunk = int((overlap / codebook_size) * sr)      # (legacy path only)
+    ctx = max(1, overlap)                                     # crossfade needs >=1 token of context
+
+    # crossfade width in samples, bounded so the ramp fits inside the context and
+    # leaves a non-empty chunk core.
+    xf = int(sr * (CROSSFADE_MS / 1000.0))
+    xf = max(2, min(xf, ctx * samples_per_token, (chunk_size * samples_per_token) // 2))
+    half = xf // 2
+
+    TOKEN_RE = re.compile(r'<\|s_(\d+)\|>')
+    all_ids = []
+
+    def cos_ramp(n):
+        # raised-cosine 0->1: derivative 0 at both ends, and up + reversed(up) == 1
+        # -> equal-gain crossfade with no slope kink at the ramp edges.
+        return 0.5 * (1.0 - np.cos(np.pi * np.linspace(0.0, 1.0, n)))
 
     def snap_to_zero_crossing(y_, margin=256):
-        """Find nearest zero crossing near the end of the chunk and trim there."""
+        """(legacy path) trim to the nearest zero crossing near the chunk end."""
         if len(y_) < margin * 2:
             return y_
         search_region = y_[-margin:]
@@ -350,7 +365,101 @@ async def stream_speech(
             return y_[:cut]
         return y_
 
-    async def audio_stream():
+    async def next_output():
+        while True:
+            try:
+                return queue.get_nowait()
+            except asyncio.QueueEmpty:
+                await asyncio.sleep(1e-9)
+
+    async def audio_stream_crossfade():
+        """Streaming decode with context-primed windows + a raised-cosine crossfade
+        at every chunk boundary.
+
+        The NeuCodec decoder is non-causal (bidirectional attention over the window,
+        conv receptive field, ISTFT 'same' padding), so a token decoded at the cold
+        edge of an isolated chunk differs from the same token decoded with real
+        neighbours -> splicing two chunks produces a click. Here each chunk is
+        decoded with `ctx` tokens of real neighbour context on both sides (whose
+        audio only warms the codec edges and is discarded), and adjacent chunk
+        waveforms are blended over `xf` samples so the join is continuous.
+        """
+        all_ids.clear()
+        text_buf = ""
+        prev_xf = None        # samples held back straddling the last emitted boundary
+        k = 0
+        count = 0
+
+        def to_bytes(y):
+            return (np.clip(y, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
+
+        async def emit_step(k, is_last):
+            nonlocal prev_xf, count
+            s = k * chunk_size
+            e = len(all_ids) if is_last else s + chunk_size
+            ds = max(0, s - ctx)
+            de = len(all_ids) if is_last else min(len(all_ids), e + ctx)
+            _, a = await decode_speech_token("".join(f"<|s_{i}|>" for i in all_ids[ds:de]))
+            if len(a) == 0:
+                return None
+            off = ds * samples_per_token
+            bk = s * samples_per_token        # boundary with chunk k-1
+            be = e * samples_per_token        # boundary with chunk k+1
+            parts = []
+            if k == 0:
+                emit_lo = 0
+            else:
+                cx = a[bk - half - off: bk + half - off]
+                n = min(len(cx), len(prev_xf) if prev_xf is not None else 0)
+                if n > 0:
+                    r = cos_ramp(n)
+                    parts.append(prev_xf[:n] * (1.0 - r) + cx[:n] * r)
+                emit_lo = bk + half
+            if is_last:
+                parts.append(a[emit_lo - off:])
+                prev_xf = None
+            else:
+                parts.append(a[emit_lo - off: be - half - off])
+                prev_xf = a[be - half - off: be + half - off].copy()
+            y = np.concatenate(parts) if len(parts) != 1 else parts[0]
+            if len(y) == 0:
+                return None
+            if DEBUG_AUDIO:
+                sf.write(f'/app/app/{count}.wav', y, sr)
+                count += 1
+            return to_bytes(y)
+
+        while True:
+            output = await next_output()
+            if output is None:
+                break
+            if "error" in output:
+                raise HTTPException(status_code=400, detail=output["error"])
+            text_buf += output["result"]
+            last = 0
+            for m in TOKEN_RE.finditer(text_buf):
+                all_ids.append(int(m.group(1)))
+                last = m.end()
+            text_buf = text_buf[last:]
+            # emit every chunk that now has its full right-hand context available
+            while (k + 1) * chunk_size + ctx <= len(all_ids):
+                b = await emit_step(k, is_last=False)
+                if b:
+                    yield b
+                    await asyncio.sleep(0)
+                k += 1
+
+        # flush the tail: one final decode covering all remaining tokens
+        if k * chunk_size < len(all_ids):
+            b = await emit_step(k, is_last=True)
+            if b:
+                yield b
+                await asyncio.sleep(0)
+        elif prev_xf is not None and len(prev_xf):
+            yield to_bytes(prev_xf)
+            await asyncio.sleep(0)
+
+    async def audio_stream_legacy():
         buffer = []
         to_yield = 0
         count = 0
@@ -416,7 +525,7 @@ async def stream_speech(
             yield (leftover * 32767).astype(np.int16).tobytes()
             await asyncio.sleep(0)
 
-    func = audio_stream()
+    func = audio_stream_crossfade() if STREAM_CROSSFADE else audio_stream_legacy()
     stream_headers = {
         'Cache-Control': 'no-cache, no-store',
         'X-Accel-Buffering': 'no',
