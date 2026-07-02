@@ -104,10 +104,13 @@ class TestNormalizeChinese:
 
     def test_ic(self):
         assert '八八零一零一一四五六七八' in normalize_chinese('身份证880101-14-5678')
+        assert '八八零一零一一四五六七八' in normalize_chinese('身份证 880101-14-5678')
 
     def test_date_dmy(self):
         assert normalize_chinese('今天是25/12/2025') == '今天是二零二五年十二月二十五日'
         assert normalize_chinese('今天是25-12-2025') == '今天是二零二五年十二月二十五日'
+        assert normalize_chinese('今天是 25/12/2025') == '今天是 二零二五年十二月二十五日'
+        assert normalize_chinese('今天是 25-12-2025') == '今天是 二零二五年十二月二十五日'
 
     def test_date_ymd(self):
         assert normalize_chinese('今天是2025/12/25') == '今天是二零二五年十二月二十五日'
@@ -121,9 +124,12 @@ class TestNormalizeChinese:
 
     def test_temperature(self):
         assert normalize_chinese('温度是36.5c') == '温度是摄氏三十六点五度'
+        assert normalize_chinese('温度是 36.5c') == '温度是 摄氏三十六点五度'
+        assert normalize_chinese('温度是 36.5 celcius') == '温度是 摄氏三十六点五度'
+        assert normalize_chinese('今天的温度是30 celcius') == '今天的温度是摄氏三十度'
 
     def test_distance(self):
-        assert normalize_chinese('距离5km') == '距离五公里'
+        assert normalize_chinese('距离5.5km') == '距离五点五公里'
 
     def test_weight(self):
         assert normalize_chinese('重量10kg') == '重量十公斤'
@@ -132,7 +138,7 @@ class TestNormalizeChinese:
         assert normalize_chinese('有50个人') == '有五十个人'
 
     def test_email_untouched(self):
-        assert normalize_chinese('联系test@mail.com') == '联系test@mail.com'
+        assert normalize_chinese('联系test@mail.com') == '联系TEST at MAIL dot COM'
 
 
 class TestIsChineseDominant:

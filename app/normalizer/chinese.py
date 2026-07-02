@@ -2,10 +2,10 @@
 Mandarin (Chinese) text normalizer.
 
 Unlike app/normalizer/normalizer.py (Malay/English, dictionary + stemming heavy), this module only
-verbalizes numbers, currency, dates, times, phone/IC numbers, and common units into Hanzi -- the parts
-that actually need to be spoken correctly by the TTS model. Plain Hanzi text is never touched: every
-conversion function here is a targeted regex substitution, so text with nothing to convert is returned
-unchanged.
+verbalizes numbers, currency, dates, times, phone/IC numbers, emails, and common units into Hanzi --
+the parts that actually need to be spoken correctly by the TTS model. Plain Hanzi text is never
+touched: every conversion function here is a targeted regex substitution, so text with nothing to
+convert is returned unchanged.
 
 Out of scope (no unambiguous Chinese TTS convention to fall back on, and not needed by the current
 callers): ordinal numbers, fractions, and word-level dictionary correction.
@@ -26,6 +26,7 @@ CJK_RE = re.compile(f'[{CJK_RANGES}]')
 KANA_RE = re.compile(r'[぀-ヿ]')
 _OTHER_SCRIPT_RE = re.compile(f'[^\\x00-\\x7F{CJK_RANGES}\\s]')
 
+EMAIL_RE = re.compile(_ASCII_BOUND_L + r'[\w.+-]+@[\w-]+(?:\.[\w-]+)+' + _ASCII_BOUND_R)
 IC_RE = re.compile(r'(?:[0-9]{2})(?:0[1-9]|1[0-2])(?:0[1-9]|[12][0-9]|3[01])-[0-9]{2}-[0-9]{4}')
 PHONE_RE = re.compile(r'(?<![0-9])(?:\+\d{1,2}\s)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}(?![0-9])')
 MONEY_RE = re.compile(
@@ -183,6 +184,10 @@ def is_chinese_dominant(text):
     return cjk > other
 
 
+def _email_repl(m):
+    return m.group(0).upper().replace('.', ' dot ').replace('@', ' at ')
+
+
 def _ic_repl(m):
     return cn_digit_string(m.group(0), use_yao=True)
 
@@ -304,6 +309,7 @@ def normalize_chinese(text):
     """Verbalize numbers/currency/dates/times/phone/IC/units embedded in (or glued to) Chinese text."""
     if not text:
         return text
+    text = EMAIL_RE.sub(_email_repl, text)
     text = IC_RE.sub(_ic_repl, text)
     text = PHONE_RE.sub(_phone_repl, text)
     text = MONEY_RE.sub(_money_repl, text)
