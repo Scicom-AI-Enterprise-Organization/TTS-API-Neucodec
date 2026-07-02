@@ -82,7 +82,7 @@ class TestChinese:
     def test_chinese_with_email(self):
         out = pipeline('请联系 test@mail.com')
         assert '请联系' in out
-        assert 'TEST di MAIL dot COM' in out
+        assert 'TEST at MAIL dot COM' in out
 
     def test_chinese_with_phone(self):
         out = pipeline('电话 012-1234567')
@@ -126,7 +126,7 @@ class TestChinese:
     def test_chinese_sentence_complex(self):
         out = pipeline('中文 email test@mail.com 电话 012-1234567')
         assert '中文' in out
-        assert 'TEST di MAIL dot COM' in out
+        assert 'TEST at MAIL dot COM' in out
         assert '电话' in out
         assert '零一二一二三四五六七' in out
 
