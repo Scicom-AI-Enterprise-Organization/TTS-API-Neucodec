@@ -126,6 +126,9 @@ class TestNormalizeChinese:
         assert normalize_chinese('温度是36.5c') == '温度是摄氏三十六点五度'
         assert normalize_chinese('温度是 36.5c') == '温度是 摄氏三十六点五度'
         assert normalize_chinese('温度是 36.5 celcius') == '温度是 摄氏三十六点五度'
+        assert normalize_chinese('温度是36.5 celcius') == '温度是摄氏三十六点五度'
+        assert normalize_chinese('温度是36.5 c') == '温度是摄氏三十六点五度'
+        assert normalize_chinese('温度是36.5 celcius') == '温度是摄氏三十六点五度'
         assert normalize_chinese('今天的温度是30 celcius') == '今天的温度是摄氏三十度'
 
     def test_distance(self):
