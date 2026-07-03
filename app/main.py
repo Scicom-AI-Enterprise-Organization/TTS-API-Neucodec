@@ -618,7 +618,9 @@ def normalize_malaysian_text(s, normalize_malaysian=False):
             return f"{words1} {to} {words2} {phrase}"
 
         s = expand_contractions(s)
+        s, _protected_phones = protect_phone_numbers(s)
         s = pattern_range.sub(replace_range, s)
+        s = restore_phone_numbers(s, _protected_phones)
         if not chinese_dominant:
             # letter/digit splitting is meant for Malay/English word-level tokenization; for Chinese
             # it would insert spaces inside glued tokens like "RM500" and break Chinese verbalization below.

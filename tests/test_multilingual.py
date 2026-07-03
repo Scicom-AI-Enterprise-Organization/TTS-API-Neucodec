@@ -20,19 +20,45 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 warnings.filterwarnings('ignore', category=FutureWarning)
 
 import pytest
-from app.rules import sanitize_markdown
-from app.normalizer import load
+from app.rules import (
+    sanitize_markdown, before_replace_mapping, expand_contractions, pattern_range,
+    protect_phone_numbers, restore_phone_numbers,
+)
+from app.normalizer import load, to_cardinal
 from app.normalizer.chinese import normalize_chinese, is_chinese_dominant, CJK_RE, KANA_RE
 
 normalizer = load()
 
 
 def pipeline(s, english=False):
-    """Simulate normalize_malaysian_text with normalize_malaysian=True."""
+    """Mirrors the ASCII/CJK segment-routing steps of normalize_malaysian_text
+    (normalize_malaysian=True), minus the fasttext language-detection call
+    (`english` stands in for that) and the split_alpha_num digit-splitting pass
+    (covered separately by TestSplitAlphaNumExhaustive in test_malaysian_rules.py).
+    Must be kept in sync with app/main.py or bugs like the pattern_range/phone-number
+    clash can hide behind a passing test."""
     s = sanitize_markdown(s)
     s = s.replace('\n', ' ')
     s = re.sub(r'[ ]+', ' ', s).strip()
+
+    for k, v in before_replace_mapping.items():
+        s = s.replace(k, v)
+
     chinese_dominant = is_chinese_dominant(s)
+
+    def replace_range(match):
+        num1 = int(match.group(1))
+        num2 = int(match.group(2))
+        words1 = to_cardinal(num1, english=english)
+        words2 = to_cardinal(num2, english=english)
+        phrase = match.group(3)
+        to = 'to' if english else 'hingga'
+        return f'{words1} {to} {words2} {phrase}'
+
+    s = expand_contractions(s)
+    s, protected_phones = protect_phone_numbers(s)
+    s = pattern_range.sub(replace_range, s)
+    s = restore_phone_numbers(s, protected_phones)
 
     segments = re.split(r'(\S*[^\x00-\x7F]\S*)', s)
     normalized_parts = []
@@ -518,6 +544,14 @@ class TestMalayPrimary:
         assert 'kosong satu dua' in out
         assert 'di TEST dot COM' in out
         assert 'celsius' in out
+
+    def test_phone_number_not_swallowed_by_range(self):
+        # Regression: pattern_range used to greedily match "012-1234567 email info"
+        # as a numeric range (12 to 1234567), garbling the phone number instead of
+        # reading it digit-by-digit.
+        out = pipeline('hubungi 012-1234567 email info@test.com')
+        assert 'kosong satu dua, satu dua tiga empat lima enam tujuh' in out
+        assert 'hingga' not in out
 
     def test_malay_english_mixed(self):
         out = pipeline('Meeting at 3:00PM please contact 012-1234567')
