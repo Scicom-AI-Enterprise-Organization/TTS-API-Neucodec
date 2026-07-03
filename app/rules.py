@@ -1,6 +1,8 @@
 import re
 import json
 
+from app.normalizer.regex import _expressions as _malay_expressions
+
 contractions = {
     "ain't": "is not",
     "aren't": "are not",
@@ -81,6 +83,27 @@ replace_mapping = {
 pattern_range = re.compile(
     r'(\d+(?:\.\d+)?)\s*[-–]\s*(\d+(?:\.\d+)?)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+)*)'
 )
+
+_phone_pattern = re.compile(_malay_expressions['phone'], re.IGNORECASE)
+_PHONE_PLACEHOLDER = '\x00PHONE{}\x00'
+
+
+def protect_phone_numbers(text):
+    """Mask phone-number-shaped substrings (e.g. '012-1234567') so `pattern_range`
+    doesn't misparse them as a numeric range ('012' to '1234567')."""
+    phones = []
+
+    def _mask(match):
+        phones.append(match.group(0))
+        return _PHONE_PLACEHOLDER.format(len(phones) - 1)
+
+    return _phone_pattern.sub(_mask, text), phones
+
+
+def restore_phone_numbers(text, phones):
+    for i, phone in enumerate(phones):
+        text = text.replace(_PHONE_PLACEHOLDER.format(i), phone)
+    return text
 
 with open('app/pronunciation.json', 'r', encoding='utf-8') as f:
     pronunciation_dict = json.load(f)
