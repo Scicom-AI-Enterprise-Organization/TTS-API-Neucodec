@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from typing import List
-from torchtune.modules import RotaryPositionalEmbeddings
+from ._rope import RotaryPositionalEmbeddings
 from vector_quantize_pytorch import ResidualFSQ
 
 from .bs_roformer5 import TransformerBlock
