@@ -31,6 +31,20 @@ TORCH_COMPILE = os.environ.get('TORCH_COMPILE', 'false').lower() == 'true'
 DEBUG_AUDIO = os.environ.get('DEBUG_AUDIO', 'false').lower() == 'true'
 SENTRY_DSN = os.environ.get('SENTRY_DSN', '')
 
+# Compute device. Empty = auto-detect (cuda -> npu -> cpu). Set to 'npu' to run the
+# codec decode on a Huawei Ascend NPU (via torch_npu). On non-cuda devices the CUDA
+# graph warmup and CUDA streams are skipped automatically (see app/main.py).
+DEVICE = os.environ.get('DEVICE', '')
+
+# Dummy streaming-tokens mode: instead of streaming speech tokens from the vLLM LM,
+# replay a canned "<|s_N|>..." token string read from this file (e.g. tokens extracted
+# from a reference audio). Lets the decode/serving pipeline run without vLLM. Empty = off.
+DUMMY_TOKENS_FILE = os.environ.get('DUMMY_TOKENS_FILE', '')
+# How many times to replay the canned tokens per request ("keep streaming").
+DUMMY_REPEAT = int(os.environ.get('DUMMY_REPEAT', '1'))
+# Seconds to sleep between emitted dummy tokens (>0 simulates the LM's token pace).
+DUMMY_TOKEN_DELAY = float(os.environ.get('DUMMY_TOKEN_DELAY', '0.0'))
+
 SPEAKERS = [s.strip() for s in SPEAKERS.split(',')]
 
 BUCKET_BATCHES = list(range(1, MAX_BATCH_SIZE + 1, 1))

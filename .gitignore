@@ -2,3 +2,8 @@
 .env_vllm
 *__pycache__
 .pytest_cache
+scicom
+
+# generated test/inference audio (keep the folder via audio/.gitkeep)
+audio/*.wav
+audio/*.pcm
