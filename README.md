@@ -156,6 +156,19 @@ curl -X POST 'http://localhost:9091/v1/audio/vc' \
   --output vc.wav
 ```
 
+## Gradio Demo
+
+`gradio_app.py` is a simple UI for poking at a running API instance (local or remote) without curl —
+tabs for text-to-speech, text normalization, and voice conversion.
+
+```bash
+pip install gradio requests
+TTS_API_BASE_URL=http://localhost:9091 python gradio_app.py   # defaults to localhost:9091
+```
+
+Open the printed local URL, set the API base URL if needed, and click **Check connection** to list
+available speakers.
+
 ## Unit Tests
 
 ### Running tests
