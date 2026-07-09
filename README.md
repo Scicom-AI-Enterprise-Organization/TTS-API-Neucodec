@@ -260,3 +260,67 @@ server emits audio faster than real time in aggregate).
 The full optimization writeup (baseline → CUDA graphs → multi-worker + MPS, and a documented negative result
 on source-level micro-optimizations) is in [`bench/OPTIMIZATION.md`](bench/OPTIMIZATION.md). To reproduce, see
 the ready scripts in [`bench/deploy/`](bench/deploy) (`setup_pod.sh`, `start_vllm.sh`, `start_app.sh`).
+
+## Huawei Ascend 910B3 NPU — support & the precision quality gap
+
+The full stack runs on Huawei Ascend 910B3 (CANN 8.5.2): the **vLLM LM via
+[`vllm-ascend`](https://github.com/vllm-project/vllm-ascend) on NPU 0**, and the **NeuCodec decoder via
+`torch_npu` on NPU 1**. The app is unchanged apart from device selection — set `DEVICE=npu` and it uses a
+`torch.npu` stream shim, skipping CUDA graphs/streams automatically (see [app/main.py](app/main.py)). Pin
+each stage to a chip with `ASCEND_RT_VISIBLE_DEVICES` (0 for vLLM, 1 for the codec).
+
+**Working install** (Python **3.11** — vLLM 0.11 uses py3.10 syntax that breaks on 3.9):
+
+```bash
+# codec app venv (py3.9 ok): torch 2.8.0 + torch_npu 2.8.0.post5  → see requirements-npu.txt
+# vLLM venv (py3.11): install vllm first, then vllm-ascend (it pins torch back to 2.7.1)
+uv venv /root/vllm-venv311 --python 3.11 && source /root/vllm-venv311/bin/activate
+uv pip install vllm==0.11.0
+uv pip install vllm-ascend==0.11.0 "setuptools<81"   # torch 2.7.1 + torch-npu 2.7.1; <81 keeps pkg_resources
+source /usr/local/Ascend/ascend-toolkit/set_env.sh && source /usr/local/Ascend/nnal/atb/set_env.sh
+```
+
+The NeuCodec **decode runs cleanly on the NPU** (bit-identical to CUDA — the vendored RoPE in
+[`app/neucodec/_rope.py`](app/neucodec/_rope.py) removed the torchtune/torchao dependency, which is what
+made py3.9 + NPU viable). **Encode** currently must run on CPU (the encoder's alias-free resample mis-shapes
+on NPU); this only affects VC/token-extraction, not TTS decode.
+
+### 910B3 vs H100 — measured (single-stream, 16-sentence eval set, bf16, temp 0.6)
+
+| Metric | H100 SXM | Ascend 910B3 | Notes |
+|---|---|---|---|
+| LM rate (vLLM) | ~380 tok/s | ~81 tok/s | **~4.8× slower** |
+| End-to-end RTF | ~0.13 | ~0.68 | LM-bound; codec decode is fast on both |
+| Intelligibility (Whisper large-v3 CER) | 2.2% | 3.4% | comparable — content not garbled |
+| **Naturalness (UTMOSv2 MOS)** | **3.2** | **2.6** | **−0.6 MOS — audibly less natural** |
+
+> ⚠️ **Open issue — the bf16 quality gap.** With identical decode and identical sampling settings, the
+> Ascend LM produces **measurably less-natural speech tokens** (−0.6 MOS) than the H100, despite comparable
+> intelligibility. The gap is in the `vllm-ascend` LM path, i.e. the 910B3's bf16 compute kernels — **not**
+> the codec. Mitigations tested and their MOS:
+>
+> | Config | MOS | Result |
+> |---|---|---|
+> | Ascend bf16 + ACL graphs (default) | 2.60 | baseline |
+> | Ascend bf16 + `--enforce-eager` | 2.45 | **no help** — ACL graph capture is not the cause |
+> | Ascend `--dtype float16` + eager | 1.73 | **much worse** — keep bf16 |
+> | H100 bf16 | 3.21 | target |
+>
+> Neither disabling graph capture nor switching precision closes it, so **for this TTS model the 910B3 is
+> both slower and less natural than H100 at bf16.** MOS measured with
+> [faster-UTMOSv2](https://github.com/Scicom-AI-Enterprise-Organization/faster-UTMOSv2).
+>
+> **Root cause — isolated (not fixable via config):** the gap is entirely in the **LM tokens the
+> `vllm-ascend` bf16 forward produces**, not the codec:
+> - **Codec decode is bit-identical on NPU vs CPU** — decoding the *same* tokens on both gives
+>   `MAE = 0.00000` on all 16 clips. Rules out the decoder.
+> - **Sampling is already fp32** (AscendSampler softmax `dtype=float32`) and matmul HF32 is **off**
+>   (`torch.npu.matmul.allow_hf32 == False`) — both full precision. Rules out sampler + matmul.
+> - **fp32 is impossible on this stack**: `--dtype float32` crashes the engine — the Ascend paged-KV
+>   attention op (`ReshapeCacheOperation`, `ERR00100`) only supports bf16/fp16. So the fused
+>   **attention kernel is locked to bf16**, and its internal accumulation is what diverges from the
+>   H100's bf16 attention, shifting sampled tokens toward less-natural speech.
+>
+> There is **no serving-flag fix** today. Real fixes require a higher-precision (fp32-accumulate)
+> attention kernel from Huawei/`vllm-ascend`, a different attention backend, or fine-tuning the model to
+> the 910B3 bf16 numerics. Tracked for upstream.
