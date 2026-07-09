@@ -81,12 +81,18 @@ logging.info(f"decode device: {device}")
 lang_model = None
 normalizer = None
 if not DUMMY_TOKENS_FILE:
-    import fasttext
-    filename = hf_hub_download(
-        repo_id="mesolitica/fasttext-language-detection-bahasa-en",
-        filename="fasttext.ftz",
-    )
-    lang_model = fasttext.load_model(filename)
+    # fasttext (language detection) is only used when a request sets normalize_malaysian=True.
+    # Make it optional so the app still boots where a fasttext build is unavailable (e.g. NPU);
+    # requests with normalize_malaysian=False are unaffected.
+    try:
+        import fasttext
+        filename = hf_hub_download(
+            repo_id="mesolitica/fasttext-language-detection-bahasa-en",
+            filename="fasttext.ftz",
+        )
+        lang_model = fasttext.load_model(filename)
+    except Exception as e:
+        logging.warning(f"fasttext unavailable; malaysian language detection disabled: {e}")
     normalizer = load_normalizer()
 
 # Canned speech tokens replayed in DUMMY_TOKENS mode (extracted from a reference audio).
