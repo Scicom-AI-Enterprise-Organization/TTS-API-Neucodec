@@ -336,6 +336,8 @@ async def stream_speech(
         'accept': 'application/json',
         'Content-Type': 'application/json',
     }
+    if TTS_API_KEY:
+        headers['Authorization'] = f'Bearer {TTS_API_KEY}'
 
     json_data = {
         'model': model,

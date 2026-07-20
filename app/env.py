@@ -4,6 +4,7 @@ import logging
 TTS_API = os.environ.get('TTS_API', 'http://tts-engine:9093')
 if '/v1/completions' not in TTS_API:
     TTS_API = TTS_API + '/v1/completions'
+TTS_API_KEY = os.environ.get('TTS_API_KEY', '')
 MODEL_NAME = os.environ.get('MODEL_NAME', 'TTS-model')
 DEFAULT_SPEAKER = os.environ.get('DEFAULT_SPEAKER', 'TM_English')
 SPEAKERS = os.environ.get('SPEAKERS', 'TM_Mandarin,TM_English')
