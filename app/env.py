@@ -13,6 +13,14 @@ DEFAULT_REPETITION_PENALTY = float(os.environ.get('DEFAULT_REPETITION_PENALTY', 
 DEFAULT_MAX_TOKENS = int(os.environ.get('DEFAULT_MAX_TOKENS', '3072'))
 DEFAULT_PLAYBACK_SPEED = float(os.environ.get('DEFAULT_PLAYBACK_SPEED', '1.5'))
 DEFAULT_PLAYBACK_OVERLAP_SPEED = float(os.environ.get('DEFAULT_PLAYBACK_OVERLAP_SPEED', '0.2'))
+# Streaming stitcher: overlap-add with context-primed windows + a raised-cosine
+# crossfade at every chunk boundary, to remove the boundary 'snap'/click. The
+# NeuCodec decoder is non-causal (bidirectional attention + conv + ISTFT 'same'
+# padding), so each chunk decoded in isolation has different edge context; a hard
+# splice of two such chunks clicks. Set STREAM_CROSSFADE=false for the old hard-cut
+# behaviour. CROSSFADE_MS is the blend width (bounded to the context/chunk size).
+STREAM_CROSSFADE = os.environ.get('STREAM_CROSSFADE', 'true').lower() == 'true'
+CROSSFADE_MS = float(os.environ.get('CROSSFADE_MS', '12.0'))
 DYNAMIC_BATCHING = os.environ.get('DYNAMIC_BATCHING', 'false').lower() == 'true'
 MICROSLEEP = float(os.environ.get('MICROSLEEP', '1e-4'))
 MAX_BATCH_SIZE = int(os.environ.get('MAX_BATCH_SIZE', '16'))
@@ -23,6 +31,20 @@ Nice value is [0.1, 0.2, 0.5, 1.0, 1.5, 2.0, 3.0, 10.0]
 TORCH_COMPILE = os.environ.get('TORCH_COMPILE', 'false').lower() == 'true'
 DEBUG_AUDIO = os.environ.get('DEBUG_AUDIO', 'false').lower() == 'true'
 SENTRY_DSN = os.environ.get('SENTRY_DSN', '')
+
+# Compute device. Empty = auto-detect (cuda -> npu -> cpu). Set to 'npu' to run the
+# codec decode on a Huawei Ascend NPU (via torch_npu). On non-cuda devices the CUDA
+# graph warmup and CUDA streams are skipped automatically (see app/main.py).
+DEVICE = os.environ.get('DEVICE', '')
+
+# Dummy streaming-tokens mode: instead of streaming speech tokens from the vLLM LM,
+# replay a canned "<|s_N|>..." token string read from this file (e.g. tokens extracted
+# from a reference audio). Lets the decode/serving pipeline run without vLLM. Empty = off.
+DUMMY_TOKENS_FILE = os.environ.get('DUMMY_TOKENS_FILE', '')
+# How many times to replay the canned tokens per request ("keep streaming").
+DUMMY_REPEAT = int(os.environ.get('DUMMY_REPEAT', '1'))
+# Seconds to sleep between emitted dummy tokens (>0 simulates the LM's token pace).
+DUMMY_TOKEN_DELAY = float(os.environ.get('DUMMY_TOKEN_DELAY', '0.0'))
 
 SPEAKERS = [s.strip() for s in SPEAKERS.split(',')]
 

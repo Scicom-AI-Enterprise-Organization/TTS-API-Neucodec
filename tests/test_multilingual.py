@@ -20,26 +20,62 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 warnings.filterwarnings('ignore', category=FutureWarning)
 
 import pytest
-from app.rules import sanitize_markdown
-from app.normalizer import load
+from app.rules import (
+    sanitize_markdown, before_replace_mapping, expand_contractions, pattern_range,
+    protect_phone_numbers, restore_phone_numbers,
+)
+from app.normalizer import load, to_cardinal
+from app.normalizer.chinese import normalize_chinese, is_chinese_dominant, CJK_RE, KANA_RE
 
 normalizer = load()
 
 
 def pipeline(s, english=False):
-    """Simulate normalize_malaysian_text with normalize_malaysian=True."""
+    """Mirrors the ASCII/CJK segment-routing steps of normalize_malaysian_text
+    (normalize_malaysian=True), minus the fasttext language-detection call
+    (`english` stands in for that) and the split_alpha_num digit-splitting pass
+    (covered separately by TestSplitAlphaNumExhaustive in test_malaysian_rules.py).
+    Must be kept in sync with app/main.py or bugs like the pattern_range/phone-number
+    clash can hide behind a passing test."""
     s = sanitize_markdown(s)
     s = s.replace('\n', ' ')
     s = re.sub(r'[ ]+', ' ', s).strip()
+
+    for k, v in before_replace_mapping.items():
+        s = s.replace(k, v)
+
+    chinese_dominant = is_chinese_dominant(s)
+
+    def replace_range(match):
+        num1 = int(match.group(1))
+        num2 = int(match.group(2))
+        words1 = to_cardinal(num1, english=english)
+        words2 = to_cardinal(num2, english=english)
+        phrase = match.group(3)
+        to = 'to' if english else 'hingga'
+        return f'{words1} {to} {words2} {phrase}'
+
+    s = expand_contractions(s)
+    s, protected_phones = protect_phone_numbers(s)
+    s = pattern_range.sub(replace_range, s)
+    s = restore_phone_numbers(s, protected_phones)
 
     segments = re.split(r'(\S*[^\x00-\x7F]\S*)', s)
     normalized_parts = []
     for seg in segments:
         if re.search(r'[^\x00-\x7F]', seg):
-            normalized_parts.append(seg)
+            if CJK_RE.search(seg) and not KANA_RE.search(seg):
+                normalized_parts.append(normalize_chinese(seg))
+            else:
+                normalized_parts.append(seg)
         elif seg.strip():
             leading_ws = seg[:len(seg) - len(seg.lstrip())]
             trailing_ws = seg[len(seg.rstrip()):]
+            if chinese_dominant:
+                converted = normalize_chinese(seg.strip())
+                if converted != seg.strip():
+                    normalized_parts.append(leading_ws + converted + trailing_ws)
+                    continue
             result = normalizer.normalize(
                 seg.strip(),
                 normalize_hingga=False, normalize_text=False,
@@ -67,27 +103,28 @@ class TestChinese:
     def test_chinese_with_money(self):
         out = pipeline('价格是 RM500')
         assert '价格是' in out
-        assert 'lima ratus ringgit' in out
+        assert '五百令吉' in out
 
     def test_chinese_with_email(self):
         out = pipeline('请联系 test@mail.com')
         assert '请联系' in out
-        assert 'TEST di MAIL dot COM' in out
+        assert 'TEST at MAIL dot COM' in out
 
     def test_chinese_with_phone(self):
         out = pipeline('电话 012-1234567')
         assert '电话' in out
-        assert 'kosong satu dua' in out
+        assert '零一二一二三四五六七' in out
 
     def test_chinese_with_temperature(self):
         out = pipeline('今天温度是 36.5c')
         assert '今天温度是' in out
-        assert 'celsius' in out
+        assert '摄氏三十六点五度' in out
 
     def test_chinese_with_url(self):
         out = pipeline('访问 https://www.google.com')
         assert '访问' in out
         assert 'HTTPS' in out
+        assert 'WWW' in out
         assert 'dot' in out
 
     def test_chinese_mixed_english(self):
@@ -103,21 +140,21 @@ class TestChinese:
         assert '世界' in out
 
     def test_chinese_number_attached(self):
-        # When number is attached to CJK, the whole token is non-ASCII => pass through raw
+        # Numbers glued directly to Hanzi (the normal way to write Chinese) are now verbalized too.
         out = pipeline('价格是RM500')
-        assert '价格是RM500' in out
+        assert '价格是五百令吉' in out
 
     def test_chinese_number_spaced(self):
-        # When separated by space, normalization works
+        # Separated by a space, still Chinese wording since the sentence is Chinese-dominant.
         out = pipeline('价格是 RM500')
-        assert 'ringgit' in out
+        assert '令吉' in out
 
     def test_chinese_sentence_complex(self):
         out = pipeline('中文 email test@mail.com 电话 012-1234567')
         assert '中文' in out
-        assert 'TEST di MAIL dot COM' in out
+        assert 'TEST at MAIL dot COM' in out
         assert '电话' in out
-        assert 'kosong satu dua' in out
+        assert '零一二一二三四五六七' in out
 
 
 # ---------------------------------------------------------------------------
@@ -439,22 +476,23 @@ class TestMixedMultilingual:
 # Non-ASCII attached to ASCII (edge cases)
 # ---------------------------------------------------------------------------
 class TestNonASCIIAttached:
-    """When non-ASCII chars are attached to ASCII without spaces,
-    the whole token is treated as non-ASCII and passes through raw."""
+    """When non-ASCII chars are attached to ASCII without spaces, the whole token is treated as
+    non-ASCII. For most scripts that means it passes through raw; Chinese is the exception, since
+    normalize_chinese() verbalizes numbers/currency embedded in it instead of leaving them raw."""
 
     def test_chinese_rm_attached(self):
-        # No space between CJK and RM500 => whole token is non-ASCII
+        # No space between CJK and RM500 => whole token is non-ASCII, but Chinese still verbalizes it
         out = pipeline('价格是RM500')
-        assert '价格是RM500' in out
+        assert '价格是五百令吉' in out
 
     def test_chinese_number_attached(self):
         out = pipeline('温度是36.5c')
-        assert '温度是36.5c' in out
+        assert '温度是摄氏三十六点五度' in out
 
     def test_chinese_rm_spaced(self):
-        # With space => normalization works
+        # With space => still Chinese wording (sentence is Chinese-dominant)
         out = pipeline('价格是 RM500')
-        assert 'ringgit' in out
+        assert '令吉' in out
 
     def test_korean_number_attached(self):
         out = pipeline('가격RM100')
@@ -506,6 +544,14 @@ class TestMalayPrimary:
         assert 'kosong satu dua' in out
         assert 'di TEST dot COM' in out
         assert 'celsius' in out
+
+    def test_phone_number_not_swallowed_by_range(self):
+        # Regression: pattern_range used to greedily match "012-1234567 email info"
+        # as a numeric range (12 to 1234567), garbling the phone number instead of
+        # reading it digit-by-digit.
+        out = pipeline('hubungi 012-1234567 email info@test.com')
+        assert 'kosong satu dua, satu dua tiga empat lima enam tujuh' in out
+        assert 'hingga' not in out
 
     def test_malay_english_mixed(self):
         out = pipeline('Meeting at 3:00PM please contact 012-1234567')
