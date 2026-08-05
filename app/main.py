@@ -21,6 +21,7 @@ from fastapi.responses import StreamingResponse, FileResponse, Response
 from pydantic import BaseModel
 from huggingface_hub import hf_hub_download
 from app.normalizer import load as load_normalizer, to_cardinal
+from app.normalizer.chinese import normalize_chinese, is_chinese_dominant, CJK_RE, KANA_RE
 import torch.cuda as cuda
 import uuid
 import bisect
@@ -29,35 +30,79 @@ import queue as thread_queue
 import concurrent.futures
 import soundfile as sf
 import numpy as np
-import librosa
 import aiohttp
-import sentry_sdk
-import fasttext
-import fastapi_loki_tempo
+# Optional heavy front-end deps: only needed for text->LM generation / VC. In DUMMY_TOKENS
+# mode (canned tokens) or on a bare NPU box these may be absent; degrade gracefully.
+try:
+    import librosa
+except Exception:
+    librosa = None
+try:
+    import sentry_sdk
+except Exception:
+    sentry_sdk = None
+try:
+    import fastapi_loki_tempo
+except Exception:
+    fastapi_loki_tempo = None
 from app.rules import *
 from app.wrapper import CUDAGraphsWrapper
 from app.neucodec import NeuCodec
 
-if len(SENTRY_DSN):
+if sentry_sdk is not None and len(SENTRY_DSN):
     sentry_sdk.init(dsn=SENTRY_DSN, send_default_pii=True)
 
 app = FastAPI()
-fastapi_loki_tempo.patch(app=app)
+if fastapi_loki_tempo is not None:
+    fastapi_loki_tempo.patch(app=app)
 
 torch.set_grad_enabled(False)
 
-if torch.cuda.is_available():
+if DEVICE:
+    device = DEVICE
+elif torch.cuda.is_available():
     device = "cuda"
 else:
-    logging.warning("GPU is not available, will run using CPU.")
     device = "cpu"
 
-filename = hf_hub_download(
-    repo_id="mesolitica/fasttext-language-detection-bahasa-en", 
-    filename="fasttext.ftz"
-)
-lang_model = fasttext.load_model(filename)
-normalizer = load_normalizer()
+# Accelerator helper module: torch.cuda / torch.npu / None. CUDA graphs and CUDA/NPU
+# streams are only used when this is not None; on cpu the decode falls back to eager.
+if device == "cuda":
+    dev = torch.cuda
+elif device == "npu":
+    import torch_npu  # noqa: F401  registers the 'npu' device backend
+    dev = torch.npu
+else:
+    logging.warning("No CUDA/NPU device selected, will run using CPU.")
+    dev = None
+logging.info(f"decode device: {device}")
+
+# Language detection + text normalization are only needed when generating from text via
+# the LM. In DUMMY_TOKENS mode we replay canned speech tokens, so skip them (and fasttext).
+lang_model = None
+normalizer = None
+if not DUMMY_TOKENS_FILE:
+    # fasttext (language detection) is only used when a request sets normalize_malaysian=True.
+    # Make it optional so the app still boots where a fasttext build is unavailable (e.g. NPU);
+    # requests with normalize_malaysian=False are unaffected.
+    try:
+        import fasttext
+        filename = hf_hub_download(
+            repo_id="mesolitica/fasttext-language-detection-bahasa-en",
+            filename="fasttext.ftz",
+        )
+        lang_model = fasttext.load_model(filename)
+    except Exception as e:
+        logging.warning(f"fasttext unavailable; malaysian language detection disabled: {e}")
+    normalizer = load_normalizer()
+
+# Canned speech tokens replayed in DUMMY_TOKENS mode (extracted from a reference audio).
+DUMMY_TOKENS = ""
+if DUMMY_TOKENS_FILE:
+    with open(DUMMY_TOKENS_FILE) as f:
+        DUMMY_TOKENS = f.read().strip()
+    _n_dummy = len(re.findall(r's_(\d+)', DUMMY_TOKENS))
+    logging.info(f"DUMMY_TOKENS mode: replaying {_n_dummy} tokens from {DUMMY_TOKENS_FILE}")
 
 logging.info('loading audio encoder')
 
@@ -67,8 +112,13 @@ sr = 24000
 
 logging.info('done load audio encoder')
 
-h2d_stream = cuda.Stream()
-compute_stream = cuda.Stream()
+# Streams are only used by the dynamic-batching path (DYNAMIC_BATCHING=true). Guard so a
+# non-CUDA box (e.g. Ascend NPU with dev=torch.npu, or plain CPU) does not crash at import.
+if dev is not None:
+    h2d_stream = dev.Stream()
+    compute_stream = dev.Stream()
+else:
+    h2d_stream = compute_stream = None
 
 def fn(padded_token):
     return codec.decode_code(padded_token.unsqueeze(1))
@@ -144,7 +194,7 @@ def compute_thread_fn(loop):
             continue
 
         with torch.no_grad():
-            with cuda.stream(compute_stream):
+            with dev.stream(compute_stream):
                 compute_stream.wait_stream(h2d_stream)
                 if shapes in buckets:
                     logging.debug(f'{uuid_str}, Hit compute shape {shapes}')
@@ -173,7 +223,7 @@ def batch_thread_fn():
         shapes = padded_token.shape
         logging.debug(f'{uuid_str}, batch shape {shapes} cpu')
 
-        with cuda.stream(h2d_stream):
+        with dev.stream(h2d_stream):
             padded_token_gpu = padded_token.to(device, non_blocking=True)
         compute_queue.put((uuid_str, padded_token_gpu, padded_token_len, futures))
 
@@ -303,6 +353,19 @@ async def stream_speech(
     queue = asyncio.Queue()
 
     async def generate_audio_stream():
+        # DUMMY_TOKENS mode: replay canned speech tokens (simulating the vLLM SSE stream)
+        # instead of calling the LM. Emits one token per event, repeated DUMMY_REPEAT times.
+        if DUMMY_TOKENS_FILE:
+            toks = re.findall(r"<\|s_\d+\|>", DUMMY_TOKENS)
+            for _ in range(max(1, DUMMY_REPEAT)):
+                for t in toks:
+                    if await request.is_disconnected():
+                        break
+                    await queue.put({'result': t})
+                    if DUMMY_TOKEN_DELAY > 0:
+                        await asyncio.sleep(DUMMY_TOKEN_DELAY)
+            await queue.put(None)
+            return
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.post(
@@ -338,13 +401,28 @@ async def stream_speech(
 
     asyncio.create_task(generate_audio_stream())
 
-    chunk_size = int(playback_speed * codebook_size)
-    overlap = int(playback_overlap_speed * codebook_size)
-    overlap_chunk = int((overlap / codebook_size) * sr)
-    fade_len = int(sr * 0.002)
+    samples_per_token = sr // codebook_size                  # 480 samples / speech token
+    chunk_size = int(playback_speed * codebook_size)         # tokens finalized per step (hop)
+    overlap = int(playback_overlap_speed * codebook_size)    # neighbour-context tokens / side
+    overlap_chunk = int((overlap / codebook_size) * sr)      # (legacy path only)
+    ctx = max(1, overlap)                                     # crossfade needs >=1 token of context
+
+    # crossfade width in samples, bounded so the ramp fits inside the context and
+    # leaves a non-empty chunk core.
+    xf = int(sr * (CROSSFADE_MS / 1000.0))
+    xf = max(2, min(xf, ctx * samples_per_token, (chunk_size * samples_per_token) // 2))
+    half = xf // 2
+
+    TOKEN_RE = re.compile(r'<\|s_(\d+)\|>')
+    all_ids = []
+
+    def cos_ramp(n):
+        # raised-cosine 0->1: derivative 0 at both ends, and up + reversed(up) == 1
+        # -> equal-gain crossfade with no slope kink at the ramp edges.
+        return 0.5 * (1.0 - np.cos(np.pi * np.linspace(0.0, 1.0, n)))
 
     def snap_to_zero_crossing(y_, margin=256):
-        """Find nearest zero crossing near the end of the chunk and trim there."""
+        """(legacy path) trim to the nearest zero crossing near the chunk end."""
         if len(y_) < margin * 2:
             return y_
         search_region = y_[-margin:]
@@ -354,7 +432,101 @@ async def stream_speech(
             return y_[:cut]
         return y_
 
-    async def audio_stream():
+    async def next_output():
+        while True:
+            try:
+                return queue.get_nowait()
+            except asyncio.QueueEmpty:
+                await asyncio.sleep(1e-9)
+
+    async def audio_stream_crossfade():
+        """Streaming decode with context-primed windows + a raised-cosine crossfade
+        at every chunk boundary.
+
+        The NeuCodec decoder is non-causal (bidirectional attention over the window,
+        conv receptive field, ISTFT 'same' padding), so a token decoded at the cold
+        edge of an isolated chunk differs from the same token decoded with real
+        neighbours -> splicing two chunks produces a click. Here each chunk is
+        decoded with `ctx` tokens of real neighbour context on both sides (whose
+        audio only warms the codec edges and is discarded), and adjacent chunk
+        waveforms are blended over `xf` samples so the join is continuous.
+        """
+        all_ids.clear()
+        text_buf = ""
+        prev_xf = None        # samples held back straddling the last emitted boundary
+        k = 0
+        count = 0
+
+        def to_bytes(y):
+            return (np.clip(y, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
+
+        async def emit_step(k, is_last):
+            nonlocal prev_xf, count
+            s = k * chunk_size
+            e = len(all_ids) if is_last else s + chunk_size
+            ds = max(0, s - ctx)
+            de = len(all_ids) if is_last else min(len(all_ids), e + ctx)
+            _, a = await decode_speech_token("".join(f"<|s_{i}|>" for i in all_ids[ds:de]))
+            if len(a) == 0:
+                return None
+            off = ds * samples_per_token
+            bk = s * samples_per_token        # boundary with chunk k-1
+            be = e * samples_per_token        # boundary with chunk k+1
+            parts = []
+            if k == 0:
+                emit_lo = 0
+            else:
+                cx = a[bk - half - off: bk + half - off]
+                n = min(len(cx), len(prev_xf) if prev_xf is not None else 0)
+                if n > 0:
+                    r = cos_ramp(n)
+                    parts.append(prev_xf[:n] * (1.0 - r) + cx[:n] * r)
+                emit_lo = bk + half
+            if is_last:
+                parts.append(a[emit_lo - off:])
+                prev_xf = None
+            else:
+                parts.append(a[emit_lo - off: be - half - off])
+                prev_xf = a[be - half - off: be + half - off].copy()
+            y = np.concatenate(parts) if len(parts) != 1 else parts[0]
+            if len(y) == 0:
+                return None
+            if DEBUG_AUDIO:
+                sf.write(f'/app/app/{count}.wav', y, sr)
+                count += 1
+            return to_bytes(y)
+
+        while True:
+            output = await next_output()
+            if output is None:
+                break
+            if "error" in output:
+                raise HTTPException(status_code=400, detail=output["error"])
+            text_buf += output["result"]
+            last = 0
+            for m in TOKEN_RE.finditer(text_buf):
+                all_ids.append(int(m.group(1)))
+                last = m.end()
+            text_buf = text_buf[last:]
+            # emit every chunk that now has its full right-hand context available
+            while (k + 1) * chunk_size + ctx <= len(all_ids):
+                b = await emit_step(k, is_last=False)
+                if b:
+                    yield b
+                    await asyncio.sleep(0)
+                k += 1
+
+        # flush the tail: one final decode covering all remaining tokens
+        if k * chunk_size < len(all_ids):
+            b = await emit_step(k, is_last=True)
+            if b:
+                yield b
+                await asyncio.sleep(0)
+        elif prev_xf is not None and len(prev_xf):
+            yield to_bytes(prev_xf)
+            await asyncio.sleep(0)
+
+    async def audio_stream_legacy():
         buffer = []
         to_yield = 0
         count = 0
@@ -420,7 +592,7 @@ async def stream_speech(
             yield (leftover * 32767).astype(np.int16).tobytes()
             await asyncio.sleep(0)
 
-    func = audio_stream()
+    func = audio_stream_crossfade() if STREAM_CROSSFADE else audio_stream_legacy()
     stream_headers = {
         'Cache-Control': 'no-cache, no-store',
         'X-Accel-Buffering': 'no',
@@ -527,6 +699,7 @@ def normalize_malaysian_text(s, normalize_malaysian=False):
     if normalize_malaysian:
         lang = lang_model.predict(s, k = 3)[0][0]
         normalize_in_english = 'english' in lang
+        chinese_dominant = is_chinese_dominant(s)
 
         def replace_range(match):
             num1 = int(match.group(1))
@@ -541,16 +714,21 @@ def normalize_malaysian_text(s, normalize_malaysian=False):
             return f"{words1} {to} {words2} {phrase}"
 
         s = expand_contractions(s)
+        s, _protected_phones = protect_phone_numbers(s)
         s = pattern_range.sub(replace_range, s)
-        new_s = []
-        for w in s.split():
-            splitted = split_alpha_num(w).split()
-            for i in range(len(splitted)):
-                if len(splitted[i]) == 1:
-                    splitted[i] = splitted[i].upper()
-            splitted = ' '.join(splitted)
-            new_s.append(splitted)
-        s = ' '.join(new_s)
+        s = restore_phone_numbers(s, _protected_phones)
+        if not chinese_dominant:
+            # letter/digit splitting is meant for Malay/English word-level tokenization; for Chinese
+            # it would insert spaces inside glued tokens like "RM500" and break Chinese verbalization below.
+            new_s = []
+            for w in s.split():
+                splitted = split_alpha_num(w).split()
+                for i in range(len(splitted)):
+                    if len(splitted[i]) == 1:
+                        splitted[i] = splitted[i].upper()
+                splitted = ' '.join(splitted)
+                new_s.append(splitted)
+            s = ' '.join(new_s)
 
         logging.info(f'out from internal normalizer: {s}')
 
@@ -558,10 +736,18 @@ def normalize_malaysian_text(s, normalize_malaysian=False):
         normalized_parts = []
         for seg in segments:
             if re.search(r'[^\x00-\x7F]', seg):
-                normalized_parts.append(seg)
+                if CJK_RE.search(seg) and not KANA_RE.search(seg):
+                    normalized_parts.append(normalize_chinese(seg))
+                else:
+                    normalized_parts.append(seg)
             elif seg.strip():
                 leading_ws = seg[:len(seg) - len(seg.lstrip())]
                 trailing_ws = seg[len(seg.rstrip()):]
+                if chinese_dominant:
+                    converted = normalize_chinese(seg.strip())
+                    if converted != seg.strip():
+                        normalized_parts.append(leading_ws + converted + trailing_ws)
+                        continue
                 result = normalizer.normalize(
                     seg.strip(),
                     normalize_hingga = False,
@@ -616,11 +802,14 @@ async def speaker():
 async def tts_stream(data: TTSRequest, request: Request = None):
     speaker = data.voice
 
-    s = normalize_malaysian_text(data.input, normalize_malaysian=data.normalize_malaysian)
-    logging.info(f'normalized: {s}')
-
-    prompt = f'<|im_start|>{speaker}: {s}<|speech_start|>'
-    logging.info(f'prompt: {prompt}')
+    if DUMMY_TOKENS_FILE:
+        # tokens are replayed from DUMMY_TOKENS_FILE; the prompt is unused.
+        prompt = ''
+    else:
+        s = normalize_malaysian_text(data.input, normalize_malaysian=data.normalize_malaysian)
+        logging.info(f'normalized: {s}')
+        prompt = f'<|im_start|>{speaker}: {s}<|speech_start|>'
+        logging.info(f'prompt: {prompt}')
 
     return await stream_speech(
         prompt=prompt,

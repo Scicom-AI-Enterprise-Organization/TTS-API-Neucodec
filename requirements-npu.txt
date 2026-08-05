@@ -1,0 +1,65 @@
+# ---------------------------------------------------------------------------
+# Dependencies to run the TTS/VC decode API on a Huawei Ascend NPU (910B3).
+#
+# Target box: aarch64, Python 3.9, CANN 8.5.2 (npu-smi/driver 25.5.1).
+# All wheels install straight from PyPI (no special index). Before installing
+# and before running, source the CANN env so torch_npu can load its backend:
+#     source /usr/local/Ascend/ascend-toolkit/set_env.sh
+#     python -m venv venv && source venv/bin/activate
+#     pip install -U pip && pip install -r requirements-npu.txt
+#
+# This is the NPU counterpart of requirements.txt. Differences vs the CUDA reqs:
+#   * torch/torchaudio pinned to 2.8.0 (the version torch_npu 2.8.0.post5 matches;
+#     the CUDA reqs use 2.9.1, which torch_npu does not support yet).
+#   * torch_npu added; provides the 'npu' device backend.
+#   * NO torchtune / torchao: torchtune hard-imports torchao, which is broken on
+#     Python 3.9 (py3.10 `X | Y` syntax) and also breaks transformers. NeuCodec
+#     only needs torchtune's RotaryPositionalEmbeddings, which is vendored in
+#     app/neucodec/_rope.py instead.
+#   * The gradio / malaya / fasttext-language-detection / sentry / loki / wandb /
+#     tensorboard extras are dropped: not needed for the decode+serving path, and
+#     fasttext/librosa/loki/sentry are imported optionally in app/main.py.
+# ---------------------------------------------------------------------------
+
+# --- core: matched torch + Ascend adapter (install from PyPI; CPU build of torch
+#     supplies the ATen ops, torch_npu supplies the NPU backend) ---
+torch==2.8.0
+torchaudio==2.8.0
+torch_npu==2.8.0.post5
+
+# --- torch_npu runtime deps (bare venv is missing these; import fails without them) ---
+numpy==1.26.4
+PyYAML>=6.0
+decorator>=5.1.0
+attrs>=23.0.0
+psutil>=5.9
+scipy>=1.7.3
+cloudpickle>=3.0
+ml_dtypes>=0.5
+importlib_metadata>=6.0   # torch on py3.9 uses the backport
+packaging>=23.0
+setuptools>=68.0
+
+# --- NeuCodec (vendored under app/neucodec; these are its third-party imports) ---
+transformers>=4.55.0
+huggingface_hub>=0.24.0
+einops>=0.8.0
+local_attention>=1.11.0
+vector_quantize_pytorch>=1.17.8
+soundfile>=0.13.1
+
+# --- FastAPI serving stack ---
+# uvicorn pinned <0.36: app/main.py calls asyncio.get_running_loop() at import;
+# uvicorn >=0.36 imports the app outside the event loop -> RuntimeError.
+fastapi==0.115.6
+uvicorn==0.35.0
+pydantic>=2.11.7
+aiohttp>=3.12.0
+tqdm>=4.66.0
+python-multipart>=0.0.20   # required by the /v1/audio/vc form endpoint
+
+# --- text normalizer (app.normalizer is imported at module top in app/main.py,
+#     so these are needed to boot even in DUMMY_TOKENS mode) ---
+dateparser>=1.2.0
+num2words>=0.5.14
+Unidecode>=1.3.0
