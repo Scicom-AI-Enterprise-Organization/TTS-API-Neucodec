@@ -28,6 +28,8 @@ Copy [.env_example](.env_example) to `.env` and adjust as needed. See [app/env.p
 | `DEFAULT_MAX_TOKENS` | `3072` | Max output tokens |
 | `DEFAULT_PLAYBACK_SPEED` | `1.5` | Playback speed multiplier |
 | `DEFAULT_PLAYBACK_OVERLAP_SPEED` | `0.2` | Overlap speed for crossfading |
+| `DEFAULT_NORMALIZE_MALAYSIAN` | `false` | Default for the `normalize_malaysian` request field |
+| `DEFAULT_NORMALIZER_MODE` | `rule` | Default for the `mode` request field (`rule` or `llm`) |
 | `DYNAMIC_BATCHING` | `false` | Enable dynamic batching |
 | `MICROSLEEP` | `1e-4` | Batch collection interval (seconds) |
 | `MAX_BATCH_SIZE` | `16` | Max requests per batch |
@@ -78,8 +80,8 @@ selected by `mode`:
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `input` | string | required | Text to normalize |
-| `normalize_malaysian` | bool | `false` | Apply Malaysian text normalization (`rule` mode only) |
-| `mode` | `rule` \| `llm` | `rule` | Normalization engine |
+| `normalize_malaysian` | bool | `DEFAULT_NORMALIZE_MALAYSIAN` (`false`) | Apply Malaysian text normalization (`rule` mode only) |
+| `mode` | `rule` \| `llm` | `DEFAULT_NORMALIZER_MODE` (`rule`) | Normalization engine |
 
 **Example:**
 
@@ -120,8 +122,8 @@ Accepts JSON body.
 | `stream` | bool | `true` | Stream audio response |
 | `playback_speed` | float | `1.5` | Playback speed |
 | `playback_overlap_speed` | float | `0.2` | Overlap for crossfading |
-| `normalize_malaysian` | bool | `true` | Apply Malaysian text normalization |
-| `mode` | `rule` \| `llm` | `rule` | Normalization engine (see `/v1/audio/normalize`); `llm` falls back to `rule` if the LLM call fails, so speech is still produced |
+| `normalize_malaysian` | bool | `DEFAULT_NORMALIZE_MALAYSIAN` (`false`) | Apply Malaysian text normalization |
+| `mode` | `rule` \| `llm` | `DEFAULT_NORMALIZER_MODE` (`rule`) | Normalization engine (see `/v1/audio/normalize`); `llm` falls back to `rule` if the LLM call fails, so speech is still produced |
 
 **Example:**
 
