@@ -38,6 +38,9 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   backends lacking guided decoding). Importable without torch/GPU — keep it that way so
   `tests/test_llm_normalizer.py` runs anywhere. On LLM failure: `/v1/audio/normalize` returns 502
   (400 if unconfigured); the TTS path falls back to rule-based so speech is still produced.
+  Request-field defaults are env-driven: `DEFAULT_NORMALIZER_MODE` (`rule`|`llm`) and
+  `DEFAULT_NORMALIZE_MALAYSIAN` (bool) set what requests get when they omit `mode` /
+  `normalize_malaysian`.
 - `vllm.yaml` / `docker-compose.yaml` — the two services, sharing external docker network `tts-network`.
 - `bench/` — benchmark + Whisper-CER harness, RunPod deploy scripts, and recorded results (see `bench/OPTIMIZATION.md`).
 

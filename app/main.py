@@ -675,11 +675,12 @@ async def stream_speech(
 
 class NormalizeRequest(BaseModel):
     input: str = "Hello! How can I help you?"
-    normalize_malaysian: bool = False
-    # "rule" = the built-in rule-based pipeline below (default, back-compat);
-    # "llm" = OpenAI-compatible LLM normalizer (app/llm_normalizer.py), requires
-    # OPENAI_BASE_URL/OPENAI_MODEL_NAME. In llm mode normalize_malaysian is ignored.
-    mode: NormalizerMode = NormalizerMode.rule
+    normalize_malaysian: bool = DEFAULT_NORMALIZE_MALAYSIAN
+    # "rule" = the built-in rule-based pipeline below; "llm" = OpenAI-compatible LLM
+    # normalizer (app/llm_normalizer.py), requires OPENAI_BASE_URL/OPENAI_MODEL_NAME.
+    # In llm mode normalize_malaysian is ignored. Defaults come from
+    # DEFAULT_NORMALIZER_MODE / DEFAULT_NORMALIZE_MALAYSIAN in the environment.
+    mode: NormalizerMode = NormalizerMode(DEFAULT_NORMALIZER_MODE)
 
 class TTSRequest(NormalizeRequest):
     voice: str = DEFAULT_SPEAKER

@@ -134,10 +134,13 @@ For more details, visit [our website](https://property.com.my)."""
 class TestNormalizeModeParam:
     """The mode enum: rule (default) vs llm (OpenAI-compatible normalizer)."""
 
-    def test_default_mode_is_rule(self):
+    def test_default_mode_follows_env(self):
+        expected = os.environ.get('DEFAULT_NORMALIZER_MODE', 'rule')
         r = client.post('/v1/audio/normalize', json={'input': 'Hello world'})
         assert r.status_code == 200
-        assert r.json() == {'output': 'Hello world.', 'mode': 'rule'}
+        assert r.json()['mode'] == expected
+        if expected == 'rule':
+            assert r.json()['output'] == 'Hello world.'
 
     def test_explicit_rule_mode(self):
         r = client.post('/v1/audio/normalize', json={'input': 'Hello world', 'mode': 'rule'})

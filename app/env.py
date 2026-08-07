@@ -13,6 +13,10 @@ DEFAULT_REPETITION_PENALTY = float(os.environ.get('DEFAULT_REPETITION_PENALTY', 
 DEFAULT_MAX_TOKENS = int(os.environ.get('DEFAULT_MAX_TOKENS', '3072'))
 DEFAULT_PLAYBACK_SPEED = float(os.environ.get('DEFAULT_PLAYBACK_SPEED', '1.5'))
 DEFAULT_PLAYBACK_OVERLAP_SPEED = float(os.environ.get('DEFAULT_PLAYBACK_OVERLAP_SPEED', '0.2'))
+# Request-level normalization defaults (overridable per request). DEFAULT_NORMALIZER_MODE
+# must be 'rule' or 'llm' (validated against NormalizerMode in app/main.py at import).
+DEFAULT_NORMALIZE_MALAYSIAN = os.environ.get('DEFAULT_NORMALIZE_MALAYSIAN', 'false').lower() == 'true'
+DEFAULT_NORMALIZER_MODE = os.environ.get('DEFAULT_NORMALIZER_MODE', 'rule')
 # Streaming stitcher: overlap-add with context-primed windows + a raised-cosine
 # crossfade at every chunk boundary, to remove the boundary 'snap'/click. The
 # NeuCodec decoder is non-causal (bidirectional attention + conv + ISTFT 'same'
