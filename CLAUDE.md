@@ -43,12 +43,17 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   `normalize_malaysian`.
 - `vllm.yaml` / `docker-compose.yaml` — the two services, sharing external docker network `tts-network`.
 - `bench/` — benchmark + Whisper-CER harness, RunPod deploy scripts, and recorded results (see `bench/OPTIMIZATION.md`).
+- `bench/livekit/` — LiveKit agent stress rig (no-STT/no-LLM agent + load client): measures TTFB and
+  per-utterance loudness through a real agent + WebRTC path. See its README for setup and results.
 
 ## Decode pipeline internals (`app/main.py`)
 
-Streaming decode is the hot path. Per request, `audio_stream()` accumulates speech tokens and decodes a
-sliding window of `chunk_size = playback_speed * 50` tokens (with `playback_overlap_speed*50` overlap for
-crossfade). Each decode flows through:
+Streaming decode is the hot path. Per request, `audio_stream_crossfade()` accumulates speech tokens and
+decodes **growing windows**: the first is `chunk_size = playback_speed * 50` tokens (default 2 s), each
+later one ×`STREAM_CHUNK_GROWTH` capped at `STREAM_MAX_CHUNK_S` — plus `STREAM_PAST_CONTEXT_S` of past
+tokens (free, sliced off) and `playback_overlap_speed*50` future tokens each side for crossfade. Bigger
+windows + real history matter because the NeuCodec decoder is non-causal: small isolated windows tilt the
+loudness envelope ~0.7–1.5 dB vs one-shot decode. Each decode flows through:
 
 `decode_speech_token` → `dynamic_batch_queue` → `dynamic_batching()` (collects ≤`MAX_BATCH_SIZE` every
 `MICROSLEEP`s) → `batch_thread_fn` (pads tokens to the next CUDA-graph bucket, pinned async H2D copy) →
@@ -60,7 +65,9 @@ every batch size `1..MAX_BATCH_SIZE`. Empty `CUDA_GRAPH_BATCH` ⇒ eager decode 
 ## Performance: where the time goes & what to turn
 
 Measured on **1× H100 SXM (80GB)** with both services colocated (see `bench/OPTIMIZATION.md` for the full
-writeup + raw JSON in `bench/results/`).
+writeup + raw JSON in `bench/results/`). *Numbers predate the 2026-08 stitcher rework (growing windows,
+past context, loudness normalization) — per-request decode count dropped ~2.5×, so throughput shape may
+differ slightly; the bottleneck analysis still holds.*
 
 - **The LM is not the bottleneck.** vLLM alone sustains ~12,800 speech-tokens/s (≈255 audio-s/s) at
   concurrency 50. The end-to-end pipeline is gated by **codec decode + the Python serving loop**.
@@ -85,11 +92,12 @@ for ~4.6 s of audio (RTF ≈0.15).
 
 | Var | Effect |
 |---|---|
-| `DYNAMIC_BATCHING=true` | Batch concurrent decode calls. Essential for concurrency. |
-| `CUDA_GRAPH_BATCH=[0.5,1.0,1.5,2.0,3.0,4.0]` | Token-length buckets (×50). **Enabling this is the single biggest codec win (~1.7×).** Empty = eager. |
+| `DYNAMIC_BATCHING` (default `true`) | Batch concurrent decode calls. Essential for concurrency, free at concurrency 1. |
+| `CUDA_GRAPH_BATCH=[0.5,1.0,1.5,2.0,3.0,4.0]` | Token-length buckets (×50). **Enabling this is the single biggest codec win (~1.7×).** Empty = eager. With growing windows + past context, decode shapes reach `STREAM_MAX_CHUNK_S + STREAM_PAST_CONTEXT_S` (~13s ⇒ 650 tokens) — include big buckets (e.g. `...,6.0,10.0,13.5]`) or oversize windows silently fall back to eager decode. |
 | `MAX_BATCH_SIZE` | Max requests/decode-batch and largest CUDA-graph batch dim. Bigger = more graph memory (~0.06 GB/graph; graphs = `MAX_BATCH_SIZE × len(CUDA_GRAPH_BATCH)`). |
-| `DEFAULT_PLAYBACK_SPEED` | Sets decode `chunk_size`; larger ⇒ fewer/bigger decodes (more throughput, higher first-chunk latency). |
+| `DEFAULT_PLAYBACK_SPEED` (default `2.0`) | Size of the **first** decode window only (×50 tokens ⇒ 2 s); later windows grow via `STREAM_CHUNK_GROWTH`/`STREAM_MAX_CHUNK_S`, with `STREAM_PAST_CONTEXT_S` of past tokens primed into every window. Larger first window ⇒ higher first-chunk latency, better first-window decode. |
 | `TORCH_COMPILE=true` | Use `torch.compile` instead of CUDA graphs (alternative codepath). |
+| `STREAM_NORMALIZE` (default `true`) | Per-utterance loudness normalization in the crossfade stitcher (running active-RMS → gain toward `TARGET_RMS_DB`, slew `GAIN_SLEW_DB`/chunk, clamp `MAX_GAIN_DB`); per-request override via `stream_normalize` on `/v1/audio/speech`. The LM's sampled tokens carry loudness — same text at temp 0.6–0.7 spreads 3–10 dB active-RMS (and different voices sit ~5 dB apart in natural level), and ~half of hot utterances clip at full scale; this collapses the spread to <2 dB (verified through a LiveKit agent at concurrency 8, see `bench/livekit/`). Boosts are capped by running-peak headroom and peaks are rounded by a tanh soft-knee limiter (knee 0.85, drive 1.4) — RMS-boosting a peaky voice (crest ~19 dB) through the old hard clip crackled audibly. The gain locks after the first ~1s of voiced audio (one static trim per utterance): a continuously-adapting causal AGC drifted ±0.75 dB mid-utterance, audible as "damping". Residual streaming loudness ripple (~0.7–1.5 dB envelope tilt vs a single big decode window) is the non-causal decoder's window effect — shrink it with larger `playback_speed`/`playback_overlap_speed` (e.g. `playback_speed=10` for non-realtime requests). |
 | uvicorn `--workers N` (deploy) | Run N app processes to beat the GIL ceiling. **Requires NVIDIA MPS** to share the GPU without context-thrash collapse at high concurrency. |
 
 ### Accuracy guardrail (Whisper-large-v3 CER, 16 sentences, temp 0.6)

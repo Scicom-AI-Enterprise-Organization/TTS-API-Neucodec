@@ -20,27 +20,37 @@ Copy [.env_example](.env_example) to `.env` and adjust as needed. See [app/env.p
 | Variable | Default | Description |
 |---|---|---|
 | `TTS_API` | `http://tts-engine:9093` | vLLM backend URL |
+| `TTS_API_KEY` | ` ` | Bearer token sent to the vLLM backend when set |
 | `MODEL_NAME` | `TTS-model` | Model identifier |
-| `DEFAULT_SPEAKER` | `husein` | Default voice |
-| `SPEAKERS` | `husein,idayu,jenny` | Available voices |
+| `DEVICE` | ` ` (auto) | Codec decode device: empty = cuda→npu→cpu autodetect, or force `npu`/`cpu` |
+| `DEFAULT_SPEAKER` | see [app/env.py](app/env.py) | Default voice |
+| `SPEAKERS` | see [app/env.py](app/env.py) | Available voices (comma-separated) |
 | `DEFAULT_TEMPERATURE` | `0.6` | Sampling temperature |
 | `DEFAULT_REPETITION_PENALTY` | `1.15` | Repetition penalty |
 | `DEFAULT_MAX_TOKENS` | `3072` | Max output tokens |
-| `DEFAULT_PLAYBACK_SPEED` | `1.5` | Playback speed multiplier |
+| `DEFAULT_PLAYBACK_SPEED` | `2.0` | First decode window in seconds ×50 tokens (2.0 ⇒ 100 tokens = 2 s) |
+| `STREAM_CHUNK_GROWTH` | `2.0` | Each later decode window grows by this factor (1.0 = fixed windows) |
+| `STREAM_MAX_CHUNK_S` | `10.0` | Cap on grown decode windows (seconds) |
+| `STREAM_PAST_CONTEXT_S` | `3.0` | Past tokens included in every decode window then sliced off (no latency cost; pulls windowed decode toward one-shot) |
 | `DEFAULT_PLAYBACK_OVERLAP_SPEED` | `0.2` | Overlap speed for crossfading |
 | `DEFAULT_NORMALIZE_MALAYSIAN` | `false` | Default for the `normalize_malaysian` request field |
 | `DEFAULT_NORMALIZER_MODE` | `rule` | Default for the `mode` request field (`rule` or `llm`) |
-| `DYNAMIC_BATCHING` | `false` | Enable dynamic batching |
+| `STREAM_CROSSFADE` | `true` | Context-primed windows + raised-cosine crossfade at chunk boundaries (removes the boundary click; `false` = legacy hard cut) |
+| `CROSSFADE_MS` | `12.0` | Crossfade blend width in ms |
+| `STREAM_NORMALIZE` | `true` | Loudness-normalize streamed audio toward `TARGET_RMS_DB` (running per-utterance estimate; kills the 3–10 dB run-to-run LM loudness variance and full-scale clipping) |
+| `TARGET_RMS_DB` | `-16.0` | Target active-speech RMS (dBFS) when `STREAM_NORMALIZE` is on |
+| `MAX_GAIN_DB` / `GAIN_SLEW_DB` | `12` / `1` | Gain clamp and max gain change per chunk |
+| `DYNAMIC_BATCHING` | `true` | Batch concurrent decode calls (free at concurrency 1) |
 | `MICROSLEEP` | `1e-4` | Batch collection interval (seconds) |
 | `MAX_BATCH_SIZE` | `16` | Max requests per batch |
-| `CUDA_GRAPH_BATCH` | `[]` | CUDA graph bucket sizes, e.g. `[0.1, 0.2, 0.5, 1.0, 1.5, 2.0, 3.0, 10.0]` |
+| `CUDA_GRAPH_BATCH` | `[]` (eager) | CUDA graph token-length buckets (seconds ×50). Must cover grown windows (`STREAM_MAX_CHUNK_S`+`STREAM_PAST_CONTEXT_S` ≈ 13.5 s) or oversize decodes fall back to eager, e.g. `[0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 10.0, 13.5]` |
 | `TORCH_COMPILE` | `false` | Use torch.compile instead of CUDA Graphs |
 | `DEBUG_AUDIO` | `false` | Save intermediate audio chunks to disk |
 | `SENTRY_DSN` | ` ` | Sentry DSN for error tracking |
 | `OPENAI_BASE_URL` | ` ` | OpenAI-compatible endpoint for the LLM normalizer (`mode: "llm"`). Empty = llm mode disabled |
 | `OPENAI_API_KEY` | ` ` | API key for `OPENAI_BASE_URL` |
 | `OPENAI_MODEL_NAME` | ` ` | Model to use on `OPENAI_BASE_URL` (e.g. `google/gemma-4-31b-it`). **Not** `MODEL_NAME`, which is the TTS model |
-| `OPENAI_TIMEOUT` | `30` | LLM normalizer request timeout (seconds) |
+| `OPENAI_TIMEOUT` | `10` | LLM normalizer request timeout (seconds); bounds the TTS stall before rule-based fallback |
 
 ### 3. Run the API
 
@@ -113,17 +123,18 @@ Accepts JSON body.
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `input` | string | required | Text to synthesize |
-| `voice` | string | `husein` | Speaker voice |
+| `voice` | string | `DEFAULT_SPEAKER` | Speaker voice (list via `GET /v1/audio/speaker`) |
 | `model` | string | `TTS-model` | Model name |
 | `response_format` | `pcm` \| `wav` | `pcm` | Output audio format |
 | `temperature` | float | `0.6` | Sampling temperature |
 | `repetition_penalty` | float | `1.15` | Repetition penalty |
 | `max_tokens` | int | `3072` | Max output tokens |
 | `stream` | bool | `true` | Stream audio response |
-| `playback_speed` | float | `1.5` | Playback speed |
+| `playback_speed` | float | `2.0` | First decode window (×50 tokens; later windows grow per `STREAM_CHUNK_GROWTH`) |
 | `playback_overlap_speed` | float | `0.2` | Overlap for crossfading |
 | `normalize_malaysian` | bool | `DEFAULT_NORMALIZE_MALAYSIAN` (`false`) | Apply Malaysian text normalization |
 | `mode` | `rule` \| `llm` | `DEFAULT_NORMALIZER_MODE` (`rule`) | Normalization engine (see `/v1/audio/normalize`); `llm` falls back to `rule` if the LLM call fails, so speech is still produced |
+| `stream_normalize` | bool | `STREAM_NORMALIZE` (`true`) | Per-utterance loudness normalization toward `TARGET_RMS_DB` |
 
 **Example:**
 
@@ -161,7 +172,7 @@ Accepts multipart form data. Clones the reference voice and generates speech for
 | `repetition_penalty` | float | `1.15` | Repetition penalty |
 | `max_tokens` | int | `3072` | Max output tokens |
 | `stream` | bool | `true` | Stream audio response |
-| `playback_speed` | float | `1.5` | Playback speed |
+| `playback_speed` | float | `2.0` | First decode window (×50 tokens) |
 | `playback_overlap_speed` | float | `0.2` | Overlap for crossfading |
 
 **Example:**
@@ -294,6 +305,27 @@ server emits audio faster than real time in aggregate).
 The full optimization writeup (baseline → CUDA graphs → multi-worker + MPS, and a documented negative result
 on source-level micro-optimizations) is in [`bench/OPTIMIZATION.md`](bench/OPTIMIZATION.md). To reproduce, see
 the ready scripts in [`bench/deploy/`](bench/deploy) (`setup_pod.sh`, `start_vllm.sh`, `start_app.sh`).
+
+## LiveKit agent stress test & loudness consistency
+
+[`bench/livekit/`](bench/livekit) drives the API through a **real LiveKit agent** (text in → agent
+`session.say()` → TTS → WebRTC audio out) at concurrency 1/4/8: 0 errors, TTFB p50 ≈ 1.2 s with the
+LLM normalizer in the path. It also quantified utterance-to-utterance loudness variance — the LM's
+sampled speech tokens carry loudness, so identical text at temperature 0.6–0.7 spans **3–10 dB**
+active-RMS (and different voices sit ~5 dB apart in natural level), and roughly half
+of hot utterances clip at full scale. `STREAM_NORMALIZE=true` (default; per-request
+`stream_normalize`) collapses the spread to **< 2 dB** with no added latency: one static gain per
+utterance (locked after the first ~1 s of voiced audio — no mid-utterance drift), boost capped by
+running-peak headroom, and a tanh soft-knee limiter instead of a hard clip. Details and
+before/after numbers in [`bench/livekit/README.md`](bench/livekit/README.md).
+
+Streaming decode quality itself is near one-shot: the stitcher decodes **growing windows** (first =
+`playback_speed`×50 tokens, ×`STREAM_CHUNK_GROWTH` per step up to `STREAM_MAX_CHUNK_S`) with
+`STREAM_PAST_CONTEXT_S` of already-generated past tokens included in every window and sliced off
+after decode (free, unlike future context). Measured streamed-vs-one-shot envelope gap on identical
+tokens: **0.03–0.04 dB median** (worst 0.3–0.5 dB, first window only) vs 0.25–0.55 dB median with
+the old fixed 1.5 s windows. For offline generation (`stream: false`), `"playback_speed": 10`
+decodes the whole utterance in one window.
 
 ## Huawei Ascend 910B3 NPU — support & the precision quality gap
 
