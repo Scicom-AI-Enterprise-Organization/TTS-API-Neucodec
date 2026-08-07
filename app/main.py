@@ -164,7 +164,11 @@ def thread_safe_set_result(loop, future, value):
 
 def make_pinned_batch(tokens, target_T, dtype=torch.long):
     B = len(tokens)
-    pinned = torch.empty((B, target_T), dtype=dtype).pin_memory()
+    pinned = torch.empty((B, target_T), dtype=dtype)
+    if dev is not None:
+        # pinned host memory enables the async H2D copy; without an accelerator
+        # pin_memory() raises "Cannot access accelerator device".
+        pinned = pinned.pin_memory()
     pinned.fill_(0)
 
     for i, t in enumerate(tokens):
@@ -195,17 +199,22 @@ def compute_thread_fn(loop):
             continue
 
         with torch.no_grad():
-            with dev.stream(compute_stream):
-                compute_stream.wait_stream(h2d_stream)
-                if shapes in buckets:
-                    logging.debug(f'{uuid_str}, Hit compute shape {shapes}')
-                    recon = buckets[shapes](padded_token)
-                else:
-                    recon = fn(padded_token)
-                logging.debug(f'{uuid_str}, done compute shape {shapes}')
+            if dev is not None:
+                with dev.stream(compute_stream):
+                    compute_stream.wait_stream(h2d_stream)
+                    if shapes in buckets:
+                        logging.debug(f'{uuid_str}, Hit compute shape {shapes}')
+                        recon = buckets[shapes](padded_token)
+                    else:
+                        recon = fn(padded_token)
+                    logging.debug(f'{uuid_str}, done compute shape {shapes}')
 
-                ys = recon.cpu()
-            compute_stream.synchronize()
+                    ys = recon.cpu()
+                compute_stream.synchronize()
+            else:
+                # no accelerator: plain eager decode, no streams to synchronize
+                ys = fn(padded_token).cpu()
+                logging.debug(f'{uuid_str}, done compute shape {shapes} (cpu)')
             for i, fut in enumerate(futures):
                 out_len = padded_token_len[i] * 480
                 ys_ = ys[i:i+1, :, :out_len]
@@ -224,8 +233,11 @@ def batch_thread_fn():
         shapes = padded_token.shape
         logging.debug(f'{uuid_str}, batch shape {shapes} cpu')
 
-        with dev.stream(h2d_stream):
-            padded_token_gpu = padded_token.to(device, non_blocking=True)
+        if dev is not None:
+            with dev.stream(h2d_stream):
+                padded_token_gpu = padded_token.to(device, non_blocking=True)
+        else:
+            padded_token_gpu = padded_token
         compute_queue.put((uuid_str, padded_token_gpu, padded_token_len, futures))
 
 async def dynamic_batching():
@@ -334,6 +346,7 @@ async def stream_speech(
     stream,
     request,
     stream_format="audio",
+    stream_normalize=STREAM_NORMALIZE,
 ):
     headers = {
         'accept': 'application/json',
@@ -455,26 +468,82 @@ async def stream_speech(
         all_ids.clear()
         text_buf = ""
         prev_xf = None        # samples held back straddling the last emitted boundary
-        k = 0
+        seg_start = 0                    # token index where the next window begins
+        seg_len = chunk_size             # current window length; grows geometrically
+        max_seg_tokens = max(chunk_size, int(STREAM_MAX_CHUNK_S * codebook_size))
         count = 0
+        # running loudness state (STREAM_NORMALIZE): cumulative sum-of-squares / count of
+        # active samples across the utterance so far, the running raw peak, and the
+        # currently applied gain.
+        norm_sq = 0.0
+        norm_n = 0
+        norm_peak = 0.0
+        norm_gain_db = None
+        # Freeze the gain once this much voiced audio has been seen: a causal AGC that
+        # keeps adapting produces audible mid-utterance gain drift ("damping"); a single
+        # per-utterance trim from the first second is within ~1 dB of the full-utterance
+        # estimate and moves nothing afterwards. Later peaks are absorbed by the limiter.
+        norm_lock_n = int(1.0 * sr)
+        # Peaky voices (crest factor ~19 dB, raw peaks already near full scale) hard-clip
+        # audibly when RMS-boosted. Cap the boost so gained peaks stay <= LIMITER_DRIVE,
+        # and round whatever still exceeds the knee with a tanh soft clip instead of the
+        # flat-top hard clip (which crackles).
+        LIMITER_KNEE = 0.85
+        LIMITER_DRIVE = 1.4
+
+        def normalize_chunk(y):
+            nonlocal norm_sq, norm_n, norm_peak, norm_gain_db
+            locked = norm_gain_db is not None and norm_n >= norm_lock_n
+            if not locked:
+                active = y[np.abs(y) > 10 ** (-50 / 20)]    # gate out silence (< -50 dBFS)
+                if len(active):
+                    norm_sq += float(np.sum(active.astype(np.float64) ** 2))
+                    norm_n += len(active)
+                    norm_peak = max(norm_peak, float(np.abs(y).max()))
+                if not norm_n:
+                    return y
+                est_db = 10 * np.log10(norm_sq / norm_n)    # == 20*log10(active RMS)
+                want_db = float(np.clip(TARGET_RMS_DB - est_db, -MAX_GAIN_DB, MAX_GAIN_DB))
+                if norm_peak > 0:
+                    want_db = min(want_db, 20 * np.log10(LIMITER_DRIVE / norm_peak))
+                if norm_gain_db is None:
+                    norm_gain_db = want_db
+                else:
+                    norm_gain_db += float(np.clip(want_db - norm_gain_db, -GAIN_SLEW_DB, GAIN_SLEW_DB))
+            y = y * (10 ** (norm_gain_db / 20))
+            over = np.abs(y) > LIMITER_KNEE
+            if np.any(over):
+                y = np.where(
+                    over,
+                    np.sign(y) * (LIMITER_KNEE + (1.0 - LIMITER_KNEE)
+                                  * np.tanh((np.abs(y) - LIMITER_KNEE) / (1.0 - LIMITER_KNEE))),
+                    y,
+                )
+            return y
 
         def to_bytes(y):
+            if stream_normalize:
+                y = normalize_chunk(y)
             return (np.clip(y, -1.0, 1.0) * 32767).astype(np.int16).tobytes()
 
-        async def emit_step(k, is_last):
+        # left/past context: free latency-wise (tokens already exist), decoded then
+        # sliced off; right/future context stays small because it delays emission.
+        past_ctx = max(ctx, int(STREAM_PAST_CONTEXT_S * codebook_size))
+
+        async def emit_step(s, e, is_last):
             nonlocal prev_xf, count
-            s = k * chunk_size
-            e = len(all_ids) if is_last else s + chunk_size
-            ds = max(0, s - ctx)
+            if is_last:
+                e = len(all_ids)
+            ds = max(0, s - past_ctx)
             de = len(all_ids) if is_last else min(len(all_ids), e + ctx)
             _, a = await decode_speech_token("".join(f"<|s_{i}|>" for i in all_ids[ds:de]))
             if len(a) == 0:
                 return None
             off = ds * samples_per_token
-            bk = s * samples_per_token        # boundary with chunk k-1
-            be = e * samples_per_token        # boundary with chunk k+1
+            bk = s * samples_per_token        # boundary with the previous window
+            be = e * samples_per_token        # boundary with the next window
             parts = []
-            if k == 0:
+            if s == 0:
                 emit_lo = 0
             else:
                 cx = a[bk - half - off: bk + half - off]
@@ -509,17 +578,21 @@ async def stream_speech(
                 all_ids.append(int(m.group(1)))
                 last = m.end()
             text_buf = text_buf[last:]
-            # emit every chunk that now has its full right-hand context available
-            while (k + 1) * chunk_size + ctx <= len(all_ids):
-                b = await emit_step(k, is_last=False)
+            # emit every window that now has its full right-hand context available.
+            # Windows grow geometrically (STREAM_CHUNK_GROWTH, capped at
+            # STREAM_MAX_CHUNK_S): the first stays at chunk_size for TTFB, later ones
+            # decode near-one-shot, shrinking the non-causal decoder's window tilt.
+            while seg_start + seg_len + ctx <= len(all_ids):
+                b = await emit_step(seg_start, seg_start + seg_len, is_last=False)
                 if b:
                     yield b
                     await asyncio.sleep(0)
-                k += 1
+                seg_start += seg_len
+                seg_len = min(int(seg_len * max(1.0, STREAM_CHUNK_GROWTH)), max_seg_tokens)
 
         # flush the tail: one final decode covering all remaining tokens
-        if k * chunk_size < len(all_ids):
-            b = await emit_step(k, is_last=True)
+        if seg_start < len(all_ids):
+            b = await emit_step(seg_start, len(all_ids), is_last=True)
             if b:
                 yield b
                 await asyncio.sleep(0)
@@ -695,6 +768,9 @@ class TTSRequest(NormalizeRequest):
     stream: bool = True
     playback_speed: float = DEFAULT_PLAYBACK_SPEED
     playback_overlap_speed: float = DEFAULT_PLAYBACK_OVERLAP_SPEED
+    # per-request override of the STREAM_NORMALIZE env default (utterance loudness
+    # normalization toward TARGET_RMS_DB in the crossfade stitcher).
+    stream_normalize: bool = STREAM_NORMALIZE
 
 def _pre_normalize(s):
     s = sanitize_markdown(s)
@@ -859,6 +935,7 @@ async def tts_stream(data: TTSRequest, request: Request = None):
         stream=data.stream,
         request=request,
         stream_format=data.stream_format,
+        stream_normalize=data.stream_normalize,
     )
 
 def batch_encode(ys):
