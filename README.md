@@ -35,6 +35,10 @@ Copy [.env_example](.env_example) to `.env` and adjust as needed. See [app/env.p
 | `TORCH_COMPILE` | `false` | Use torch.compile instead of CUDA Graphs |
 | `DEBUG_AUDIO` | `false` | Save intermediate audio chunks to disk |
 | `SENTRY_DSN` | ` ` | Sentry DSN for error tracking |
+| `OPENAI_BASE_URL` | ` ` | OpenAI-compatible endpoint for the LLM normalizer (`mode: "llm"`). Empty = llm mode disabled |
+| `OPENAI_API_KEY` | ` ` | API key for `OPENAI_BASE_URL` |
+| `OPENAI_MODEL_NAME` | ` ` | Model to use on `OPENAI_BASE_URL` (e.g. `google/gemma-4-31b-it`). **Not** `MODEL_NAME`, which is the TTS model |
+| `OPENAI_TIMEOUT` | `30` | LLM normalizer request timeout (seconds) |
 
 ### 3. Run the API
 
@@ -58,14 +62,24 @@ Returns the list of available speaker voices.
 
 ### `POST /v1/audio/normalize` — Text Normalization
 
-Normalizes text for TTS input. Strips markdown/HTML and optionally applies Malaysian text normalization (email, URL, phone, IC, money, time, units, etc.).
+Normalizes text for TTS input. Strips markdown/HTML, then normalizes with one of two engines
+selected by `mode`:
+
+- **`rule`** (default) — the built-in rule-based pipeline; optionally applies Malaysian text
+  normalization (email, URL, phone, IC, money, time, units, etc.) when `normalize_malaysian` is set.
+- **`llm`** — sends the text to an OpenAI-compatible LLM (`OPENAI_BASE_URL` / `OPENAI_MODEL_NAME`)
+  with a multilingual few-shot prompt ([app/prompt.py](app/prompt.py)). The reply is constrained to
+  `{"normalized": "..."}` via `response_format` json_schema (vLLM guided decoding), so the model can
+  only return the normalized text. Returns `400` if `OPENAI_*` is not configured, `502` if the LLM
+  call fails. `normalize_malaysian` is ignored in this mode.
 
 **Parameters:**
 
 | Field | Type | Default | Description |
 |---|---|---|---|
 | `input` | string | required | Text to normalize |
-| `normalize_malaysian` | bool | `false` | Apply Malaysian text normalization |
+| `normalize_malaysian` | bool | `false` | Apply Malaysian text normalization (`rule` mode only) |
+| `mode` | `rule` \| `llm` | `rule` | Normalization engine |
 
 **Example:**
 
@@ -76,6 +90,16 @@ curl -X POST 'http://localhost:9091/v1/audio/normalize' \
     "input": "**Harga** rumah RM500,000. Hubungi 012-1234567 atau email husein.zol05@gmail.com",
     "normalize_malaysian": true
   }'
+
+# LLM-based normalization
+curl -X POST 'http://localhost:9091/v1/audio/normalize' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "input": "baki saya tinggal RM1,250.50 dan IC saya 960314875079",
+    "mode": "llm"
+  }'
+# {"output":"baki saya tinggal seribu dua ratus lima puluh ringgit lima puluh sen dan IC saya
+#   sembilan enam kosong tiga satu empat lapan tujuh lima kosong tujuh sembilan.","mode":"llm"}
 ```
 
 ### `POST /v1/audio/speech` — Text-to-Speech
@@ -97,6 +121,7 @@ Accepts JSON body.
 | `playback_speed` | float | `1.5` | Playback speed |
 | `playback_overlap_speed` | float | `0.2` | Overlap for crossfading |
 | `normalize_malaysian` | bool | `true` | Apply Malaysian text normalization |
+| `mode` | `rule` \| `llm` | `rule` | Normalization engine (see `/v1/audio/normalize`); `llm` falls back to `rule` if the LLM call fails, so speech is still produced |
 
 **Example:**
 
@@ -176,6 +201,12 @@ available speakers.
 ```bash
 pip install pytest requests
 
+# or with uv (no install needed), e.g. the LLM normalizer tests:
+uv run --with aiohttp --with pytest -- pytest tests/test_llm_normalizer.py -v
+# include the live LLM tests (hits OPENAI_BASE_URL):
+set -a; source .env; set +a
+uv run --with aiohttp --with pytest -- pytest tests/test_llm_normalizer.py -v
+
 # run all tests (unit + integration against live API)
 python -m pytest tests/ -v
 
@@ -203,7 +234,7 @@ python -m pytest tests/test_normalize_api.py -v
 
 ### Test files
 
-**543 passed, 31 skipped** on a full run with a live API.
+**571 passed, 35 skipped** on a full run with a live API and `OPENAI_*` configured.
 
 | File | Tests | Dependencies | Description |
 |---|---|---|---|
@@ -212,7 +243,8 @@ python -m pytest tests/test_normalize_api.py -v
 | `tests/test_malaysian_rules.py` | 208 | `app/normalizer`, `app/rules` | Stress tests for Malaysian normalization rules. Exhaustive coverage of: money (RM whole/sen/zero/sentence, USD with K/M suffixes), IC numbers (standard/young/zeros/multiple), phone numbers (mobile 012/011, landline 03, multiple), email (basic/subdomain/sentence/multiple), URL (https/www/path/IP), time (AM/PM/midnight/morning/late night), percentages (decimal/100/small), units (celsius/kg/g/km/liter/ml/mb/gb), dates, zero-prefix numbers, passports, year normalization (tahun 2024/1999/2000/1945), pada hari bulan, ordinals (ke-1/ke-100/Roman), cardinals, fractions, multiplier (x kali), hingga, Hijri year, elongated words, tak prefix, all 51 pronunciation replacements (dr/mr/mrs/Sdn Bhd/LRT/MRT/KL/PDRM/CCTV/UMNO/5G/US), pattern ranges (100-200 ringgit), all contractions, alpha-num splitting, replace mappings, and 12 complex multi-type sentence tests simulating the full pipeline. |
 | `tests/test_multilingual.py` | 76 | `app/normalizer`, `app/rules` | Multilingual passthrough tests for Chinese (Simplified/Traditional), Korean, Tamil, Arabic, Japanese (Hiragana/Katakana/Kanji), Thai, Hindi/Devanagari, and emoji. Verifies non-Latin scripts pass through untouched while ASCII content (RM, phone, email, URL, IC, time, %) is still normalized. Tests mixed-script sentences, markdown stripping with multilingual text, and the non-ASCII-attached-to-ASCII edge case (e.g. `价格是RM500` passes through raw vs `价格是 RM500` normalizes). |
 | `tests/test_tts_vc_api.py` | 43 | Live API (`TTS_TEST_URL`, default `http://localhost:9091`) | Integration tests for TTS (`POST /v1/audio/speech`) and VC (`POST /v1/audio/vc`) endpoints. **TTS tests** (24): WAV/PCM format validation (sample rate 24000, mono, 16-bit), streaming vs buffered, all speakers (husein/jenny/idayu), speaker list endpoint, markdown/HTML/link sanitization, Malaysian normalization with numbers, temperature/speed/max_tokens parameters, short/long/English/multilingual text. **VC tests** (19): uses `jenny.wav` with reference text, WAV/PCM format validation, streaming vs buffered, Malay/English/long/short generate text, markdown/HTML/link/code sanitization in both reference_text and generate_text, temperature/speed/max_tokens parameters. Auto-skipped when the API is not reachable. |
-| `tests/test_normalize_api.py` | 31 | In-process app import (GPU/models) | Integration tests for `POST /v1/audio/normalize` endpoint. Auto-skipped when the app cannot be imported. Tests both `normalize_malaysian=false` (sanitize only) and `normalize_malaysian=true` (full normalization). |
+| `tests/test_normalize_api.py` | 35 | In-process app import (GPU/models) | Integration tests for `POST /v1/audio/normalize` endpoint. Auto-skipped when the app cannot be imported. Tests `normalize_malaysian=false` (sanitize only), `normalize_malaysian=true` (full normalization), and the `mode` enum (`rule` default, `llm`, invalid → 422). |
+| `tests/test_llm_normalizer.py` | 28 | `aiohttp` + `pytest` only (no GPU/torch) | Unit tests for the LLM-based normalizer (`app/llm_normalizer.py`): few-shot message building from `app/prompt.py`, strict JSON schema, reply parsing (clean/fenced/bare/plain-text/unusable), and full HTTP behaviour against a local fake OpenAI server (auth header, payload shape, 400 retry without `response_format`, 5xx/unreachable/unconfigured errors). 4 live tests hit the real `OPENAI_BASE_URL` (Malay money, English IC, Chinese money, passthrough) and are skipped unless `OPENAI_*` is set. |
 
 ## Benchmark — H100 SXM vs H200 SXM
 

@@ -30,6 +30,14 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
 - `app/wrapper.py` — `CUDAGraphsWrapper`: captures one CUDA graph per `(batch, token-length)` bucket.
 - `app/neucodec/` — **vendored** NeuCodec (`from app.neucodec import NeuCodec`; *not* the pip package).
 - `app/normalizer/`, `app/rules.py` — Malaysian/multilingual text normalization + markdown sanitization.
+- `app/llm_normalizer.py`, `app/prompt.py` — **LLM-based normalizer** (`mode: "llm"` on
+  `/v1/audio/normalize` and TTS requests; default `mode: "rule"` is the pipeline above). Calls any
+  OpenAI-compatible `/chat/completions` (`OPENAI_BASE_URL`/`OPENAI_API_KEY`/`OPENAI_MODEL_NAME`,
+  timeout `OPENAI_TIMEOUT`) with the few-shot prompt in `prompt.py`, output constrained to
+  `{"normalized": "..."}` via `response_format` json_schema (retries once without it on 400 for
+  backends lacking guided decoding). Importable without torch/GPU — keep it that way so
+  `tests/test_llm_normalizer.py` runs anywhere. On LLM failure: `/v1/audio/normalize` returns 502
+  (400 if unconfigured); the TTS path falls back to rule-based so speech is still produced.
 - `vllm.yaml` / `docker-compose.yaml` — the two services, sharing external docker network `tts-network`.
 - `bench/` — benchmark + Whisper-CER harness, RunPod deploy scripts, and recorded results (see `bench/OPTIMIZATION.md`).
 
@@ -123,8 +131,9 @@ vLLM ≈60 GB on an 80 GB card.
 ## Common commands
 
 ```bash
-python -m pytest tests/ -v                        # 543 pass / 31 skip with a live API
+python -m pytest tests/ -v                        # 571 pass / 35 skip with a live API + OPENAI_* set
 python -m pytest tests/test_sanitize_markdown.py -v   # no GPU deps
+uv run --with aiohttp --with pytest -- pytest tests/test_llm_normalizer.py -v  # no GPU deps; `set -a; source .env; set +a` first to include the live LLM tests
 
 # local docker stack
 docker network create tts-network
@@ -153,6 +162,9 @@ python bench/cer_eval.py --wav-dir /tmp/eval --out /tmp/cer.json   # needs faste
 - **Multiple GPU processes without MPS collapse under load** (CUDA context time-slicing): throughput swings
   wildly and p99 latency explodes at high concurrency. Always run multi-worker + colocated vLLM under MPS.
 - NeuCodec downloads `facebook/w2v-bert-2.0` + `neuphonic/neucodec` from HF on first start — cache them.
+- **`MODEL_NAME` ≠ `OPENAI_MODEL_NAME`.** `MODEL_NAME` is the TTS model vLLM serves (`TTS-model`);
+  the LLM normalizer's model goes in `OPENAI_MODEL_NAME`. Setting `MODEL_NAME=google/gemma-...` in
+  `.env` silently breaks every TTS request (vLLM rejects the unknown model).
 - Killing the stack: vLLM's engine-core child has comm `VLLM::EngineCor` (uppercase) — a `pkill -f vllm`
   (lowercase) misses it and leaks GPU memory. Match case-insensitively or kill by PID.
 - **On RunPod, never run from `/workspace`** — it's slow network storage. Keep code, `HF_HOME`, and venvs

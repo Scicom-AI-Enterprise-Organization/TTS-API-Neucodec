@@ -29,6 +29,15 @@ CUDA_GRAPH_BATCH = eval(os.environ.get('CUDA_GRAPH_BATCH', '[]'))
 Nice value is [0.1, 0.2, 0.5, 1.0, 1.5, 2.0, 3.0, 10.0]
 """
 TORCH_COMPILE = os.environ.get('TORCH_COMPILE', 'false').lower() == 'true'
+
+# LLM-based text normalizer (mode="llm" on /v1/audio/normalize and TTS requests):
+# any OpenAI-compatible /chat/completions endpoint. Note OPENAI_MODEL_NAME is
+# deliberately separate from MODEL_NAME (the TTS model served by vLLM).
+# Empty OPENAI_BASE_URL disables llm mode (requests get a 400).
+OPENAI_BASE_URL = os.environ.get('OPENAI_BASE_URL', '').rstrip('/')
+OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
+OPENAI_MODEL_NAME = os.environ.get('OPENAI_MODEL_NAME', '')
+OPENAI_TIMEOUT = float(os.environ.get('OPENAI_TIMEOUT', '30'))
 DEBUG_AUDIO = os.environ.get('DEBUG_AUDIO', 'false').lower() == 'true'
 SENTRY_DSN = os.environ.get('SENTRY_DSN', '')
 
