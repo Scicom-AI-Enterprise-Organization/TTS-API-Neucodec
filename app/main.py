@@ -22,6 +22,7 @@ from pydantic import BaseModel
 from huggingface_hub import hf_hub_download
 from app.normalizer import load as load_normalizer, to_cardinal
 from app.normalizer.chinese import normalize_chinese, is_chinese_dominant, CJK_RE, KANA_RE
+from app.llm_normalizer import llm_normalize, LLMNormalizerError, NormalizerMode
 import torch.cuda as cuda
 import uuid
 import bisect
@@ -672,8 +673,15 @@ async def stream_speech(
                 filename="merged_audio.pcm"
             )
 
-class TTSRequest(BaseModel):
+class NormalizeRequest(BaseModel):
     input: str = "Hello! How can I help you?"
+    normalize_malaysian: bool = False
+    # "rule" = the built-in rule-based pipeline below (default, back-compat);
+    # "llm" = OpenAI-compatible LLM normalizer (app/llm_normalizer.py), requires
+    # OPENAI_BASE_URL/OPENAI_MODEL_NAME. In llm mode normalize_malaysian is ignored.
+    mode: NormalizerMode = NormalizerMode.rule
+
+class TTSRequest(NormalizeRequest):
     voice: str = DEFAULT_SPEAKER
     model: str = MODEL_NAME
     response_format: Literal["pcm", "wav"] = "pcm"
@@ -686,15 +694,29 @@ class TTSRequest(BaseModel):
     stream: bool = True
     playback_speed: float = DEFAULT_PLAYBACK_SPEED
     playback_overlap_speed: float = DEFAULT_PLAYBACK_OVERLAP_SPEED
-    normalize_malaysian: bool = False
 
-def normalize_malaysian_text(s, normalize_malaysian=False):
+def _pre_normalize(s):
     s = sanitize_markdown(s)
     s = s.replace('\n', ' ')
     s = re.sub(r'[ ]+', ' ', s).strip()
 
     for k, v in before_replace_mapping.items():
         s = s.replace(k, v)
+    return s
+
+
+def _post_normalize(s):
+    for k, v in replace_mapping.items():
+        s = s.replace(k, v)
+
+    if not s.endswith('.'):
+        s = s + '.'
+
+    return re.sub(r'[ ]+', ' ', s).strip()
+
+
+def normalize_malaysian_text(s, normalize_malaysian=False):
+    s = _pre_normalize(s)
 
     if normalize_malaysian:
         lang = lang_model.predict(s, k = 3)[0][0]
@@ -772,26 +794,39 @@ def normalize_malaysian_text(s, normalize_malaysian=False):
         if s != original_s:
             logging.info(f'Pronunciation replacements applied: "{original_s}" -> "{s}"')
 
-    for k, v in replace_mapping.items():
-        s = s.replace(k, v)
-
-    if not s.endswith('.'):
-        s = s + '.'
-
-    s = re.sub(r'[ ]+', ' ', s).strip()
-
-    return s
+    return _post_normalize(s)
 
 
-class NormalizeRequest(BaseModel):
-    input: str = "Hello! How can I help you?"
-    normalize_malaysian: bool = False
+async def normalize_request_text(data, fallback_to_rule=False):
+    """Dispatch on data.mode. llm mode keeps the same pre/post cleanup (markdown
+    sanitization, replace mappings) around the LLM call. With fallback_to_rule
+    (TTS path) an LLM failure degrades to the rule-based pipeline instead of
+    failing the whole speech request."""
+    if data.mode == NormalizerMode.llm:
+        if not (OPENAI_BASE_URL and OPENAI_MODEL_NAME):
+            if not fallback_to_rule:
+                raise HTTPException(
+                    status_code=400,
+                    detail='mode="llm" requires OPENAI_BASE_URL and OPENAI_MODEL_NAME to be configured',
+                )
+            logging.warning('llm normalizer not configured, falling back to rule-based')
+        else:
+            s = _pre_normalize(data.input)
+            try:
+                s = await llm_normalize(s)
+                logging.info(f'out from llm normalizer: {s}')
+                return _post_normalize(s)
+            except LLMNormalizerError as e:
+                if not fallback_to_rule:
+                    raise HTTPException(status_code=502, detail=f'llm normalizer failed: {e}')
+                logging.warning(f'llm normalizer failed, falling back to rule-based: {e}')
+    return normalize_malaysian_text(data.input, normalize_malaysian=data.normalize_malaysian)
 
 
 @app.post('/v1/audio/normalize')
 async def normalize_text(data: NormalizeRequest):
-    s = normalize_malaysian_text(data.input, normalize_malaysian=data.normalize_malaysian)
-    return {'output': s}
+    s = await normalize_request_text(data)
+    return {'output': s, 'mode': data.mode}
 
 
 @app.get('/v1/audio/speaker')
@@ -806,7 +841,7 @@ async def tts_stream(data: TTSRequest, request: Request = None):
         # tokens are replayed from DUMMY_TOKENS_FILE; the prompt is unused.
         prompt = ''
     else:
-        s = normalize_malaysian_text(data.input, normalize_malaysian=data.normalize_malaysian)
+        s = await normalize_request_text(data, fallback_to_rule=True)
         logging.info(f'normalized: {s}')
         prompt = f'<|im_start|>{speaker}: {s}<|speech_start|>'
         logging.info(f'prompt: {prompt}')

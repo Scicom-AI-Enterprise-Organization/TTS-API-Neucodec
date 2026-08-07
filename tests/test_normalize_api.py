@@ -131,6 +131,40 @@ For more details, visit [our website](https://property.com.my)."""
 
 
 @skipif_no_app
+class TestNormalizeModeParam:
+    """The mode enum: rule (default) vs llm (OpenAI-compatible normalizer)."""
+
+    def test_default_mode_is_rule(self):
+        r = client.post('/v1/audio/normalize', json={'input': 'Hello world'})
+        assert r.status_code == 200
+        assert r.json() == {'output': 'Hello world.', 'mode': 'rule'}
+
+    def test_explicit_rule_mode(self):
+        r = client.post('/v1/audio/normalize', json={'input': 'Hello world', 'mode': 'rule'})
+        assert r.status_code == 200
+        assert r.json()['output'] == 'Hello world.'
+
+    def test_invalid_mode_rejected(self):
+        r = client.post('/v1/audio/normalize', json={'input': 'Hello', 'mode': 'chatgpt'})
+        assert r.status_code == 422
+
+    def test_llm_mode(self):
+        import os
+        r = client.post('/v1/audio/normalize', json={
+            'input': 'baki saya tinggal RM50',
+            'mode': 'llm',
+        })
+        if all(os.environ.get(k) for k in ('OPENAI_BASE_URL', 'OPENAI_MODEL_NAME')):
+            assert r.status_code == 200
+            out = r.json()
+            assert out['mode'] == 'llm'
+            assert 'lima puluh ringgit' in out['output'].lower()
+        else:
+            # unconfigured llm mode must fail loudly, not silently fall back
+            assert r.status_code == 400
+
+
+@skipif_no_app
 class TestNormalizeEndpointMalaysian:
     """Tests with normalize_malaysian=True."""
 
