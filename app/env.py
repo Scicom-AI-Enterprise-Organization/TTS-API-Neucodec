@@ -58,6 +58,11 @@ GAIN_SLEW_DB = float(os.environ.get('GAIN_SLEW_DB', '1.0'))
 DYNAMIC_BATCHING = os.environ.get('DYNAMIC_BATCHING', 'true').lower() == 'true'
 MICROSLEEP = float(os.environ.get('MICROSLEEP', '1e-4'))
 MAX_BATCH_SIZE = int(os.environ.get('MAX_BATCH_SIZE', '16'))
+# Upper bound on how long a request waits for its decode/encode future to resolve.
+# Without it, a wedged worker thread turns every in-flight and future request into a
+# permanent silent hang; with it the request fails loudly and the service stays usable.
+# Set to 0 to disable the timeout.
+BATCH_TIMEOUT = float(os.environ.get('BATCH_TIMEOUT', '120'))
 CUDA_GRAPH_BATCH = eval(os.environ.get('CUDA_GRAPH_BATCH', '[]'))
 """
 Empty = eager decode. On CUDA, enabling buckets is the single biggest codec win (~1.7x).

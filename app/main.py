@@ -185,9 +185,28 @@ def choose_bucket_len(max_len):
         return BUCKET_TOKENS[idx]
     return max_len
 
+def thread_safe_set_exception(loop, futures, exc):
+    for fut in futures:
+        def _safe_set_exc(f=fut, ex=exc):
+            if not f.done():
+                f.set_exception(ex)
+        loop.call_soon_threadsafe(_safe_set_exc)
+
 def compute_thread_fn(loop):
     while True:
-        uuid_str, padded_token, padded_token_len, futures = compute_queue.get()
+        item = compute_queue.get()
+        try:
+            _compute_one(loop, item)
+        except Exception as e:
+            # An unhandled exception here used to kill the thread outright. The process
+            # stayed up, compute_queue was never drained again, and every subsequent
+            # decode hung forever on its future with nothing logged. Fail the batch,
+            # log it, keep the worker alive.
+            logging.exception(f'{item[0]}, compute_thread_fn failed: {e}')
+            thread_safe_set_exception(loop, item[3], e)
+
+def _compute_one(loop, item):
+        uuid_str, padded_token, padded_token_len, futures = item
         logging.debug(f'{uuid_str}, enter compute_thread_fn')
         shapes = padded_token.shape
 
@@ -196,7 +215,7 @@ def compute_thread_fn(loop):
             empty = torch.zeros((shapes[0], 1, 0), dtype=torch.float32)
             for i, fut in enumerate(futures):
                 thread_safe_set_result(loop, fut, empty[i:i+1])
-            continue
+            return
 
         with torch.no_grad():
             if dev is not None:
@@ -220,9 +239,16 @@ def compute_thread_fn(loop):
                 ys_ = ys[i:i+1, :, :out_len]
                 thread_safe_set_result(loop, fut, ys_)
 
-def batch_thread_fn():
+def batch_thread_fn(loop):
     while True:
         uuid_str, batch = batch_queue.get()
+        try:
+            _batch_one(uuid_str, batch)
+        except Exception as e:
+            logging.exception(f'{uuid_str}, batch_thread_fn failed: {e}')
+            thread_safe_set_exception(loop, [b[0] for b in batch], e)
+
+def _batch_one(uuid_str, batch):
         logging.debug(f'{uuid_str}, enter batch_thread_fn')
         futures, tokens = zip(*[(b[0], b[1]) for b in batch])
 
@@ -261,7 +287,15 @@ async def dynamic_batching():
 
         uuid_str = str(uuid.uuid4())
         logging.debug(f'{uuid_str}, dynamic batching size {len(batch)}')
-        batch_queue.put((uuid_str, batch))
+        try:
+            batch_queue.put((uuid_str, batch))
+        except Exception as e:
+            # this task is the only feeder for the decode threads -- if it dies the whole
+            # service stops decoding with no error surfaced anywhere. Never let it exit.
+            logging.exception(f'{uuid_str}, dynamic_batching failed to enqueue: {e}')
+            for fut, _ in batch:
+                if not fut.done():
+                    fut.set_exception(e)
 
 def vc_compute_thread_fn(loop):
     while True:
@@ -272,18 +306,19 @@ def vc_compute_thread_fn(loop):
             for i, fut in enumerate(futures):
                 thread_safe_set_result(loop, fut, tokens[i])
         except Exception as e:
-            for fut in futures:
-                def _safe_set_exc(f=fut, ex=e):
-                    if not f.done():
-                        f.set_exception(ex)
-                loop.call_soon_threadsafe(_safe_set_exc)
+            logging.exception(f'{uuid_str}, vc_compute_thread_fn failed: {e}')
+            thread_safe_set_exception(loop, futures, e)
 
 def vc_batch_thread_fn(loop):
     while True:
         uuid_str, batch = vc_batch_queue.get()
         logging.debug(f'{uuid_str}, enter vc_batch_thread_fn, batch size {len(batch)}')
-        futures, ys = zip(*[(b[0], b[1]) for b in batch])
-        vc_compute_queue.put((uuid_str, list(ys), futures))
+        try:
+            futures, ys = zip(*[(b[0], b[1]) for b in batch])
+            vc_compute_queue.put((uuid_str, list(ys), futures))
+        except Exception as e:
+            logging.exception(f'{uuid_str}, vc_batch_thread_fn failed: {e}')
+            thread_safe_set_exception(loop, [b[0] for b in batch], e)
 
 async def vc_dynamic_batching():
     need_sleep = True
@@ -306,13 +341,36 @@ async def vc_dynamic_batching():
 
         uuid_str = str(uuid.uuid4())
         logging.debug(f'{uuid_str}, vc dynamic batching size {len(batch)}')
-        vc_batch_queue.put((uuid_str, batch))
+        try:
+            vc_batch_queue.put((uuid_str, batch))
+        except Exception as e:
+            logging.exception(f'{uuid_str}, vc_dynamic_batching failed to enqueue: {e}')
+            for fut, _ in batch:
+                if not fut.done():
+                    fut.set_exception(e)
+
+async def await_batched(future, what):
+    """Wait on a batched worker future, bounded by BATCH_TIMEOUT.
+
+    An unbounded wait means one wedged worker thread silently hangs every request
+    that follows it -- the service looks alive and answers nothing.
+    """
+    if not BATCH_TIMEOUT:
+        return await future
+    try:
+        return await asyncio.wait_for(future, timeout=BATCH_TIMEOUT)
+    except asyncio.TimeoutError:
+        logging.error(f'{what} timed out after {BATCH_TIMEOUT}s -- worker may be wedged')
+        raise HTTPException(
+            status_code=503,
+            detail=f'{what} timed out after {BATCH_TIMEOUT}s',
+        )
 
 async def encode_audio(y):
     if DYNAMIC_BATCHING:
         future = asyncio.Future()
         await vc_dynamic_batch_queue.put((future, y))
-        tokens = await future
+        tokens = await await_batched(future, 'encode_audio')
     else:
         tokens = batch_encode([y])
         tokens = tokens[0]
@@ -327,7 +385,7 @@ async def decode_speech_token(speech_token):
     if DYNAMIC_BATCHING:
         future = asyncio.Future()
         await dynamic_batch_queue.put((future, d))
-        y_gen = await future
+        y_gen = await await_batched(future, 'decode_speech_token')
     else:
         audio_codes = torch.tensor(d)[None, None]
         y_gen = codec.decode_code(audio_codes.to(device))
@@ -367,20 +425,24 @@ async def stream_speech(
     queue = asyncio.Queue()
 
     async def generate_audio_stream():
-        # DUMMY_TOKENS mode: replay canned speech tokens (simulating the vLLM SSE stream)
-        # instead of calling the LM. Emits one token per event, repeated DUMMY_REPEAT times.
-        if DUMMY_TOKENS_FILE:
-            toks = re.findall(r"<\|s_\d+\|>", DUMMY_TOKENS)
-            for _ in range(max(1, DUMMY_REPEAT)):
-                for t in toks:
-                    if await request.is_disconnected():
-                        break
-                    await queue.put({'result': t})
-                    if DUMMY_TOKEN_DELAY > 0:
-                        await asyncio.sleep(DUMMY_TOKEN_DELAY)
-            await queue.put(None)
-            return
+        # The consumer blocks on `queue` until it sees a terminator, so EVERY exit path
+        # of this producer must leave one behind -- including cancellation and unexpected
+        # exceptions. A missing terminator strands the consumer forever, which under load
+        # silently accumulates dead tasks until the event loop stops serving requests.
         try:
+            # DUMMY_TOKENS mode: replay canned speech tokens (simulating the vLLM SSE
+            # stream) instead of calling the LM. One token per event, DUMMY_REPEAT times.
+            if DUMMY_TOKENS_FILE:
+                toks = re.findall(r"<\|s_\d+\|>", DUMMY_TOKENS)
+                for _ in range(max(1, DUMMY_REPEAT)):
+                    for t in toks:
+                        if await request.is_disconnected():
+                            break
+                        await queue.put({'result': t})
+                        if DUMMY_TOKEN_DELAY > 0:
+                            await asyncio.sleep(DUMMY_TOKEN_DELAY)
+                return
+
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     TTS_API,
@@ -390,6 +452,7 @@ async def stream_speech(
                     if resp.status != 200:
                         error_text = await resp.text()
                         logging.error(f"Backend error: {resp.status} - {error_text}")
+                        queue.put_nowait({'error': f'backend returned {resp.status}: {error_text[:200]}'})
                         return
 
                     async for line in resp.content:
@@ -407,13 +470,18 @@ async def stream_speech(
                             except json.JSONDecodeError:
                                 continue
 
-                    await queue.put(None)
-
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
-            await queue.put({'error': str(e)})
-            return
+            logging.exception(f'generate_audio_stream failed: {e}')
+            queue.put_nowait({'error': str(e)})
+        finally:
+            # unbounded queue -> put_nowait cannot block or raise, and is safe to run
+            # while the task is being cancelled. A duplicate terminator is harmless:
+            # the consumer stops at the first one and drops the queue.
+            queue.put_nowait(None)
 
-    asyncio.create_task(generate_audio_stream())
+    producer_task = asyncio.create_task(generate_audio_stream())
 
     samples_per_token = sr // codebook_size                  # 480 samples / speech token
     chunk_size = int(playback_speed * codebook_size)         # tokens finalized per step (hop)
@@ -447,11 +515,10 @@ async def stream_speech(
         return y_
 
     async def next_output():
-        while True:
-            try:
-                return queue.get_nowait()
-            except asyncio.QueueEmpty:
-                await asyncio.sleep(1e-9)
+        # Block on the queue rather than spinning on get_nowait()/sleep(1e-9): the spin
+        # burns a full core on the single-threaded event loop, and if the producer ever
+        # dies without a terminator it spins forever and starves every other request.
+        return await queue.get()
 
     async def audio_stream_crossfade():
         """Streaming decode with context-primed windows + a raised-cosine crossfade
@@ -607,11 +674,7 @@ async def stream_speech(
         leftover = np.array([], dtype=np.float64)
 
         while True:
-            try:
-                output = queue.get_nowait()
-            except asyncio.QueueEmpty:
-                await asyncio.sleep(1e-9)
-                continue
+            output = await next_output()
 
             if output is None:
                 break
@@ -666,7 +729,25 @@ async def stream_speech(
             yield (leftover * 32767).astype(np.int16).tobytes()
             await asyncio.sleep(0)
 
-    func = audio_stream_crossfade() if STREAM_CROSSFADE else audio_stream_legacy()
+    def with_producer_cleanup(gen):
+        """Cancel the LM-reader task whenever the consumer stops.
+
+        On client disconnect the response generator is closed but the producer task
+        keeps running; under sustained load those orphans pile up and hold aiohttp
+        sessions/sockets open until the app stops responding.
+        """
+        async def _wrapped():
+            try:
+                async for chunk in gen:
+                    yield chunk
+            finally:
+                if not producer_task.done():
+                    producer_task.cancel()
+        return _wrapped()
+
+    func = with_producer_cleanup(
+        audio_stream_crossfade() if STREAM_CROSSFADE else audio_stream_legacy()
+    )
     stream_headers = {
         'Cache-Control': 'no-cache, no-store',
         'X-Accel-Buffering': 'no',
@@ -1019,6 +1100,7 @@ app.state.background_vc_dynamic_batching = asyncio.create_task(vc_dynamic_batchi
 loop = asyncio.get_running_loop()
 t1 = threading.Thread(
     target=batch_thread_fn,
+    args=(loop,),
     daemon=True
 )
 t1.start()
