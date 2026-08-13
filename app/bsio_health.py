@@ -63,16 +63,15 @@ import fcntl
 import logging
 import os
 import socket
-import sys
 import threading
-import time
 from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
 
-# The client is vendored: one stdlib-only file, so the GPU nodes need no package install
-# and no network access at start.
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "_vendor"))
+# One stdlib-only file at the repo root, next to app/ — same place Python already finds
+# `app` itself from, so a plain import works with no path juggling. It lives in the repo
+# rather than being installed because there is no published package yet; when there is,
+# this becomes a requirements.txt line and the file goes away.
 try:
     import bettersentryio
 except Exception as exc:  # noqa: BLE001 - never let instrumentation break the import
@@ -247,6 +246,20 @@ def start(quiescent: Callable[[], bool], vc_quiescent: Callable[[], bool]):
 
     if not enabled:
         logger.info("bsio: BSIO_KEY not set, monitoring disabled")
+        return None
+
+    # Checked before anything else, and before the coroutine object exists. main.py runs at
+    # module scope, which is inside the loop on uvicorn 0.35 and outside it on >=0.36 (see
+    # the pin in requirements.txt). If someone bumps uvicorn, monitoring should print one
+    # clear line — not a traceback plus "coroutine was never awaited", which reads like a
+    # real fault and is a false lead during an incident.
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        logger.warning(
+            "bsio: no running event loop at import, monitoring disabled "
+            "(uvicorn >=0.36 imports the app outside the loop; requirements.txt pins 0.35.x)"
+        )
         return None
 
     try:
