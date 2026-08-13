@@ -50,6 +50,8 @@ from app.rules import *
 from app.wrapper import CUDAGraphsWrapper
 from app.neucodec import NeuCodec
 
+from app import bsio_health
+
 if sentry_sdk is not None and len(SENTRY_DSN):
     sentry_sdk.init(dsn=SENTRY_DSN, send_default_pii=True)
 
@@ -195,6 +197,11 @@ def thread_safe_set_exception(loop, futures, exc):
 def compute_thread_fn(loop):
     while True:
         item = compute_queue.get()
+        # Bracketing the unit of work is what makes a hang visible: `started` moves here,
+        # `completed` moves in the finally, and a decode wedged inside _compute_one leaves
+        # in-flight > 0 forever with nothing completing.
+        bsio_health.tts.start()
+        failed = False
         try:
             _compute_one(loop, item)
         except Exception as e:
@@ -202,8 +209,13 @@ def compute_thread_fn(loop):
             # stayed up, compute_queue was never drained again, and every subsequent
             # decode hung forever on its future with nothing logged. Fail the batch,
             # log it, keep the worker alive.
+            failed = True
             logging.exception(f'{item[0]}, compute_thread_fn failed: {e}')
             thread_safe_set_exception(loop, item[3], e)
+        finally:
+            # A failed batch still counts as the loop working: it drained and answered.
+            # The exception itself is reported separately by the error hooks.
+            bsio_health.tts.done(failed=failed)
 
 def _compute_one(loop, item):
         uuid_str, padded_token, padded_token_len, futures = item
@@ -301,13 +313,18 @@ def vc_compute_thread_fn(loop):
     while True:
         uuid_str, ys, futures = vc_compute_queue.get()
         logging.debug(f'{uuid_str}, enter vc_compute_thread_fn, batch size {len(ys)}')
+        bsio_health.vc.start()
+        failed = False
         try:
             tokens = batch_encode(ys)
             for i, fut in enumerate(futures):
                 thread_safe_set_result(loop, fut, tokens[i])
         except Exception as e:
+            failed = True
             logging.exception(f'{uuid_str}, vc_compute_thread_fn failed: {e}')
             thread_safe_set_exception(loop, futures, e)
+        finally:
+            bsio_health.vc.done(failed=failed)
 
 def vc_batch_thread_fn(loop):
     while True:
@@ -1094,8 +1111,65 @@ if len(SENTRY_DSN):
     async def trigger_error():
         division_by_zero = 1 / 0
 
+@app.get('/health/deep')
+async def health_deep():
+    """
+    Honest health, unlike /docs.
+
+    The Slurm probe uses /docs, which is a static page served by uvicorn — it returns 200
+    for as long as the process exists, whatever the decode pipeline is doing. This reports
+    the pipeline itself, so `curl /health/deep | jq` answers "is it actually working".
+    """
+    pending = dynamic_batch_queue.qsize() + compute_queue.qsize() + batch_queue.qsize()
+    vc_pending = vc_dynamic_batch_queue.qsize() + vc_compute_queue.qsize() + vc_batch_queue.qsize()
+    threads = {
+        'batch': app.state.batch_thread.is_alive(),
+        'compute': app.state.compute_thread.is_alive(),
+        'vc_batch': app.state.vc_batch_thread.is_alive(),
+        'vc_compute': app.state.vc_compute_thread.is_alive(),
+    }
+    batchers = {
+        'dynamic_batching': not app.state.background_dynamic_batching.done(),
+        'vc_dynamic_batching': not app.state.background_vc_dynamic_batching.done(),
+    }
+    # Work held with nothing finishing is the shape of a wedge; a dead thread or a
+    # finished batcher task means the pipeline has lost a stage outright.
+    degraded = (
+        not all(threads.values())
+        or not all(batchers.values())
+        or (pending > 0 and bsio_health.tts.in_flight > 0 and bsio_health.tts.completed == 0)
+    )
+    return {
+        'status': 'degraded' if degraded else 'ok',
+        'threads': threads,
+        'batchers': batchers,
+        'pending': {'tts': pending, 'vc': vc_pending},
+        'bsio': bsio_health.health(),
+    }
+
+
+def _tts_quiescent():
+    """Nothing queued anywhere for TTS. Used to tell 'idle' apart from 'wedged'."""
+    return (
+        dynamic_batch_queue.qsize() == 0
+        and compute_queue.qsize() == 0
+        and batch_queue.qsize() == 0
+    )
+
+
+def _vc_quiescent():
+    return (
+        vc_dynamic_batch_queue.qsize() == 0
+        and vc_compute_queue.qsize() == 0
+        and vc_batch_queue.qsize() == 0
+    )
+
+
 app.state.background_dynamic_batching = asyncio.create_task(dynamic_batching())
 app.state.background_vc_dynamic_batching = asyncio.create_task(vc_dynamic_batching())
+
+# No-op unless BSIO_KEY is set. Held on app.state for the same reason as the batchers.
+app.state.bsio_heartbeat = bsio_health.start(_tts_quiescent, _vc_quiescent)
 
 loop = asyncio.get_running_loop()
 t1 = threading.Thread(
