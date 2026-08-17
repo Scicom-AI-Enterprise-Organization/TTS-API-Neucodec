@@ -47,6 +47,10 @@ Copy [.env_example](.env_example) to `.env` and adjust as needed. See [app/env.p
 | `TORCH_COMPILE` | `false` | Use torch.compile instead of CUDA Graphs |
 | `DEBUG_AUDIO` | `false` | Save intermediate audio chunks to disk |
 | `SENTRY_DSN` | ` ` | Sentry DSN for error tracking |
+| `ENABLE_TRACING_SPANS` | `false` | Hot-path spans: dynamic-batch wait, vLLM wait, codec decode. See [Tracing](#tracing-loki--tempo) |
+| `OTLP_ENDPOINT` | ` ` | Tempo OTLP endpoint for traces (e.g. `http://localhost:4317`). Handled by `fastapi-loki-tempo` |
+| `SERVICE_NAME` | `fastapi` | Service name on spans and logs. Handled by `fastapi-loki-tempo` |
+| `TRACING_SAMPLE` | `1.0` | Head sampling ratio; drop below 1.0 before enabling spans under load |
 | `OPENAI_BASE_URL` | ` ` | OpenAI-compatible endpoint for the LLM normalizer (`mode: "llm"`). Empty = llm mode disabled |
 | `OPENAI_API_KEY` | ` ` | API key for `OPENAI_BASE_URL` |
 | `OPENAI_MODEL_NAME` | ` ` | Model to use on `OPENAI_BASE_URL` (e.g. `google/gemma-4-31b-it`). **Not** `MODEL_NAME`, which is the TTS model |
@@ -65,6 +69,73 @@ docker compose up --build
 ```bash
 docker compose -f docker-compose-cpu.yaml up --build
 ```
+
+## Tracing (Loki + Tempo)
+
+The app calls [`fastapi_loki_tempo.patch()`](https://github.com/Scicom-AI-Enterprise-Organization/fastapi-loki-tempo)
+at startup, which always gives it JSON logs carrying the active trace id, a request log
+line per request, Prometheus metrics at `/metrics`, health probes and Scalar docs at
+`/scalar`. That library owns `SERVICE_NAME`, `OTLP_ENDPOINT`, `TRACING_SAMPLE` and the
+rest of the OTLP/log config.
+
+`ENABLE_TRACING_SPANS=true` adds this repo's own spans on the serving hot path
+([app/tracing.py](app/tracing.py)), which answer where a request's time actually went:
+
+```
+POST /v1/audio/speech                 (fastapi instrumentation)
+├── tts.normalize                     normalizer.mode=rule|llm, chars in/out
+│   ├── normalize.llm                 the LLM normalizer call (mode="llm")
+│   └── normalize.rule                the rule-based pipeline
+└── tts.stream                        tts.ttfb_s, tts.lm_wait_s, tts.decode_wait_s,
+    │                                 tts.decodes, tts.chunks, tts.audio_bytes
+    ├── lm.generate                   the vLLM SSE stream, lm.deltas
+    │   ├── lm.connect                POST → response headers
+    │   └── lm.first_token            headers → first speech token (prefill)
+    ├── tts.chunk (index=0)           one emitted audio chunk
+    │   └── codec.decode              codec.tokens
+    │       ├── codec.batch_wait      queued → picked up by the batch collector
+    │       ├── codec.batch_prep      batch formed → H2D copy issued (batch thread)
+    │       ├── codec.compute_wait    H2D issued → compute thread starts
+    │       └── codec.gpu_decode      graph replay + D2H, batch.size, codec.cuda_graph
+    └── tts.chunk (index=1) ...
+```
+
+So: **dynamic batching** = `codec.batch_wait` + `codec.batch_prep` + `codec.compute_wait`,
+**waiting on vLLM** = `lm.connect` + `lm.first_token` and the `tts.lm_wait_s` aggregate
+(how long the stitcher had no tokens left to decode), **decoding speech tokens** =
+`codec.gpu_decode`, or `tts.decode_wait_s` for the whole per-request wait. Voice
+conversion adds `vc.load_audio`, `codec.encode`, `codec.encode_wait` and
+`codec.encode_gpu`.
+
+Two things make this safe to leave in the code path:
+
+- **Off by default.** With `ENABLE_TRACING_SPANS` unset, every helper is a shared
+  `contextlib.nullcontext()` or a function that returns `None` before doing anything —
+  no tracer lookup, no `time_ns()`, no per-decode dict. The decode loop is GIL-bound,
+  so tracing has to be absent when off, not merely cheap.
+- **Explicit parents.** A decode batch is built from N different requests, so the
+  batching threads cannot use the ambient span context; each queued item carries its
+  request's context plus the timestamp of the previous hop, and each stage is recorded
+  after the fact with those timestamps.
+
+Under real load, sample: `TRACING_SAMPLE=0.05` keeps the trace volume (and the ~5 extra
+spans per decode) sane. Spans are only exported when `OTLP_ENDPOINT` is set; without it
+they are created and dropped, so keep this off unless something is collecting.
+
+```bash
+# a full Tempo + Loki + Alloy + Prometheus + Grafana stack to point it at
+git clone https://github.com/Scicom-AI-Enterprise-Organization/fastapi-loki-tempo
+docker compose -f fastapi-loki-tempo/grafana/docker-compose.yaml up -d \
+  tempo loki alloy prometheus grafana
+
+# then, in .env
+ENABLE_TRACING_SPANS=true
+OTLP_ENDPOINT=http://localhost:4327
+SERVICE_NAME=tts-api
+```
+
+`ENABLE_CONSOLE_SPAN_EXPORTER=true` prints spans to stdout instead, which is enough to
+check the tree without a backend.
 
 ## API Endpoints
 
@@ -226,6 +297,9 @@ python -m pytest tests/ -v
 # run only markdown sanitization tests (no dependencies beyond app/rules.py)
 python -m pytest tests/test_sanitize_markdown.py -v
 
+# run the tracing helper tests (no GPU; add opentelemetry-sdk for the enabled-path tests)
+uv run --with pytest --with opentelemetry-sdk -- pytest tests/test_tracing.py -v
+
 # run normalizer tests (requires app/normalizer dependencies: dateparser, unidecode, numpy)
 python -m pytest tests/test_normalizer.py -v
 
@@ -247,7 +321,7 @@ python -m pytest tests/test_normalize_api.py -v
 
 ### Test files
 
-**571 passed, 35 skipped** on a full run with a live API and `OPENAI_*` configured.
+**583 passed, 35 skipped** on a full run with a live API and `OPENAI_*` configured.
 
 | File | Tests | Dependencies | Description |
 |---|---|---|---|
@@ -257,6 +331,7 @@ python -m pytest tests/test_normalize_api.py -v
 | `tests/test_multilingual.py` | 76 | `app/normalizer`, `app/rules` | Multilingual passthrough tests for Chinese (Simplified/Traditional), Korean, Tamil, Arabic, Japanese (Hiragana/Katakana/Kanji), Thai, Hindi/Devanagari, and emoji. Verifies non-Latin scripts pass through untouched while ASCII content (RM, phone, email, URL, IC, time, %) is still normalized. Tests mixed-script sentences, markdown stripping with multilingual text, and the non-ASCII-attached-to-ASCII edge case (e.g. `价格是RM500` passes through raw vs `价格是 RM500` normalizes). |
 | `tests/test_tts_vc_api.py` | 43 | Live API (`TTS_TEST_URL`, default `http://localhost:9091`) | Integration tests for TTS (`POST /v1/audio/speech`) and VC (`POST /v1/audio/vc`) endpoints. **TTS tests** (24): WAV/PCM format validation (sample rate 24000, mono, 16-bit), streaming vs buffered, all speakers (husein/jenny/idayu), speaker list endpoint, markdown/HTML/link sanitization, Malaysian normalization with numbers, temperature/speed/max_tokens parameters, short/long/English/multilingual text. **VC tests** (19): uses `jenny.wav` with reference text, WAV/PCM format validation, streaming vs buffered, Malay/English/long/short generate text, markdown/HTML/link/code sanitization in both reference_text and generate_text, temperature/speed/max_tokens parameters. Auto-skipped when the API is not reachable. |
 | `tests/test_normalize_api.py` | 35 | In-process app import (GPU/models) | Integration tests for `POST /v1/audio/normalize` endpoint. Auto-skipped when the app cannot be imported. Tests `normalize_malaysian=false` (sanitize only), `normalize_malaysian=true` (full normalization), and the `mode` enum (`rule` default, `llm`, invalid → 422). |
+| `tests/test_tracing.py` | 12 | `pytest` only (no GPU/torch; 8 need `opentelemetry-sdk`) | Unit tests for the hot-path spans (`app/tracing.py`): disabled by default, disabled helpers are no-ops returning a single shared `nullcontext`, and — with the OTel SDK installed — spans nest, an explicitly passed parent beats the ambient context (what the batching threads rely on), `record_span` honours the given timestamps and drops a stage with no start time, attributes are cleaned, exceptions mark the span. |
 | `tests/test_llm_normalizer.py` | 28 | `aiohttp` + `pytest` only (no GPU/torch) | Unit tests for the LLM-based normalizer (`app/llm_normalizer.py`): few-shot message building from `app/prompt.py`, strict JSON schema, reply parsing (clean/fenced/bare/plain-text/unusable), and full HTTP behaviour against a local fake OpenAI server (auth header, payload shape, 400 retry without `response_format`, 5xx/unreachable/unconfigured errors). 4 live tests hit the real `OPENAI_BASE_URL` (Malay money, English IC, Chinese money, passthrough) and are skipped unless `OPENAI_*` is set. |
 
 ## Benchmark — H100 SXM vs H200 SXM

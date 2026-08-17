@@ -86,6 +86,14 @@ OPENAI_TIMEOUT = float(os.environ.get('OPENAI_TIMEOUT', '10'))
 DEBUG_AUDIO = os.environ.get('DEBUG_AUDIO', 'false').lower() == 'true'
 SENTRY_DSN = os.environ.get('SENTRY_DSN', '')
 
+# Hot-path OpenTelemetry spans: how long a request spent queued in dynamic batching,
+# waiting on vLLM, and inside the codec decode. Off by default -- when off every helper
+# in app/tracing.py is a shared nullcontext / no-op, so the GIL-bound decode loop pays
+# nothing at all (see app/tracing.py for the span tree). Needs fastapi-loki-tempo (the
+# OTel SDK) installed, plus OTLP_ENDPOINT for the spans to reach Tempo; the rest of the
+# tracing config (SERVICE_NAME, OTLP_*, TRACING_SAMPLE) belongs to that library.
+ENABLE_TRACING_SPANS = os.environ.get('ENABLE_TRACING_SPANS', 'false').lower() == 'true'
+
 # Compute device. Empty = auto-detect (cuda -> npu -> cpu). Set to 'npu' to run the
 # codec decode on a Huawei Ascend NPU (via torch_npu). On non-cuda devices the CUDA
 # graph warmup and CUDA streams are skipped automatically (see app/main.py).
