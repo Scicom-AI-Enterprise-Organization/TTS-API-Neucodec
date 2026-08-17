@@ -41,6 +41,11 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   Request-field defaults are env-driven: `DEFAULT_NORMALIZER_MODE` (`rule`|`llm`) and
   `DEFAULT_NORMALIZE_MALAYSIAN` (bool) set what requests get when they omit `mode` /
   `normalize_malaysian`.
+- `app/tracing.py` — **optional** OpenTelemetry spans on the hot path (`ENABLE_TRACING_SPANS`,
+  default off ⇒ every helper is a shared `nullcontext()` / a `None`-returning no-op, so the
+  GIL-bound decode loop pays nothing). Exports spans through the provider
+  `fastapi_loki_tempo.patch()` installs, so they share the trace id with the JSON log lines.
+  Span tree and the reasoning behind it: module docstring + README "Tracing (Loki + Tempo)".
 - `vllm.yaml` / `docker-compose.yaml` — the two services, sharing external docker network `tts-network`.
 - `bench/` — benchmark + Whisper-CER harness, RunPod deploy scripts, and recorded results (see `bench/OPTIMIZATION.md`).
 - `bench/livekit/` — LiveKit agent stress rig (no-STT/no-LLM agent + load client): measures TTFB and
@@ -99,6 +104,7 @@ for ~4.6 s of audio (RTF ≈0.15).
 | `TORCH_COMPILE=true` | Use `torch.compile` instead of CUDA graphs (alternative codepath). |
 | `STREAM_NORMALIZE` (default `true`) | Per-utterance loudness normalization in the crossfade stitcher (running active-RMS → gain toward `TARGET_RMS_DB`, slew `GAIN_SLEW_DB`/chunk, clamp `MAX_GAIN_DB`); per-request override via `stream_normalize` on `/v1/audio/speech`. The LM's sampled tokens carry loudness — same text at temp 0.6–0.7 spreads 3–10 dB active-RMS (and different voices sit ~5 dB apart in natural level), and ~half of hot utterances clip at full scale; this collapses the spread to <2 dB (verified through a LiveKit agent at concurrency 8, see `bench/livekit/`). Boosts are capped by running-peak headroom and peaks are rounded by a tanh soft-knee limiter (knee 0.85, drive 1.4) — RMS-boosting a peaky voice (crest ~19 dB) through the old hard clip crackled audibly. The gain locks after the first ~1s of voiced audio (one static trim per utterance): a continuously-adapting causal AGC drifted ±0.75 dB mid-utterance, audible as "damping". Residual streaming loudness ripple (~0.7–1.5 dB envelope tilt vs a single big decode window) is the non-causal decoder's window effect — shrink it with larger `playback_speed`/`playback_overlap_speed` (e.g. `playback_speed=10` for non-realtime requests). |
 | uvicorn `--workers N` (deploy) | Run N app processes to beat the GIL ceiling. **Requires NVIDIA MPS** to share the GPU without context-thrash collapse at high concurrency. |
+| `ENABLE_TRACING_SPANS` (default `false`) | Hot-path spans (`app/tracing.py`): `codec.batch_wait`/`batch_prep`/`compute_wait` (dynamic batching), `lm.connect`/`lm.first_token` + `tts.lm_wait_s` (waiting on vLLM), `codec.gpu_decode` + `tts.decode_wait_s` (decoding speech tokens), per emitted chunk. ~5 extra spans **per decode**, so pair with `TRACING_SAMPLE<1` under load; needs `OTLP_ENDPOINT` to reach Tempo. Off = `nullcontext`, no timing taken at all. |
 
 ### Accuracy guardrail (Whisper-large-v3 CER, 16 sentences, temp 0.6)
 
@@ -142,8 +148,9 @@ vLLM ≈60 GB on an 80 GB card.
 ## Common commands
 
 ```bash
-python -m pytest tests/ -v                        # 571 pass / 35 skip with a live API + OPENAI_* set
+python -m pytest tests/ -v                        # 583 pass / 35 skip with a live API + OPENAI_* set
 python -m pytest tests/test_sanitize_markdown.py -v   # no GPU deps
+uv run --with pytest --with opentelemetry-sdk -- pytest tests/test_tracing.py -v  # no GPU deps
 uv run --with aiohttp --with pytest -- pytest tests/test_llm_normalizer.py -v  # no GPU deps; `set -a; source .env; set +a` first to include the live LLM tests
 
 # local docker stack
@@ -172,6 +179,11 @@ python bench/cer_eval.py --wav-dir /tmp/eval --out /tmp/cer.json   # needs faste
   (64 is ample — the codec, not the LM, is the throughput limit).
 - **Multiple GPU processes without MPS collapse under load** (CUDA context time-slicing): throughput swings
   wildly and p99 latency explodes at high concurrency. Always run multi-worker + colocated vLLM under MPS.
+- **Batch-queue items are 3-tuples: `(future, payload, meta)`.** `meta` is the tracing carrier
+  (`tracing.stage_meta()`, `None` when tracing is off) that the batch/compute threads mutate to
+  time each hop; `compute_queue` items are `(uuid, tokens, lens, futures, metas)`. Adding a field
+  means touching all of `dynamic_batching` / `_batch_one` / `_compute_one` (and the `vc_*` twins)
+  — an arity mismatch there wedges every decode with the error only visible in the worker log.
 - NeuCodec downloads `facebook/w2v-bert-2.0` + `neuphonic/neucodec` from HF on first start — cache them.
 - **`MODEL_NAME` ≠ `OPENAI_MODEL_NAME`.** `MODEL_NAME` is the TTS model vLLM serves (`TTS-model`);
   the LLM normalizer's model goes in `OPENAI_MODEL_NAME`. Setting `MODEL_NAME=google/gemma-...` in
