@@ -55,9 +55,74 @@ from app.neucodec import NeuCodec
 if sentry_sdk is not None and len(SENTRY_DSN):
     sentry_sdk.init(dsn=SENTRY_DSN, send_default_pii=True)
 
+def _suppress_asgi_message_spans():
+    """Default OTel's ASGI middleware to dropping its per-message spans.
+
+    That instrumentation opens one span per ASGI *event*. A streaming TTS response reads
+    the vLLM stream line by line and polls `request.is_disconnected()` as it goes -- and
+    every such poll is a real ASGI receive -- so one request produced ~2 `http receive`
+    spans per speech token: measured on an H20, 505 of them next to 19 real spans. They
+    carry no information, bury the spans that do, and multiply Tempo's ingest for nothing.
+    DISCONNECT_POLL_S cuts the count; this removes the rest, including the per-chunk
+    `http send` spans that scale with utterance length.
+
+    Done by defaulting the middleware's own kwarg rather than by re-instrumenting or by
+    editing `app.user_middleware`:
+
+    * `patch()` must stay the thing that instruments the app. It registers its
+      request-logging middleware first on purpose, and on older instrumentation versions
+      (which add OTel via `add_middleware`) instrumenting ahead of it flips the order and
+      drops `traceID` from the `type=request` log line.
+    * `opentelemetry-instrumentation-fastapi` >=0.50 does not use `add_middleware` at all
+      -- it wraps `build_middleware_stack` and constructs `OpenTelemetryMiddleware`
+      itself -- so there is no registered `Middleware` entry whose kwargs could be
+      edited (verified: that approach patched 0 of them).
+
+    Defaulting `__init__` covers both mechanisms. `exclude_spans` only exists in newer
+    versions and an unknown kwarg would raise on every request, so it is feature-detected.
+    """
+    try:
+        import functools
+        import inspect
+        from opentelemetry.instrumentation.asgi import OpenTelemetryMiddleware
+    except ImportError:
+        return
+    try:
+        if 'exclude_spans' not in inspect.signature(OpenTelemetryMiddleware.__init__).parameters:
+            logging.info(
+                'opentelemetry-instrumentation-asgi predates exclude_spans; '
+                'keeping the per-message http receive/send spans'
+            )
+            return
+        if getattr(OpenTelemetryMiddleware, '_tts_excludes_message_spans', False):
+            return      # uvicorn --reload / a second patch() call
+        original_init = OpenTelemetryMiddleware.__init__
+
+        @functools.wraps(original_init)
+        def _init(self, *args, **kwargs):
+            # not setdefault: the fastapi instrumentation passes `exclude_spans=None`
+            # explicitly, so the key is always present and a setdefault never fires.
+            # Only an explicit non-empty choice by the caller wins over this default.
+            if not kwargs.get('exclude_spans'):
+                kwargs['exclude_spans'] = ['receive', 'send']
+            return original_init(self, *args, **kwargs)
+
+        OpenTelemetryMiddleware.__init__ = _init
+        OpenTelemetryMiddleware._tts_excludes_message_spans = True
+        logging.info('asgi per-message http receive/send spans suppressed')
+    except Exception as e:
+        # an observability tweak must never stop the app from booting
+        logging.warning(f'could not suppress asgi message spans: {e}')
+
+
 app = FastAPI()
 if fastapi_loki_tempo is not None:
     fastapi_loki_tempo.patch(app=app)
+    # After patch(), so this runs with logging already configured: Starlette does not
+    # build the middleware stack (and so does not construct the OTel middleware) until
+    # the first request, which is well after this.
+    if not TRACE_ASGI_MESSAGE_SPANS:
+        _suppress_asgi_message_spans()
 
 torch.set_grad_enabled(False)
 
@@ -588,6 +653,23 @@ async def stream_speech(
         })
         lm_ctx = tracing.context_with(lm_span)
         n_deltas = 0
+        # `request.is_disconnected()` performs a real ASGI receive on every call, and
+        # aiohttp yields two lines per SSE event (the data line and the blank one), so
+        # polling it per line meant ~2 receives per speech token -- pure overhead on the
+        # GIL-bound loop, and one instrumented span each when tracing is on. Poll on a
+        # time budget instead; the consumer closing the stream still cancels this task
+        # immediately (with_producer_cleanup), so this only bounds how long a vanished
+        # client can keep the LM generating.
+        next_disconnect_check = 0.0
+
+        async def client_gone():
+            nonlocal next_disconnect_check
+            now = time.monotonic()
+            if now < next_disconnect_check:
+                return False
+            next_disconnect_check = now + DISCONNECT_POLL_S
+            return await request.is_disconnected()
+
         try:
             # DUMMY_TOKENS mode: replay canned speech tokens (simulating the vLLM SSE
             # stream) instead of calling the LM. One token per event, DUMMY_REPEAT times.
@@ -595,7 +677,7 @@ async def stream_speech(
                 toks = re.findall(r"<\|s_\d+\|>", DUMMY_TOKENS)
                 for _ in range(max(1, DUMMY_REPEAT)):
                     for t in toks:
-                        if await request.is_disconnected():
+                        if await client_gone():
                             break
                         await queue.put({'result': t})
                         n_deltas += 1
@@ -623,7 +705,7 @@ async def stream_speech(
                         return
 
                     async for line in resp.content:
-                        if await request.is_disconnected():
+                        if await client_gone():
                             tracing.add_event(lm_span, 'client_disconnected')
                             break
                         if line.startswith(b"data: "):

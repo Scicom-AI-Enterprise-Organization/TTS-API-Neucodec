@@ -41,14 +41,24 @@ def restore_env():
         sys.modules.pop(name, None)
 
 
-# --- disabled (the default) -------------------------------------------------------
+# --- disabled explicitly (the default is on) -------------------------------------------------------
 
-def test_disabled_by_default():
+def test_enabled_by_default_but_degrades_without_otel():
+    """Unset means on -- and still means off wherever opentelemetry is absent.
+
+    The second half is the one that matters operationally: a box without the OTel
+    packages (a bare NPU host, a slim image) must boot and serve, not raise.
+    """
     os.environ.pop('ENABLE_TRACING_SPANS', None)
     for name in ('app.tracing', 'app.env'):
         sys.modules.pop(name, None)
     tracing = importlib.import_module('app.tracing')
-    assert tracing.enabled is False
+    try:
+        from opentelemetry import trace as _otel_trace  # noqa: F401
+    except ImportError:
+        assert tracing.enabled is False
+    else:
+        assert tracing.enabled is True
 
 
 def test_disabled_span_is_a_shared_nullcontext():

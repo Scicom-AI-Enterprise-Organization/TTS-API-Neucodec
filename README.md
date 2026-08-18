@@ -47,7 +47,9 @@ Copy [.env_example](.env_example) to `.env` and adjust as needed. See [app/env.p
 | `TORCH_COMPILE` | `false` | Use torch.compile instead of CUDA Graphs |
 | `DEBUG_AUDIO` | `false` | Save intermediate audio chunks to disk |
 | `SENTRY_DSN` | ` ` | Sentry DSN for error tracking |
-| `ENABLE_TRACING_SPANS` | `false` | Hot-path spans: dynamic-batch wait, vLLM wait, codec decode. See [Tracing](#tracing-loki--tempo) |
+| `ENABLE_TRACING_SPANS` | `true` | Hot-path spans: dynamic-batch wait, vLLM wait, codec decode. Set `false` to remove them entirely. See [Tracing](#tracing-loki--tempo) |
+| `TRACE_ASGI_MESSAGE_SPANS` | `false` | Keep the OTel ASGI `http receive`/`http send` span per ASGI message. Off because streaming made it ~500 empty spans per request |
+| `DISCONNECT_POLL_S` | `0.25` | How often the LM reader may ask whether the client disconnected (each check is a real ASGI receive) |
 | `OTLP_ENDPOINT` | ` ` | Tempo OTLP endpoint for traces (e.g. `http://localhost:4317`). Handled by `fastapi-loki-tempo` |
 | `SERVICE_NAME` | `fastapi` | Service name on spans and logs. Handled by `fastapi-loki-tempo` |
 | `TRACING_SAMPLE` | `1.0` | Head sampling ratio; drop below 1.0 before enabling spans under load |
@@ -78,7 +80,7 @@ line per request, Prometheus metrics at `/metrics`, health probes and Scalar doc
 `/scalar`. That library owns `SERVICE_NAME`, `OTLP_ENDPOINT`, `TRACING_SAMPLE` and the
 rest of the OTLP/log config.
 
-`ENABLE_TRACING_SPANS=true` adds this repo's own spans on the serving hot path
+`ENABLE_TRACING_SPANS` (on by default) adds this repo's own spans on the serving hot path
 ([app/tracing.py](app/tracing.py)), which answer where a request's time actually went:
 
 ```
@@ -109,10 +111,11 @@ conversion adds `vc.load_audio`, `codec.encode`, `codec.encode_wait` and
 
 Two things make this safe to leave in the code path:
 
-- **Off by default.** With `ENABLE_TRACING_SPANS` unset, every helper is a shared
-  `contextlib.nullcontext()` or a function that returns `None` before doing anything —
-  no tracer lookup, no `time_ns()`, no per-decode dict. The decode loop is GIL-bound,
-  so tracing has to be absent when off, not merely cheap.
+- **Removable, not just cheap.** With `ENABLE_TRACING_SPANS=false` every helper is a
+  shared `contextlib.nullcontext()` or a function that returns `None` before doing
+  anything — no tracer lookup, no `time_ns()`, no per-decode dict. The decode loop is
+  GIL-bound, so tracing has to be genuinely absent when off. The same applies
+  automatically wherever opentelemetry is not installed.
 - **Explicit parents.** A decode batch is built from N different requests, so the
   batching threads cannot use the ambient span context; each queued item carries its
   request's context plus the timestamp of the previous hop, and each stage is recorded
@@ -121,6 +124,21 @@ Two things make this safe to leave in the code path:
 Under real load, sample: `TRACING_SAMPLE=0.05` keeps the trace volume (and the ~5 extra
 spans per decode) sane. Spans are only exported when `OTLP_ENDPOINT` is set; without it
 they are created and dropped, so keep this off unless something is collecting.
+
+One upstream default is turned off here. The OpenTelemetry ASGI instrumentation opens a
+span per ASGI *message*, and a streaming response polls the receive channel as it reads
+the LM stream — measured on an H20, one request produced **505 empty
+`POST /v1/audio/speech http receive` spans** next to 19 real ones, which is both useless
+in the flame graph and a large multiple on Tempo's ingest. Two fixes, and the same shape
+of request now emits 25 spans and **zero** ASGI-message spans:
+
+- `DISCONNECT_POLL_S` (0.25 s) bounds how often the LM reader asks whether the client
+  disconnected. Each check is a real ASGI receive, and aiohttp yields two lines per SSE
+  event, so the old per-line poll cost ~2 receives per speech token — event-loop time
+  spent whether or not tracing is on. This alone took 505 noise spans to 9.
+- `_suppress_asgi_message_spans()` in [app/main.py](app/main.py) removes the remainder,
+  including the per-chunk `http send` spans that scale with utterance length. Set
+  `TRACE_ASGI_MESSAGE_SPANS=true` to get the upstream behaviour back.
 
 ```bash
 # a full Tempo + Loki + Alloy + Prometheus + Grafana stack to point it at
