@@ -1,7 +1,7 @@
 """app/tracing.py: the disabled path must cost nothing, the enabled path must nest.
 
 No torch / GPU / API needed -- app.tracing only imports app.env. The enabled-path
-tests skip when opentelemetry is not installed (it arrives with fastapi-loki-tempo).
+tests skip when opentelemetry is not installed (it arrives with the `wan` package).
 
     uv run --with pytest -- pytest tests/test_tracing.py -v
 """
@@ -242,7 +242,7 @@ def test_attributes_are_cleaned(spans):
     assert attrs['coerced'] == '[1, 2]'
 
 
-#: app/main.py imports app.tracing *before* fastapi_loki_tempo.patch() installs the
+#: app/main.py imports app.tracing *before* wan.patch() installs the
 #: tracer provider, so get_tracer() has to resolve lazily -- if it bound a no-op tracer
 #: at import time every span would silently vanish. The global provider can only be set
 #: once per process, so this runs in a fresh one.
@@ -265,7 +265,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 provider = TracerProvider()
 exporter = InMemorySpanExporter()
 provider.add_span_processor(SimpleSpanProcessor(exporter))
-trace.set_tracer_provider(provider)           # ... as fastapi_loki_tempo.patch() does
+trace.set_tracer_provider(provider)           # ... as wan.patch() does
 
 with tracing.span('codec.decode', attrs={{'codec.tokens': 7}}):
     pass

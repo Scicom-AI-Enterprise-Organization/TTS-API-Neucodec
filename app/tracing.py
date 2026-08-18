@@ -20,7 +20,7 @@ CLAUDE.md), and an SDK with no span processor still *builds* every span before
 dropping it (~292us per request, measured), which is pure waste.
 
 Spans are emitted through whatever tracer provider is installed -- in this app
-that is the one ``fastapi_loki_tempo.patch()`` configures, so they land in Tempo
+that is the one ``wan.patch()`` configures, so they land in Tempo
 as children of the FastAPI server span and share its trace id with the JSON log
 lines. ``OTLP_ENDPOINT`` is therefore not optional: without it (or another
 exporter variable) these spans are not created at all.
@@ -62,7 +62,7 @@ enabled = False
 _tracer = None
 
 #: (level, message) explaining that decision, emitted by :func:`log_status`. Not logged
-#: here: app/main.py imports this module before fastapi_loki_tempo.patch() configures
+#: here: app/main.py imports this module before wan.patch() configures
 #: logging, so an import-time INFO goes to a root logger that drops it -- which is how the
 #: "no exporter, spans disabled" notice managed to be invisible in the first place.
 status = (logging.INFO, '')
@@ -86,7 +86,7 @@ else:
         from opentelemetry import context as otel_context
         from opentelemetry import trace as otel_trace
 
-        # Resolved lazily by the API: this runs before fastapi_loki_tempo.patch()
+        # Resolved lazily by the API: this runs before wan.patch()
         # installs the real provider, and a ProxyTracer picks it up afterwards.
         _tracer = otel_trace.get_tracer(os.environ.get('SERVICE_NAME', 'tts-api'))
         enabled = True
@@ -94,7 +94,7 @@ else:
     except ImportError as e:
         status = (logging.WARNING,
                   f'ENABLE_TRACING_SPANS=true but opentelemetry is not installed ({e}), '
-                  'hot-path spans disabled. Install fastapi-loki-tempo.')
+                  'hot-path spans disabled. Install wan.')
 
 
 def log_status():

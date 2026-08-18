@@ -2,7 +2,7 @@
 Integration tests for /v1/audio/normalize endpoint.
 Tests sanitize_markdown + normalize_malaysian_text together via the API.
 
-Requires the full app to be importable (fasttext, malaya normalizer, etc.).
+Requires the full app to be importable (fasttext, the vendored normalizer, etc.).
 Run with: python -m pytest tests/test_normalize_api.py -v
 
 If models are not available, these tests will be skipped.
