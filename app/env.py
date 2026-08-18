@@ -87,15 +87,28 @@ DEBUG_AUDIO = os.environ.get('DEBUG_AUDIO', 'false').lower() == 'true'
 SENTRY_DSN = os.environ.get('SENTRY_DSN', '')
 
 # Hot-path OpenTelemetry spans: how long a request spent queued in dynamic batching,
-# waiting on vLLM, and inside the codec decode. On by default -- ~19 spans per request,
-# which also gives every log line the span id of the stage that emitted it. Set false to
-# turn it off, and every helper in app/tracing.py becomes a shared nullcontext / no-op so
-# the GIL-bound decode loop pays nothing at all (see app/tracing.py for the span tree).
-# Degrades to off by itself if opentelemetry is not installed. Spans are only *exported*
-# when OTLP_ENDPOINT is set; without it they are still built and then dropped, so turn
-# this off (or set TRACING_SAMPLE<1) if nothing is collecting. The rest of the tracing
-# config (SERVICE_NAME, OTLP_*, TRACING_SAMPLE) belongs to fastapi-loki-tempo.
+# waiting on vLLM, and inside the codec decode. On by default (~19 spans per request), but
+# only when something will actually collect them -- both this AND an exporter are needed.
+# With no exporter the SDK builds every span and drops it, ~292us of CPU per request for
+# nothing (measured; see README "Without OTLP_ENDPOINT"), so the gate below turns the
+# whole thing into a shared nullcontext / no-op instead. Also degrades to off by itself if
+# opentelemetry is not installed. The rest of the tracing config (SERVICE_NAME, OTLP_*,
+# TRACING_SAMPLE) belongs to fastapi-loki-tempo.
 ENABLE_TRACING_SPANS = os.environ.get('ENABLE_TRACING_SPANS', 'true').lower() == 'true'
+# What counts as "something will collect them". OTLP_ENDPOINT / JAEGER_HOST /
+# ENABLE_CONSOLE_SPAN_EXPORTER are fastapi-loki-tempo's variables, read here only to make
+# this decision; OTEL_EXPORTER_OTLP_* are the OpenTelemetry standard names, honoured so an
+# auto-instrumented deployment is not silently un-traced.
+TRACING_EXPORTER_CONFIGURED = bool(
+    os.environ.get('OTLP_ENDPOINT', '')
+    or os.environ.get('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', '')
+    or os.environ.get('OTEL_EXPORTER_OTLP_ENDPOINT', '')
+    or os.environ.get('JAEGER_HOST', '')
+    or os.environ.get('ENABLE_CONSOLE_SPAN_EXPORTER', 'false').lower() == 'true'
+)
+# Escape hatch: set false when a span processor is installed in code rather than through
+# any of those variables, so the gate does not disable spans that would have been exported.
+TRACING_SPANS_REQUIRE_EXPORTER = os.environ.get('TRACING_SPANS_REQUIRE_EXPORTER', 'true').lower() == 'true'
 # The OTel ASGI instrumentation opens a span per ASGI message. Streaming a TTS response
 # polls the receive channel per LM token, so that was ~500 empty `http receive` spans per
 # request, dwarfing the real ones. Suppressed by default (see _suppress_asgi_message_spans

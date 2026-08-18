@@ -41,9 +41,10 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   Request-field defaults are env-driven: `DEFAULT_NORMALIZER_MODE` (`rule`|`llm`) and
   `DEFAULT_NORMALIZE_MALAYSIAN` (bool) set what requests get when they omit `mode` /
   `normalize_malaysian`.
-- `app/tracing.py` — OpenTelemetry spans on the hot path (`ENABLE_TRACING_SPANS`, **default on**;
-  set `false` ⇒ every helper is a shared `nullcontext()` / a `None`-returning no-op, so the
-  GIL-bound decode loop pays nothing). Exports spans through the provider
+- `app/tracing.py` — OpenTelemetry spans on the hot path (`ENABLE_TRACING_SPANS`, **default on**,
+  but gated on an exporter actually being configured; off, no exporter, or no opentelemetry ⇒
+  every helper is a shared `nullcontext()` / a `None`-returning no-op, so the GIL-bound decode
+  loop pays nothing). Exports spans through the provider
   `fastapi_loki_tempo.patch()` installs, so they share the trace id with the JSON log lines.
   Span tree and the reasoning behind it: module docstring + README "Tracing (Loki + Tempo)".
 - `vllm.yaml` / `docker-compose.yaml` — the two services, sharing external docker network `tts-network`.
@@ -105,7 +106,7 @@ for ~4.6 s of audio (RTF ≈0.15).
 | `STREAM_NORMALIZE` (default `true`) | Per-utterance loudness normalization in the crossfade stitcher (running active-RMS → gain toward `TARGET_RMS_DB`, slew `GAIN_SLEW_DB`/chunk, clamp `MAX_GAIN_DB`); per-request override via `stream_normalize` on `/v1/audio/speech`. The LM's sampled tokens carry loudness — same text at temp 0.6–0.7 spreads 3–10 dB active-RMS (and different voices sit ~5 dB apart in natural level), and ~half of hot utterances clip at full scale; this collapses the spread to <2 dB (verified through a LiveKit agent at concurrency 8, see `bench/livekit/`). Boosts are capped by running-peak headroom and peaks are rounded by a tanh soft-knee limiter (knee 0.85, drive 1.4) — RMS-boosting a peaky voice (crest ~19 dB) through the old hard clip crackled audibly. The gain locks after the first ~1s of voiced audio (one static trim per utterance): a continuously-adapting causal AGC drifted ±0.75 dB mid-utterance, audible as "damping". Residual streaming loudness ripple (~0.7–1.5 dB envelope tilt vs a single big decode window) is the non-causal decoder's window effect — shrink it with larger `playback_speed`/`playback_overlap_speed` (e.g. `playback_speed=10` for non-realtime requests). |
 | uvicorn `--workers N` (deploy) | Run N app processes to beat the GIL ceiling. **Requires NVIDIA MPS** to share the GPU without context-thrash collapse at high concurrency. |
 | `TRACE_ASGI_MESSAGE_SPANS` (default `false`) / `DISCONNECT_POLL_S` (`0.25`) | Suppress OTel's per-ASGI-message `http receive`/`http send` spans, and throttle the disconnect poll that generates them. See the gotcha below — without these one streaming request emits ~500 empty spans. |
-| `ENABLE_TRACING_SPANS` (default `true`) | Hot-path spans (`app/tracing.py`): `codec.batch_wait`/`batch_prep`/`compute_wait` (dynamic batching), `lm.connect`/`lm.first_token` + `tts.lm_wait_s` (waiting on vLLM), `codec.gpu_decode` + `tts.decode_wait_s` (decoding speech tokens), per emitted chunk. ~5 extra spans **per decode**, so pair with `TRACING_SAMPLE<1` under load; needs `OTLP_ENDPOINT` to reach Tempo, and without one the spans are built then dropped. `false` = `nullcontext`, no timing taken at all. |
+| `ENABLE_TRACING_SPANS` (default `true`, **and** needs an exporter: `OTLP_ENDPOINT`/`OTEL_EXPORTER_OTLP_*`/`JAEGER_HOST`/`ENABLE_CONSOLE_SPAN_EXPORTER`, else spans are not built — waive with `TRACING_SPANS_REQUIRE_EXPORTER=false`) | Hot-path spans (`app/tracing.py`): `codec.batch_wait`/`batch_prep`/`compute_wait` (dynamic batching), `lm.connect`/`lm.first_token` + `tts.lm_wait_s` (waiting on vLLM), `codec.gpu_decode` + `tts.decode_wait_s` (decoding speech tokens), per emitted chunk. ~5 extra spans **per decode**, so pair with `TRACING_SAMPLE<1` under load; An SDK with no span processor still *builds* every span before dropping it (~292 us/request measured), which is why no exporter ⇒ no spans. `false` = `nullcontext`, no timing taken at all (2.6 us). |
 
 ### Accuracy guardrail (Whisper-large-v3 CER, 16 sentences, temp 0.6)
 

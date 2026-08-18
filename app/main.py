@@ -123,6 +123,9 @@ if fastapi_loki_tempo is not None:
     # the first request, which is well after this.
     if not TRACE_ASGI_MESSAGE_SPANS:
         _suppress_asgi_message_spans()
+# Likewise deferred until logging exists, so "spans are off because nothing collects
+# them" is actually visible instead of being swallowed by the unconfigured root logger.
+tracing.log_status()
 
 torch.set_grad_enabled(False)
 
