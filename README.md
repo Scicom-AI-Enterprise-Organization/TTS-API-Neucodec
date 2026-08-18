@@ -47,7 +47,8 @@ Copy [.env_example](.env_example) to `.env` and adjust as needed. See [app/env.p
 | `TORCH_COMPILE` | `false` | Use torch.compile instead of CUDA Graphs |
 | `DEBUG_AUDIO` | `false` | Save intermediate audio chunks to disk |
 | `SENTRY_DSN` | ` ` | Sentry DSN for error tracking |
-| `ENABLE_TRACING_SPANS` | `true` | Hot-path spans: dynamic-batch wait, vLLM wait, codec decode. Set `false` to remove them entirely. See [Tracing](#tracing-loki--tempo) |
+| `ENABLE_TRACING_SPANS` | `true` | Hot-path spans: dynamic-batch wait, vLLM wait, codec decode. **Also needs an exporter configured** (`OTLP_ENDPOINT` etc.) or spans are not built at all. See [Tracing](#tracing-loki--tempo) |
+| `TRACING_SPANS_REQUIRE_EXPORTER` | `true` | The gate above. Set `false` only when a span processor is installed in code rather than via environment |
 | `TRACE_ASGI_MESSAGE_SPANS` | `false` | Keep the OTel ASGI `http receive`/`http send` span per ASGI message. Off because streaming made it ~500 empty spans per request |
 | `DISCONNECT_POLL_S` | `0.25` | How often the LM reader may ask whether the client disconnected (each check is a real ASGI receive) |
 | `OTLP_ENDPOINT` | ` ` | Tempo OTLP endpoint for traces (e.g. `http://localhost:4317`). Handled by `fastapi-loki-tempo` |
@@ -111,19 +112,53 @@ conversion adds `vc.load_audio`, `codec.encode`, `codec.encode_wait` and
 
 Two things make this safe to leave in the code path:
 
-- **Removable, not just cheap.** With `ENABLE_TRACING_SPANS=false` every helper is a
-  shared `contextlib.nullcontext()` or a function that returns `None` before doing
-  anything — no tracer lookup, no `time_ns()`, no per-decode dict. The decode loop is
-  GIL-bound, so tracing has to be genuinely absent when off. The same applies
-  automatically wherever opentelemetry is not installed.
+- **Removable, not just cheap, and off unless someone is listening.** Spans are built
+  only when `ENABLE_TRACING_SPANS` is on *and* an exporter is configured *and*
+  opentelemetry is importable. Fail any of the three and every helper is a shared
+  `contextlib.nullcontext()` or a function returning `None` before doing anything — no
+  tracer lookup, no `time_ns()`, no per-decode dict. The decode loop is GIL-bound, so
+  tracing has to be genuinely absent when off.
 - **Explicit parents.** A decode batch is built from N different requests, so the
   batching threads cannot use the ambient span context; each queued item carries its
   request's context plus the timestamp of the previous hop, and each stage is recorded
   after the fact with those timestamps.
 
 Under real load, sample: `TRACING_SAMPLE=0.05` keeps the trace volume (and the ~5 extra
-spans per decode) sane. Spans are only exported when `OTLP_ENDPOINT` is set; without it
-they are created and dropped, so keep this off unless something is collecting.
+spans per decode) sane.
+
+### `OTLP_ENDPOINT` is part of the switch
+
+`ENABLE_TRACING_SPANS` on its own does nothing: with no exporter configured the hot-path
+spans are **not built at all**, and the app logs why at startup rather than leaving you to
+wonder where the spans went:
+
+```
+hot-path spans requested but no span exporter is configured, so they are disabled rather
+than built and dropped. Set OTLP_ENDPOINT (or ENABLE_CONSOLE_SPAN_EXPORTER=true) to
+collect them, or TRACING_SPANS_REQUIRE_EXPORTER=false if a processor is installed in code.
+```
+
+The reason is that an OpenTelemetry SDK with no span processor attached still *builds*
+every span, stores its attributes, and then drops it. Measured over 3000 iterations of one
+request's worth of spans (24 spans with the real attribute sets, Apple M-series —
+indicative, not H100 numbers):
+
+| `ENABLE_TRACING_SPANS` | exporter | per request |
+|---|---|---|
+| `false`, or on with no exporter | — | **2.6 µs** (the nullcontext path) |
+| `true` | none attached — what this gate prevents | 292 µs, all wasted |
+| `true` | `BatchSpanProcessor` | 685 µs |
+
+Any one of these opens the gate, so a console-exporter debug session or an
+auto-instrumented deployment is not silently un-traced: `OTLP_ENDPOINT`,
+`OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`, `JAEGER_HOST`,
+`ENABLE_CONSOLE_SPAN_EXPORTER=true`. If you attach a processor in code instead, set
+`TRACING_SPANS_REQUIRE_EXPORTER=false`.
+
+What you give up when no exporter is configured is the *stage-level* `spanID` on log
+lines: `traceID` and the request's own `spanID` still come from the FastAPI
+instrumentation (as does the `X-Trace-Id` response header), but with no hot-path spans
+every line of a request carries the same span id again.
 
 One upstream default is turned off here. The OpenTelemetry ASGI instrumentation opens a
 span per ASGI *message*, and a streaming response polls the receive channel as it reads

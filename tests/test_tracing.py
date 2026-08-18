@@ -11,31 +11,48 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import importlib
+import logging
 from contextlib import nullcontext
 
 import pytest
 
 
-def _reload(enabled):
-    """Re-import app.tracing with ENABLE_TRACING_SPANS flipped.
+TRACING_VARS = (
+    'ENABLE_TRACING_SPANS', 'OTLP_ENDPOINT', 'TRACING_SPANS_REQUIRE_EXPORTER',
+    'OTEL_EXPORTER_OTLP_ENDPOINT', 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT',
+    'JAEGER_HOST', 'ENABLE_CONSOLE_SPAN_EXPORTER',
+)
 
-    The flag is read once at import time (that is what makes the disabled path free),
-    so a test that wants the other mode has to drop both modules and import again.
+
+def _import(**env):
+    """Re-import app.tracing with exactly this tracing env, nothing inherited.
+
+    Every flag is read once at import time -- that is what makes the disabled path
+    free -- so a test that wants a different mode drops both modules and imports again.
     """
-    os.environ['ENABLE_TRACING_SPANS'] = 'true' if enabled else 'false'
+    for name in TRACING_VARS:
+        os.environ.pop(name, None)
+    os.environ.update(env)
     for name in ('app.tracing', 'app.env'):
         sys.modules.pop(name, None)
     return importlib.import_module('app.tracing')
 
 
+def _reload(enabled):
+    """The common case: spans on/off with a collector configured."""
+    return _import(ENABLE_TRACING_SPANS='true' if enabled else 'false',
+                   OTLP_ENDPOINT='http://localhost:4317')
+
+
 @pytest.fixture(autouse=True)
 def restore_env():
-    previous = os.environ.get('ENABLE_TRACING_SPANS')
+    previous = {k: os.environ.get(k) for k in TRACING_VARS}
     yield
-    if previous is None:
-        os.environ.pop('ENABLE_TRACING_SPANS', None)
-    else:
-        os.environ['ENABLE_TRACING_SPANS'] = previous
+    for k, v in previous.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
     # leave no half-configured modules behind for the rest of the session
     for name in ('app.tracing', 'app.env'):
         sys.modules.pop(name, None)
@@ -43,22 +60,60 @@ def restore_env():
 
 # --- disabled explicitly (the default is on) -------------------------------------------------------
 
-def test_enabled_by_default_but_degrades_without_otel():
-    """Unset means on -- and still means off wherever opentelemetry is absent.
+def _have_otel():
+    try:
+        from opentelemetry import trace as _t  # noqa: F401
+    except ImportError:
+        return False
+    return True
 
-    The second half is the one that matters operationally: a box without the OTel
+
+def test_on_by_default_when_an_exporter_is_configured():
+    """Unset ENABLE_TRACING_SPANS means on -- given somewhere to send spans.
+
+    Also asserts the degradation that matters operationally: a box without the OTel
     packages (a bare NPU host, a slim image) must boot and serve, not raise.
     """
-    os.environ.pop('ENABLE_TRACING_SPANS', None)
-    for name in ('app.tracing', 'app.env'):
-        sys.modules.pop(name, None)
-    tracing = importlib.import_module('app.tracing')
-    try:
-        from opentelemetry import trace as _otel_trace  # noqa: F401
-    except ImportError:
-        assert tracing.enabled is False
-    else:
-        assert tracing.enabled is True
+    tracing = _import(OTLP_ENDPOINT='http://localhost:4317')
+    assert tracing.enabled is _have_otel()
+
+
+def test_no_exporter_means_no_spans_at_all():
+    """The gate: building spans an SDK will only drop costs ~292us/request, so don't."""
+    tracing = _import(ENABLE_TRACING_SPANS='true')      # no exporter variable set
+    assert tracing.enabled is False
+    assert isinstance(tracing.span('codec.decode'), nullcontext)
+    assert tracing.now_ns() == 0
+
+
+@pytest.mark.parametrize('var,value', [
+    ('OTLP_ENDPOINT', 'http://localhost:4317'),
+    ('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://collector:4317'),
+    ('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', 'http://collector:4318/v1/traces'),
+    ('JAEGER_HOST', 'localhost'),
+    ('ENABLE_CONSOLE_SPAN_EXPORTER', 'true'),
+])
+def test_every_exporter_variable_opens_the_gate(var, value):
+    """Gating on OTLP_ENDPOINT alone would silently un-trace console/jaeger/agent setups."""
+    tracing = _import(**{var: value})
+    assert tracing.enabled is _have_otel()
+
+
+def test_status_survives_being_imported_before_logging_exists(caplog):
+    """app/main.py imports app.tracing before patch() configures logging, so the
+    decision is stored and logged later by log_status(). It was logged at import time
+    once, which meant the "no exporter" notice never appeared anywhere."""
+    tracing = _import(ENABLE_TRACING_SPANS='true')      # no exporter -> warn
+    assert tracing.status[1]
+    with caplog.at_level(logging.WARNING):
+        tracing.log_status()
+    assert 'no span exporter is configured' in caplog.text
+
+
+def test_require_exporter_can_be_waived():
+    """For a span processor installed in code rather than through the environment."""
+    tracing = _import(TRACING_SPANS_REQUIRE_EXPORTER='false')
+    assert tracing.enabled is _have_otel()
 
 
 def test_disabled_span_is_a_shared_nullcontext():
@@ -114,7 +169,8 @@ def spans():
     exporter = InMemorySpanExporter()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
     exporter.clear()
-    return _reload(True), exporter
+    # the processor above is installed in code, which is what the waiver is for
+    return _import(TRACING_SPANS_REQUIRE_EXPORTER='false'), exporter
 
 
 def _by_name(exporter):
@@ -194,6 +250,9 @@ _LAZY_PROVIDER = """
 import os, sys
 sys.path.insert(0, {root!r})
 os.environ['ENABLE_TRACING_SPANS'] = 'true'
+os.environ['TRACING_SPANS_REQUIRE_EXPORTER'] = 'false'   # provider installed below, in code
+for _v in ('OTLP_ENDPOINT', 'ENABLE_CONSOLE_SPAN_EXPORTER'):
+    os.environ.pop(_v, None)
 
 from app import tracing                       # no provider exists yet
 assert tracing.enabled
