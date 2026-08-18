@@ -45,9 +45,15 @@ try:
 except Exception:
     sentry_sdk = None
 try:
-    import fastapi_loki_tempo
+    import wan
 except Exception:
-    fastapi_loki_tempo = None
+    try:
+        # pre-rename package name; a venv provisioned before the repo became `wan` still
+        # has this one, and the try/except above would otherwise silently drop JSON
+        # logging and tracing on that box rather than fail loudly.
+        import fastapi_loki_tempo as wan
+    except Exception:
+        wan = None
 from app.rules import *
 from app.wrapper import CUDAGraphsWrapper
 from app.neucodec import NeuCodec
@@ -116,11 +122,13 @@ def _suppress_asgi_message_spans():
 
 
 app = FastAPI()
-if fastapi_loki_tempo is not None:
-    fastapi_loki_tempo.patch(app=app)
-    # After patch(), so this runs with logging already configured: Starlette does not
-    # build the middleware stack (and so does not construct the OTel middleware) until
-    # the first request, which is well after this.
+if wan is not None:
+    wan.patch(app=app)
+    # Everything below is deliberately *after* patch(), which is what configures logging:
+    # an info() before it goes to an unconfigured root logger and is dropped. Also fine
+    # for the middleware tweak -- Starlette does not build the middleware stack (and so
+    # does not construct the OTel middleware) until the first request.
+    logging.info(f'observability via {wan.__name__} {getattr(wan, "__version__", "?")}')
     if not TRACE_ASGI_MESSAGE_SPANS:
         _suppress_asgi_message_spans()
 # Likewise deferred until logging exists, so "spans are off because nothing collects

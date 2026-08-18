@@ -51,8 +51,8 @@ Copy [.env_example](.env_example) to `.env` and adjust as needed. See [app/env.p
 | `TRACING_SPANS_REQUIRE_EXPORTER` | `true` | The gate above. Set `false` only when a span processor is installed in code rather than via environment |
 | `TRACE_ASGI_MESSAGE_SPANS` | `false` | Keep the OTel ASGI `http receive`/`http send` span per ASGI message. Off because streaming made it ~500 empty spans per request |
 | `DISCONNECT_POLL_S` | `0.25` | How often the LM reader may ask whether the client disconnected (each check is a real ASGI receive) |
-| `OTLP_ENDPOINT` | ` ` | Tempo OTLP endpoint for traces (e.g. `http://localhost:4317`). Handled by `fastapi-loki-tempo` |
-| `SERVICE_NAME` | `fastapi` | Service name on spans and logs. Handled by `fastapi-loki-tempo` |
+| `OTLP_ENDPOINT` | ` ` | Tempo OTLP endpoint for traces (e.g. `http://localhost:4317`). Handled by `wan` |
+| `SERVICE_NAME` | `fastapi` | Service name on spans and logs. Handled by `wan` |
 | `TRACING_SAMPLE` | `1.0` | Head sampling ratio; drop below 1.0 before enabling spans under load |
 | `OPENAI_BASE_URL` | ` ` | OpenAI-compatible endpoint for the LLM normalizer (`mode: "llm"`). Empty = llm mode disabled |
 | `OPENAI_API_KEY` | ` ` | API key for `OPENAI_BASE_URL` |
@@ -75,7 +75,7 @@ docker compose -f docker-compose-cpu.yaml up --build
 
 ## Tracing (Loki + Tempo)
 
-The app calls [`fastapi_loki_tempo.patch()`](https://github.com/Scicom-AI-Enterprise-Organization/fastapi-loki-tempo)
+The app calls [`wan.patch()`](https://github.com/Scicom-AI-Enterprise-Organization/wan)
 at startup, which always gives it JSON logs carrying the active trace id, a request log
 line per request, Prometheus metrics at `/metrics`, health probes and Scalar docs at
 `/scalar`. That library owns `SERVICE_NAME`, `OTLP_ENDPOINT`, `TRACING_SAMPLE` and the
@@ -177,8 +177,8 @@ of request now emits 25 spans and **zero** ASGI-message spans:
 
 ```bash
 # a full Tempo + Loki + Alloy + Prometheus + Grafana stack to point it at
-git clone https://github.com/Scicom-AI-Enterprise-Organization/fastapi-loki-tempo
-docker compose -f fastapi-loki-tempo/grafana/docker-compose.yaml up -d \
+git clone https://github.com/Scicom-AI-Enterprise-Organization/wan
+docker compose -f wan/grafana/docker-compose.yaml up -d \
   tempo loki alloy prometheus grafana
 
 # then, in .env

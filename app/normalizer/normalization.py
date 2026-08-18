@@ -65,7 +65,27 @@ rules_compound_normalizer_regex = (
 rules_compound_normalizer_keys = list(rules_compound_normalizer.keys())
 
 digits = '0123456789'
+#: Lazily built PySastrawi stemmer; False once known unavailable, so a missing install
+#: is not re-attempted on every word (a failed import is not cached by Python).
 sastrawi_stemmer = None
+
+
+def stem_sastrawi(word):
+    """Stem a Malay word with PySastrawi.
+
+    This used to call `malaya.stem.sastrawi`, which is a thin wrapper over exactly this
+    library -- and malaya was the only remaining reason to depend on that package, while
+    the rest of the normalizer is vendored here. Cached because
+    `StemmerFactory().create_stemmer()` builds the whole rule set, far too costly per word.
+    """
+    global sastrawi_stemmer
+    if sastrawi_stemmer is None:
+        try:
+            from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
+            sastrawi_stemmer = StemmerFactory().create_stemmer()
+        except Exception:
+            sastrawi_stemmer = False
+    return sastrawi_stemmer.stem(word) if sastrawi_stemmer else word
 
 time_descriptors = {
     "A.M.": "am", "AM": "am", "am": "am", "a.m.": "am",
@@ -535,8 +555,7 @@ def repeat_word(word, repeat=1):
         return word
     if word.startswith('se') or word.startswith('ter'):
         try:
-            from malaya.stem import sastrawi
-            stemmed = sastrawi().stem(word)
+            stemmed = stem_sastrawi(word)
         except Exception:
             stemmed = word
     else:

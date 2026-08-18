@@ -45,7 +45,8 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   but gated on an exporter actually being configured; off, no exporter, or no opentelemetry ⇒
   every helper is a shared `nullcontext()` / a `None`-returning no-op, so the GIL-bound decode
   loop pays nothing). Exports spans through the provider
-  `fastapi_loki_tempo.patch()` installs, so they share the trace id with the JSON log lines.
+  `wan.patch()` installs, so they share the trace id with the JSON log lines.
+  (`wan` is the observability library, ex-`fastapi-loki-tempo` — renamed repo *and* package.)
   Span tree and the reasoning behind it: module docstring + README "Tracing (Loki + Tempo)".
 - `vllm.yaml` / `docker-compose.yaml` — the two services, sharing external docker network `tts-network`.
 - `bench/` — benchmark + Whisper-CER harness, RunPod deploy scripts, and recorded results (see `bench/OPTIMIZATION.md`).

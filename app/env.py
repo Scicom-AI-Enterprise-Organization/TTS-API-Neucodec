@@ -93,10 +93,10 @@ SENTRY_DSN = os.environ.get('SENTRY_DSN', '')
 # nothing (measured; see README "Without OTLP_ENDPOINT"), so the gate below turns the
 # whole thing into a shared nullcontext / no-op instead. Also degrades to off by itself if
 # opentelemetry is not installed. The rest of the tracing config (SERVICE_NAME, OTLP_*,
-# TRACING_SAMPLE) belongs to fastapi-loki-tempo.
+# TRACING_SAMPLE) belongs to wan.
 ENABLE_TRACING_SPANS = os.environ.get('ENABLE_TRACING_SPANS', 'true').lower() == 'true'
 # What counts as "something will collect them". OTLP_ENDPOINT / JAEGER_HOST /
-# ENABLE_CONSOLE_SPAN_EXPORTER are fastapi-loki-tempo's variables, read here only to make
+# ENABLE_CONSOLE_SPAN_EXPORTER are wan's variables, read here only to make
 # this decision; OTEL_EXPORTER_OTLP_* are the OpenTelemetry standard names, honoured so an
 # auto-instrumented deployment is not silently un-traced.
 TRACING_EXPORTER_CONFIGURED = bool(

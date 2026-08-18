@@ -13,6 +13,13 @@ numpy==1.26.4
 protobuf==3.20.3
 pydantic>=2.11.7
 pysastrawi>=1.2.0
+# Vendored normalizer deps (app/normalizer/). These used to arrive transitively via
+# malaya; that dependency is gone -- the normalizer is vendored and its one malaya
+# call (the sastrawi stemmer) now goes straight to pysastrawi -- so they are declared
+# here. Dropping any of them breaks `import app.normalizer` outright.
+dateparser>=1.2.0
+num2words>=0.5.14
+Unidecode>=1.3.0
 sentry-sdk[fastapi]>=2.34.1
 snac>=1.2.1
 soundfile>=0.13.1
@@ -24,6 +31,5 @@ uvicorn>=0.35.0,<0.36
 vector-quantize-pytorch==1.17.8
 wandb>=0.21.0
 distilcodec @ git+https://github.com/mesolitica/DistilCodec
-fastapi-loki-tempo @ git+https://github.com/Scicom-AI-Enterprise-Organization/fastapi-loki-tempo
-malaya @ git+https://github.com/mesolitica/malaya@ddbfe3ba6e2e7e57fc845cb69226a4395b44f7d0
+wan @ git+https://github.com/Scicom-AI-Enterprise-Organization/wan
 neucodec @ git+https://github.com/Scicom-AI-Enterprise-Organization/neucodec
