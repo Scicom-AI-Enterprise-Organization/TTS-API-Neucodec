@@ -1,4 +1,4 @@
-"""Optional OpenTelemetry spans on the TTS/VC hot path.
+"""OpenTelemetry spans on the TTS/VC hot path, on by default.
 
 Answers, per request, the three questions the serving loop actually raises:
 
@@ -9,19 +9,20 @@ Answers, per request, the three questions the serving loop actually raises:
 * how long the **codec decode** itself took (`codec.gpu_decode`, wrapped by the
   per-chunk `tts.chunk` / `codec.decode` spans).
 
-Off by default. With ``ENABLE_TRACING_SPANS`` unset/false every helper here is a
-shared :func:`contextlib.nullcontext` or a function that returns ``None`` before
-doing anything, so the hot path pays one module-global boolean check per call
-site -- no tracer lookup, no ``time_ns()``, no span objects, no dict for the
-cross-thread carrier. That matters: the decode loop is GIL-bound (see
-CLAUDE.md), so tracing has to be genuinely absent when it is off, not merely
-cheap.
+On by default, and fully removable. With ``ENABLE_TRACING_SPANS=false`` every
+helper here is a shared :func:`contextlib.nullcontext` or a function that returns
+``None`` before doing anything, so the hot path pays one module-global boolean
+check per call site -- no tracer lookup, no ``time_ns()``, no span objects, no
+dict for the cross-thread carrier. That matters: the decode loop is GIL-bound
+(see CLAUDE.md), so tracing has to be genuinely absent when off, not merely
+cheap. The same happens automatically if opentelemetry is not installed.
 
 Spans are emitted through whatever tracer provider is installed -- in this app
 that is the one ``fastapi_loki_tempo.patch()`` configures, so they land in Tempo
 as children of the FastAPI server span and share its trace id with the JSON log
 lines. Set ``OTLP_ENDPOINT`` to export them; without it the spans are still
-created (and dropped), so keep this off unless something is collecting.
+built and then dropped, so set ``ENABLE_TRACING_SPANS=false`` where nothing is
+collecting and the event loop is the bottleneck.
 
 Two things are deliberate:
 
@@ -68,7 +69,7 @@ if ENABLE_TRACING_SPANS:
         # installs the real provider, and a ProxyTracer picks it up afterwards.
         _tracer = otel_trace.get_tracer(os.environ.get('SERVICE_NAME', 'tts-api'))
         enabled = True
-        logging.info('ENABLE_TRACING_SPANS=true, hot-path spans enabled')
+        logging.info('hot-path spans enabled (ENABLE_TRACING_SPANS)')
     except ImportError as e:
         logging.warning(
             f'ENABLE_TRACING_SPANS=true but opentelemetry is not installed ({e}), '

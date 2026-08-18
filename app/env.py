@@ -87,12 +87,24 @@ DEBUG_AUDIO = os.environ.get('DEBUG_AUDIO', 'false').lower() == 'true'
 SENTRY_DSN = os.environ.get('SENTRY_DSN', '')
 
 # Hot-path OpenTelemetry spans: how long a request spent queued in dynamic batching,
-# waiting on vLLM, and inside the codec decode. Off by default -- when off every helper
-# in app/tracing.py is a shared nullcontext / no-op, so the GIL-bound decode loop pays
-# nothing at all (see app/tracing.py for the span tree). Needs fastapi-loki-tempo (the
-# OTel SDK) installed, plus OTLP_ENDPOINT for the spans to reach Tempo; the rest of the
-# tracing config (SERVICE_NAME, OTLP_*, TRACING_SAMPLE) belongs to that library.
-ENABLE_TRACING_SPANS = os.environ.get('ENABLE_TRACING_SPANS', 'false').lower() == 'true'
+# waiting on vLLM, and inside the codec decode. On by default -- ~19 spans per request,
+# which also gives every log line the span id of the stage that emitted it. Set false to
+# turn it off, and every helper in app/tracing.py becomes a shared nullcontext / no-op so
+# the GIL-bound decode loop pays nothing at all (see app/tracing.py for the span tree).
+# Degrades to off by itself if opentelemetry is not installed. Spans are only *exported*
+# when OTLP_ENDPOINT is set; without it they are still built and then dropped, so turn
+# this off (or set TRACING_SAMPLE<1) if nothing is collecting. The rest of the tracing
+# config (SERVICE_NAME, OTLP_*, TRACING_SAMPLE) belongs to fastapi-loki-tempo.
+ENABLE_TRACING_SPANS = os.environ.get('ENABLE_TRACING_SPANS', 'true').lower() == 'true'
+# The OTel ASGI instrumentation opens a span per ASGI message. Streaming a TTS response
+# polls the receive channel per LM token, so that was ~500 empty `http receive` spans per
+# request, dwarfing the real ones. Suppressed by default (see _suppress_asgi_message_spans
+# in app/main.py); set true to get the upstream behaviour back.
+TRACE_ASGI_MESSAGE_SPANS = os.environ.get('TRACE_ASGI_MESSAGE_SPANS', 'false').lower() == 'true'
+# How often the LM reader may ask Starlette whether the client is gone. Each check is a
+# real ASGI receive (and, when tracing, a span), and aiohttp yields two lines per SSE
+# event, so checking per line cost ~2 receives per speech token for no benefit.
+DISCONNECT_POLL_S = float(os.environ.get('DISCONNECT_POLL_S', '0.25'))
 
 # Compute device. Empty = auto-detect (cuda -> npu -> cpu). Set to 'npu' to run the
 # codec decode on a Huawei Ascend NPU (via torch_npu). On non-cuda devices the CUDA
