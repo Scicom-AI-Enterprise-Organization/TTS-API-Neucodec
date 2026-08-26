@@ -1,0 +1,40 @@
+--- a/app/main.py
++++ b/app/main.py
+@@ -428,9 +428,13 @@
+             _trace_batch_stage(metas, tracing.now_ns(), len(batch), shapes)
+         compute_queue.put((uuid_str, padded_token_gpu, padded_token_len, futures, metas))
+ 
++_BREAK = {'raise_loop': False}
++
+ async def dynamic_batching():
+     need_sleep = True
+     while True:
++        if _BREAK['raise_loop']:
++            raise RuntimeError('injected loop death (bench/fault_kill_loop.patch)')
+         if need_sleep:
+             await asyncio.sleep(MICROSLEEP)
+         need_sleep = True
+@@ -1457,6 +1461,23 @@
+     async def trigger_error():
+         division_by_zero = 1 / 0
+ 
++@app.post("/break/raise-loop")
++async def _break_raise_loop():
++    """Next iteration raises. The task dies still holding its app.state reference -- the
++    exact silent death AsyncioIntegration exists to catch. /docs keeps answering 200."""
++    _BREAK['raise_loop'] = True
++    return {"raise_in_loop": True, "expect": "sentry issue + monitor goes MISSING"}
++
++
++@app.post("/break/kill-loop")
++async def _break_kill_loop():
++    """Cancel outright. Cancellation is not a crash, so sentry correctly stays quiet --
++    only the heartbeat (and /health/deep batchers) catches this one."""
++    task = getattr(app.state, 'background_dynamic_batching', None)
++    if task is not None:
++        task.cancel()
++    return {"cancelled": True, "expect": "no sentry issue; monitor MISSING; /health/deep degraded"}
++
+ @app.get('/health/deep')
+ async def health_deep():
+     """

@@ -85,6 +85,18 @@ OPENAI_MODEL_NAME = os.environ.get('OPENAI_MODEL_NAME', '')
 OPENAI_TIMEOUT = float(os.environ.get('OPENAI_TIMEOUT', '10'))
 DEBUG_AUDIO = os.environ.get('DEBUG_AUDIO', 'false').lower() == 'true'
 SENTRY_DSN = os.environ.get('SENTRY_DSN', '')
+# Falls back to BSIO_ENV so errors and heartbeats land under the same environment key --
+# bettersentryio keys monitor state per environment, and a mismatch splits one service's
+# telemetry into two rows.
+SENTRY_ENVIRONMENT = os.environ.get('SENTRY_ENVIRONMENT') or os.environ.get('BSIO_ENV') or 'production'
+SENTRY_RELEASE = os.environ.get('SENTRY_RELEASE', '')
+# bettersentryio drops transaction items (APM is an explicit non-goal there) and this
+# service already sends spans to Tempo via wan, so raising this buys nothing and costs
+# CPU on the hot path.
+SENTRY_TRACES_SAMPLE_RATE = float(os.environ.get('SENTRY_TRACES_SAMPLE_RATE', '0'))
+# The same name wan puts on spans and JSON log lines, so the Sentry tag correlates with
+# them instead of being a third spelling of the same service.
+SENTRY_SERVICE = os.environ.get('SERVICE_NAME', 'tts-api')
 
 # Hot-path OpenTelemetry spans: how long a request spent queued in dynamic batching,
 # waiting on vLLM, and inside the codec decode. On by default (~19 spans per request), but
