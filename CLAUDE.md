@@ -48,6 +48,13 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   3am" from "a batch is held and `synchronize()` never returned". One monitor per uvicorn worker,
   slot claimed by `flock`. `GET /health/deep` reports thread/batcher liveness and queue depths.
   Entirely opt-in: no `BSIO_KEY`, no behaviour change. Client is one stdlib-only file, no install.
+- `app/tracing.py` — OpenTelemetry spans on the hot path (`ENABLE_TRACING_SPANS`, **default on**,
+  but gated on an exporter actually being configured; off, no exporter, or no opentelemetry ⇒
+  every helper is a shared `nullcontext()` / a `None`-returning no-op, so the GIL-bound decode
+  loop pays nothing). Exports spans through the provider
+  `wan.patch()` installs, so they share the trace id with the JSON log lines.
+  (`wan` is the observability library, ex-`fastapi-loki-tempo` — renamed repo *and* package.)
+  Span tree and the reasoning behind it: module docstring + README "Tracing (Loki + Tempo)".
 - `vllm.yaml` / `docker-compose.yaml` — the two services, sharing external docker network `tts-network`.
 - `bench/` — benchmark + Whisper-CER harness, RunPod deploy scripts, and recorded results (see `bench/OPTIMIZATION.md`).
 - `bench/livekit/` — LiveKit agent stress rig (no-STT/no-LLM agent + load client): measures TTFB and
@@ -108,6 +115,8 @@ for ~4.6 s of audio (RTF ≈0.15).
 | uvicorn `--workers N` (deploy) | Run N app processes to beat the GIL ceiling. **Requires NVIDIA MPS** to share the GPU without context-thrash collapse at high concurrency. |
 | `BSIO_URL` / `BSIO_KEY` | Enable wedge detection. Unset (default) = off entirely. `BSIO_WORKERS` must match `--workers` so each worker gets its own monitor. |
 | `BSIO_STALL_WINDOW` (default `180`) | How long the pipeline may hold work with **nothing completing** before it is called stalled. A batch decodes in seconds, so 3 min is a hang, not a slow batch. Raise it if very long inputs false-positive. `BSIO_EVERY`/`BSIO_GRACE` (both `30`) are the heartbeat interval and its slack. |
+| `TRACE_ASGI_MESSAGE_SPANS` (default `false`) / `DISCONNECT_POLL_S` (`0.25`) | Suppress OTel's per-ASGI-message `http receive`/`http send` spans, and throttle the disconnect poll that generates them. See the gotcha below — without these one streaming request emits ~500 empty spans. |
+| `ENABLE_TRACING_SPANS` (default `true`, **and** needs an exporter: `OTLP_ENDPOINT`/`OTEL_EXPORTER_OTLP_*`/`JAEGER_HOST`/`ENABLE_CONSOLE_SPAN_EXPORTER`, else spans are not built — waive with `TRACING_SPANS_REQUIRE_EXPORTER=false`) | Hot-path spans (`app/tracing.py`): `codec.batch_wait`/`batch_prep`/`compute_wait` (dynamic batching), `lm.connect`/`lm.first_token` + `tts.lm_wait_s` (waiting on vLLM), `codec.gpu_decode` + `tts.decode_wait_s` (decoding speech tokens), per emitted chunk. ~5 extra spans **per decode**, so pair with `TRACING_SAMPLE<1` under load; An SDK with no span processor still *builds* every span before dropping it (~292 us/request measured), which is why no exporter ⇒ no spans. `false` = `nullcontext`, no timing taken at all (2.6 us). |
 
 ### Accuracy guardrail (Whisper-large-v3 CER, 16 sentences, temp 0.6)
 
@@ -151,8 +160,9 @@ vLLM ≈60 GB on an 80 GB card.
 ## Common commands
 
 ```bash
-python -m pytest tests/ -v                        # 571 pass / 35 skip with a live API + OPENAI_* set
+python -m pytest tests/ -v                        # 583 pass / 35 skip with a live API + OPENAI_* set
 python -m pytest tests/test_sanitize_markdown.py -v   # no GPU deps
+uv run --with pytest --with opentelemetry-sdk -- pytest tests/test_tracing.py -v  # no GPU deps
 uv run --with aiohttp --with pytest -- pytest tests/test_llm_normalizer.py -v  # no GPU deps; `set -a; source .env; set +a` first to include the live LLM tests
 
 # local docker stack
@@ -185,6 +195,23 @@ python bench/cer_eval.py --wav-dir /tmp/eval --out /tmp/cer.json   # needs faste
   (64 is ample — the codec, not the LM, is the throughput limit).
 - **Multiple GPU processes without MPS collapse under load** (CUDA context time-slicing): throughput swings
   wildly and p99 latency explodes at high concurrency. Always run multi-worker + colocated vLLM under MPS.
+- **OTel's ASGI instrumentation spans every ASGI *message*, which streaming turns into a flood.**
+  `request.is_disconnected()` is a real ASGI receive, and aiohttp yields two lines per SSE event, so
+  polling it per line produced ~2 `http receive` spans per speech token (measured: 505 spans vs 19
+  real ones for one request; 25 spans / 0 noise after the fix). Fixed on both ends —
+  `DISCONNECT_POLL_S` throttles the poll (505 noise spans → 9 on its own), and
+  `_suppress_asgi_message_spans()` defaults `OpenTelemetryMiddleware.__init__` to
+  `exclude_spans=['receive','send']` for the rest. Two traps if you touch it: the fastapi
+  instrumentation ≥0.50 does **not** register that middleware via `add_middleware` (it wraps
+  `build_middleware_stack` and constructs it directly, so editing `app.user_middleware` patches
+  nothing), and it passes `exclude_spans=None` explicitly, so a `setdefault` never fires. Don't
+  instrument the app yourself before `patch()` either — on older versions that flips the
+  middleware order and drops `traceID` from the `type=request` log line.
+- **Batch-queue items are 3-tuples: `(future, payload, meta)`.** `meta` is the tracing carrier
+  (`tracing.stage_meta()`, `None` when tracing is off) that the batch/compute threads mutate to
+  time each hop; `compute_queue` items are `(uuid, tokens, lens, futures, metas)`. Adding a field
+  means touching all of `dynamic_batching` / `_batch_one` / `_compute_one` (and the `vc_*` twins)
+  — an arity mismatch there wedges every decode with the error only visible in the worker log.
 - NeuCodec downloads `facebook/w2v-bert-2.0` + `neuphonic/neucodec` from HF on first start — cache them.
 - **`MODEL_NAME` ≠ `OPENAI_MODEL_NAME`.** `MODEL_NAME` is the TTS model vLLM serves (`TTS-model`);
   the LLM normalizer's model goes in `OPENAI_MODEL_NAME`. Setting `MODEL_NAME=google/gemma-...` in

@@ -12,6 +12,7 @@ import base64
 import struct
 import asyncio
 import io
+import time
 import wave
 import tempfile
 from tqdm import tqdm
@@ -23,6 +24,7 @@ from huggingface_hub import hf_hub_download
 from app.normalizer import load as load_normalizer, to_cardinal
 from app.normalizer.chinese import normalize_chinese, is_chinese_dominant, CJK_RE, KANA_RE
 from app.llm_normalizer import llm_normalize, LLMNormalizerError, NormalizerMode
+from app import tracing
 import torch.cuda as cuda
 import uuid
 import bisect
@@ -43,9 +45,15 @@ try:
 except Exception:
     sentry_sdk = None
 try:
-    import fastapi_loki_tempo
+    import wan
 except Exception:
-    fastapi_loki_tempo = None
+    try:
+        # pre-rename package name; a venv provisioned before the repo became `wan` still
+        # has this one, and the try/except above would otherwise silently drop JSON
+        # logging and tracing on that box rather than fail loudly.
+        import fastapi_loki_tempo as wan
+    except Exception:
+        wan = None
 from app.rules import *
 from app.wrapper import CUDAGraphsWrapper
 from app.neucodec import NeuCodec
@@ -55,9 +63,79 @@ from app import bsio_health
 if sentry_sdk is not None and len(SENTRY_DSN):
     sentry_sdk.init(dsn=SENTRY_DSN, send_default_pii=True)
 
+def _suppress_asgi_message_spans():
+    """Default OTel's ASGI middleware to dropping its per-message spans.
+
+    That instrumentation opens one span per ASGI *event*. A streaming TTS response reads
+    the vLLM stream line by line and polls `request.is_disconnected()` as it goes -- and
+    every such poll is a real ASGI receive -- so one request produced ~2 `http receive`
+    spans per speech token: measured on an H20, 505 of them next to 19 real spans. They
+    carry no information, bury the spans that do, and multiply Tempo's ingest for nothing.
+    DISCONNECT_POLL_S cuts the count; this removes the rest, including the per-chunk
+    `http send` spans that scale with utterance length.
+
+    Done by defaulting the middleware's own kwarg rather than by re-instrumenting or by
+    editing `app.user_middleware`:
+
+    * `patch()` must stay the thing that instruments the app. It registers its
+      request-logging middleware first on purpose, and on older instrumentation versions
+      (which add OTel via `add_middleware`) instrumenting ahead of it flips the order and
+      drops `traceID` from the `type=request` log line.
+    * `opentelemetry-instrumentation-fastapi` >=0.50 does not use `add_middleware` at all
+      -- it wraps `build_middleware_stack` and constructs `OpenTelemetryMiddleware`
+      itself -- so there is no registered `Middleware` entry whose kwargs could be
+      edited (verified: that approach patched 0 of them).
+
+    Defaulting `__init__` covers both mechanisms. `exclude_spans` only exists in newer
+    versions and an unknown kwarg would raise on every request, so it is feature-detected.
+    """
+    try:
+        import functools
+        import inspect
+        from opentelemetry.instrumentation.asgi import OpenTelemetryMiddleware
+    except ImportError:
+        return
+    try:
+        if 'exclude_spans' not in inspect.signature(OpenTelemetryMiddleware.__init__).parameters:
+            logging.info(
+                'opentelemetry-instrumentation-asgi predates exclude_spans; '
+                'keeping the per-message http receive/send spans'
+            )
+            return
+        if getattr(OpenTelemetryMiddleware, '_tts_excludes_message_spans', False):
+            return      # uvicorn --reload / a second patch() call
+        original_init = OpenTelemetryMiddleware.__init__
+
+        @functools.wraps(original_init)
+        def _init(self, *args, **kwargs):
+            # not setdefault: the fastapi instrumentation passes `exclude_spans=None`
+            # explicitly, so the key is always present and a setdefault never fires.
+            # Only an explicit non-empty choice by the caller wins over this default.
+            if not kwargs.get('exclude_spans'):
+                kwargs['exclude_spans'] = ['receive', 'send']
+            return original_init(self, *args, **kwargs)
+
+        OpenTelemetryMiddleware.__init__ = _init
+        OpenTelemetryMiddleware._tts_excludes_message_spans = True
+        logging.info('asgi per-message http receive/send spans suppressed')
+    except Exception as e:
+        # an observability tweak must never stop the app from booting
+        logging.warning(f'could not suppress asgi message spans: {e}')
+
+
 app = FastAPI()
-if fastapi_loki_tempo is not None:
-    fastapi_loki_tempo.patch(app=app)
+if wan is not None:
+    wan.patch(app=app)
+    # Everything below is deliberately *after* patch(), which is what configures logging:
+    # an info() before it goes to an unconfigured root logger and is dropped. Also fine
+    # for the middleware tweak -- Starlette does not build the middleware stack (and so
+    # does not construct the OTel middleware) until the first request.
+    logging.info(f'observability via {wan.__name__} {getattr(wan, "__version__", "?")}')
+    if not TRACE_ASGI_MESSAGE_SPANS:
+        _suppress_asgi_message_spans()
+# Likewise deferred until logging exists, so "spans are off because nothing collects
+# them" is actually visible instead of being swallowed by the unconfigured root logger.
+tracing.log_status()
 
 torch.set_grad_enabled(False)
 
@@ -194,6 +272,46 @@ def thread_safe_set_exception(loop, futures, exc):
                 f.set_exception(ex)
         loop.call_soon_threadsafe(_safe_set_exc)
 
+# --- tracing of the batching stages ----------------------------------------------
+# A batch is built from N different requests, so the worker threads cannot use the
+# ambient span context: each item carries its own `meta` (tracing.stage_meta) holding
+# that request's parent context plus the timestamp of the previous hop. Stages are
+# recorded after the fact with explicit start/end times -- a stage that crosses a
+# thread boundary and a queue cannot be a live `with` block. Every call site guards on
+# `tracing.enabled` so nothing below runs, or is even iterated, when tracing is off.
+
+def _trace_batch_stage(metas, t_end, batch_size, padded_shape):
+    """Batch formed -> H2D copy issued (the batch thread), per request."""
+    for meta in metas:
+        if meta is None:
+            continue
+        tracing.record_span(
+            'codec.batch_prep', meta.get('t_batched'), t_end, parent=meta['ctx'],
+            attrs={
+                'batch.size': batch_size,
+                'batch.padded_tokens': int(padded_shape[1]),
+            },
+        )
+        meta['t_h2d'] = t_end
+
+def _trace_compute_stage(metas, t_start, t_end, padded_shape, cuda_graph):
+    """H2D issued -> compute start -> decode done (the compute thread), per request."""
+    for meta in metas:
+        if meta is None:
+            continue
+        tracing.record_span(
+            'codec.compute_wait', meta.get('t_h2d'), t_start, parent=meta['ctx'],
+        )
+        tracing.record_span(
+            'codec.gpu_decode', t_start, t_end, parent=meta['ctx'],
+            attrs={
+                'batch.size': int(padded_shape[0]),
+                'batch.padded_tokens': int(padded_shape[1]),
+                'codec.cuda_graph': cuda_graph,
+                'codec.device': device,
+            },
+        )
+
 def compute_thread_fn(loop):
     while True:
         item = compute_queue.get()
@@ -218,8 +336,9 @@ def compute_thread_fn(loop):
             bsio_health.tts.done(failed=failed)
 
 def _compute_one(loop, item):
-        uuid_str, padded_token, padded_token_len, futures = item
+        uuid_str, padded_token, padded_token_len, futures, metas = item
         logging.debug(f'{uuid_str}, enter compute_thread_fn')
+        t_compute = tracing.now_ns()
         shapes = padded_token.shape
 
         if shapes[1] == 0:
@@ -229,11 +348,12 @@ def _compute_one(loop, item):
                 thread_safe_set_result(loop, fut, empty[i:i+1])
             return
 
+        cuda_graph = shapes in buckets
         with torch.no_grad():
             if dev is not None:
                 with dev.stream(compute_stream):
                     compute_stream.wait_stream(h2d_stream)
-                    if shapes in buckets:
+                    if cuda_graph:
                         logging.debug(f'{uuid_str}, Hit compute shape {shapes}')
                         recon = buckets[shapes](padded_token)
                     else:
@@ -246,6 +366,8 @@ def _compute_one(loop, item):
                 # no accelerator: plain eager decode, no streams to synchronize
                 ys = fn(padded_token).cpu()
                 logging.debug(f'{uuid_str}, done compute shape {shapes} (cpu)')
+            if tracing.enabled:
+                _trace_compute_stage(metas, t_compute, tracing.now_ns(), shapes, cuda_graph)
             for i, fut in enumerate(futures):
                 out_len = padded_token_len[i] * 480
                 ys_ = ys[i:i+1, :, :out_len]
@@ -262,7 +384,7 @@ def batch_thread_fn(loop):
 
 def _batch_one(uuid_str, batch):
         logging.debug(f'{uuid_str}, enter batch_thread_fn')
-        futures, tokens = zip(*[(b[0], b[1]) for b in batch])
+        futures, tokens, metas = zip(*[(b[0], b[1], b[2]) for b in batch])
 
         padded_token_len = [len(t) for t in tokens]
         max_len = max(padded_token_len)
@@ -276,7 +398,9 @@ def _batch_one(uuid_str, batch):
                 padded_token_gpu = padded_token.to(device, non_blocking=True)
         else:
             padded_token_gpu = padded_token
-        compute_queue.put((uuid_str, padded_token_gpu, padded_token_len, futures))
+        if tracing.enabled:
+            _trace_batch_stage(metas, tracing.now_ns(), len(batch), shapes)
+        compute_queue.put((uuid_str, padded_token_gpu, padded_token_len, futures, metas))
 
 async def dynamic_batching():
     need_sleep = True
@@ -299,24 +423,49 @@ async def dynamic_batching():
 
         uuid_str = str(uuid.uuid4())
         logging.debug(f'{uuid_str}, dynamic batching size {len(batch)}')
+        if tracing.enabled:
+            # queued -> picked up by this collector: the wait that MICROSLEEP and a
+            # busy event loop add before the request is even part of a batch.
+            t_batched = tracing.now_ns()
+            for _, _, meta in batch:
+                if meta is None:
+                    continue
+                tracing.record_span(
+                    'codec.batch_wait', meta['t_enqueue'], t_batched, parent=meta['ctx'],
+                    attrs={'batch.size': len(batch)},
+                )
+                meta['t_batched'] = t_batched
         try:
             batch_queue.put((uuid_str, batch))
         except Exception as e:
             # this task is the only feeder for the decode threads -- if it dies the whole
             # service stops decoding with no error surfaced anywhere. Never let it exit.
             logging.exception(f'{uuid_str}, dynamic_batching failed to enqueue: {e}')
-            for fut, _ in batch:
+            for fut, _, _ in batch:
                 if not fut.done():
                     fut.set_exception(e)
 
 def vc_compute_thread_fn(loop):
     while True:
-        uuid_str, ys, futures = vc_compute_queue.get()
+        uuid_str, ys, futures, metas = vc_compute_queue.get()
         logging.debug(f'{uuid_str}, enter vc_compute_thread_fn, batch size {len(ys)}')
         bsio_health.vc.start()
         failed = False
+        t_compute = tracing.now_ns()
         try:
             tokens = batch_encode(ys)
+            if tracing.enabled:
+                t_done = tracing.now_ns()
+                for meta in metas:
+                    if meta is None:
+                        continue
+                    tracing.record_span(
+                        'codec.encode_wait', meta['t_enqueue'], t_compute, parent=meta['ctx'],
+                    )
+                    tracing.record_span(
+                        'codec.encode_gpu', t_compute, t_done, parent=meta['ctx'],
+                        attrs={'batch.size': len(ys), 'codec.device': device},
+                    )
             for i, fut in enumerate(futures):
                 thread_safe_set_result(loop, fut, tokens[i])
         except Exception as e:
@@ -331,8 +480,8 @@ def vc_batch_thread_fn(loop):
         uuid_str, batch = vc_batch_queue.get()
         logging.debug(f'{uuid_str}, enter vc_batch_thread_fn, batch size {len(batch)}')
         try:
-            futures, ys = zip(*[(b[0], b[1]) for b in batch])
-            vc_compute_queue.put((uuid_str, list(ys), futures))
+            futures, ys, metas = zip(*[(b[0], b[1], b[2]) for b in batch])
+            vc_compute_queue.put((uuid_str, list(ys), futures, metas))
         except Exception as e:
             logging.exception(f'{uuid_str}, vc_batch_thread_fn failed: {e}')
             thread_safe_set_exception(loop, [b[0] for b in batch], e)
@@ -362,7 +511,7 @@ async def vc_dynamic_batching():
             vc_batch_queue.put((uuid_str, batch))
         except Exception as e:
             logging.exception(f'{uuid_str}, vc_dynamic_batching failed to enqueue: {e}')
-            for fut, _ in batch:
+            for fut, _, _ in batch:
                 if not fut.done():
                     fut.set_exception(e)
 
@@ -384,30 +533,45 @@ async def await_batched(future, what):
         )
 
 async def encode_audio(y):
-    if DYNAMIC_BATCHING:
-        future = asyncio.Future()
-        await vc_dynamic_batch_queue.put((future, y))
-        tokens = await await_batched(future, 'encode_audio')
-    else:
-        tokens = batch_encode([y])
-        tokens = tokens[0]
+    with tracing.span(
+        'codec.encode',
+        attrs={'codec.samples': len(y), 'codec.dynamic_batching': DYNAMIC_BATCHING},
+    ) as sp:
+        if DYNAMIC_BATCHING:
+            future = asyncio.Future()
+            await vc_dynamic_batch_queue.put((future, y, tracing.stage_meta(sp)))
+            tokens = await await_batched(future, 'encode_audio')
+        else:
+            tokens = batch_encode([y])
+            tokens = tokens[0]
+        tracing.set_attributes(sp, {'codec.tokens': len(tokens)})
     return tokens
 
-async def decode_speech_token(speech_token):
+async def decode_speech_token(speech_token, parent=None):
+    """`parent` pins the span to the request that asked for the decode.
+
+    Needed because this is awaited from the streaming generator, which Starlette
+    iterates in its own task -- and because everything downstream of the queue runs
+    in the batching threads, where the ambient context is meaningless.
+    """
     numbers = re.findall(r's_(\d+)', speech_token)
     d = list(map(int, numbers))
     if not d:
         logging.warning(f'decode_speech_token received empty tokens from: {speech_token[:100]}')
         return (sr, np.array([], dtype=np.float64))
-    if DYNAMIC_BATCHING:
-        future = asyncio.Future()
-        await dynamic_batch_queue.put((future, d))
-        y_gen = await await_batched(future, 'decode_speech_token')
-    else:
-        audio_codes = torch.tensor(d)[None, None]
-        y_gen = codec.decode_code(audio_codes.to(device))
+    with tracing.span(
+        'codec.decode', parent=parent,
+        attrs={'codec.tokens': len(d), 'codec.dynamic_batching': DYNAMIC_BATCHING},
+    ) as sp:
+        if DYNAMIC_BATCHING:
+            future = asyncio.Future()
+            await dynamic_batch_queue.put((future, d, tracing.stage_meta(sp)))
+            y_gen = await await_batched(future, 'decode_speech_token')
+        else:
+            audio_codes = torch.tensor(d)[None, None]
+            y_gen = codec.decode_code(audio_codes.to(device))
 
-    return (sr, y_gen[0, 0].cpu().numpy())
+        return (sr, y_gen[0, 0].cpu().numpy())
 
 async def stream_speech(
     prompt,
@@ -439,6 +603,60 @@ async def stream_speech(
         'stream': True,
     }
 
+    # `tts.stream` covers the whole response, which outlives this function: the
+    # generator below is iterated by Starlette after we return, so the span is started
+    # by hand here and ended in with_producer_cleanup(). Its context is the explicit
+    # parent for everything that runs off this task (the LM producer, each decode).
+    traced = tracing.enabled
+    stream_span = tracing.start_span('tts.stream', attrs={
+        'tts.model': model,
+        'tts.max_tokens': max_tokens,
+        'tts.temperature': temperature,
+        'tts.prompt_chars': len(prompt),
+        'tts.playback_speed': playback_speed,
+        'tts.playback_overlap_speed': playback_overlap_speed,
+        'tts.response_format': response_format,
+        'tts.stream': stream,
+        'tts.stream_format': stream_format,
+        'tts.stream_normalize': stream_normalize,
+        'tts.crossfade': STREAM_CROSSFADE,
+    })
+    stream_ctx = tracing.context_with(stream_span)
+    t_stream_start = time.perf_counter() if traced else 0.0
+    # Aggregates, attached to `tts.stream` when the response finishes. Aggregated
+    # rather than spanned because a request streams thousands of LM tokens: a span
+    # each would bury the trace (and cost more than the decode it measures).
+    stats = {
+        'tts.lm_wait_s': 0.0,       # time the stitcher sat blocked on the LM queue
+        'tts.decode_wait_s': 0.0,   # time it sat blocked on codec decodes
+        'tts.decodes': 0,
+        'tts.chunks': 0,
+        'tts.audio_bytes': 0,
+        'tts.ttfb_s': None,
+    }
+
+    def counted(b):
+        """Count an emitted chunk (and the first one's latency)."""
+        if traced:
+            stats['tts.chunks'] += 1
+            stats['tts.audio_bytes'] += len(b)
+            if stats['tts.ttfb_s'] is None:
+                stats['tts.ttfb_s'] = time.perf_counter() - t_stream_start
+        return b
+
+    async def decode_counted(speech_token, parent=None):
+        """decode_speech_token + the aggregate "waiting for the codec" bookkeeping.
+
+        The wait covers queueing, batching and the GPU alike -- `codec.batch_wait` /
+        `codec.gpu_decode` inside the decode's own span say which of those it was.
+        """
+        t0 = time.perf_counter() if traced else 0.0
+        out = await decode_speech_token(speech_token, parent=parent or stream_ctx)
+        if traced:
+            stats['tts.decode_wait_s'] += time.perf_counter() - t0
+            stats['tts.decodes'] += 1
+        return out
+
     queue = asyncio.Queue()
 
     async def generate_audio_stream():
@@ -446,6 +664,40 @@ async def stream_speech(
         # of this producer must leave one behind -- including cancellation and unexpected
         # exceptions. A missing terminator strands the consumer forever, which under load
         # silently accumulates dead tasks until the event loop stops serving requests.
+        #
+        # `lm.generate` is the whole "waiting on vLLM" story from the producer's side:
+        # lm.connect (POST -> response headers) + lm.first_token (headers -> first
+        # speech token, i.e. prefill) + the tail of the token stream. Started by hand
+        # rather than with a `with` so a cancelled producer -- the normal outcome of a
+        # client disconnect -- is an event, not an ERROR span.
+        lm_span = tracing.start_span('lm.generate', parent=stream_ctx, attrs={
+            'lm.url': TTS_API,
+            'lm.model': model,
+            'lm.max_tokens': max_tokens,
+            'lm.temperature': temperature,
+            'lm.repetition_penalty': repetition_penalty,
+            'lm.prompt_chars': len(prompt),
+            'lm.dummy_tokens': bool(DUMMY_TOKENS_FILE),
+        })
+        lm_ctx = tracing.context_with(lm_span)
+        n_deltas = 0
+        # `request.is_disconnected()` performs a real ASGI receive on every call, and
+        # aiohttp yields two lines per SSE event (the data line and the blank one), so
+        # polling it per line meant ~2 receives per speech token -- pure overhead on the
+        # GIL-bound loop, and one instrumented span each when tracing is on. Poll on a
+        # time budget instead; the consumer closing the stream still cancels this task
+        # immediately (with_producer_cleanup), so this only bounds how long a vanished
+        # client can keep the LM generating.
+        next_disconnect_check = 0.0
+
+        async def client_gone():
+            nonlocal next_disconnect_check
+            now = time.monotonic()
+            if now < next_disconnect_check:
+                return False
+            next_disconnect_check = now + DISCONNECT_POLL_S
+            return await request.is_disconnected()
+
         try:
             # DUMMY_TOKENS mode: replay canned speech tokens (simulating the vLLM SSE
             # stream) instead of calling the LM. One token per event, DUMMY_REPEAT times.
@@ -453,19 +705,27 @@ async def stream_speech(
                 toks = re.findall(r"<\|s_\d+\|>", DUMMY_TOKENS)
                 for _ in range(max(1, DUMMY_REPEAT)):
                     for t in toks:
-                        if await request.is_disconnected():
+                        if await client_gone():
                             break
                         await queue.put({'result': t})
+                        n_deltas += 1
                         if DUMMY_TOKEN_DELAY > 0:
                             await asyncio.sleep(DUMMY_TOKEN_DELAY)
                 return
 
+            t_post = tracing.now_ns()
             async with aiohttp.ClientSession() as session:
                 async with session.post(
                     TTS_API,
                     headers=headers,
                     json=json_data,
                 ) as resp:
+                    t_headers = tracing.now_ns()
+                    tracing.record_span(
+                        'lm.connect', t_post, t_headers, parent=lm_ctx,
+                        attrs={'http.response.status_code': resp.status},
+                    )
+                    tracing.set_attributes(lm_span, {'http.response.status_code': resp.status})
                     if resp.status != 200:
                         error_text = await resp.text()
                         logging.error(f"Backend error: {resp.status} - {error_text}")
@@ -473,7 +733,8 @@ async def stream_speech(
                         return
 
                     async for line in resp.content:
-                        if await request.is_disconnected():
+                        if await client_gone():
+                            tracing.add_event(lm_span, 'client_disconnected')
                             break
                         if line.startswith(b"data: "):
                             data_str = line.decode("utf-8").strip()[6:]
@@ -483,16 +744,26 @@ async def stream_speech(
                                 data_json = json.loads(data_str)
                                 delta = data_json["choices"][0]
                                 if "text" in delta:
+                                    if not n_deltas:
+                                        # prefill: what the request actually waited for
+                                        tracing.record_span(
+                                            'lm.first_token', t_headers, tracing.now_ns(),
+                                            parent=lm_ctx,
+                                        )
+                                    n_deltas += 1
                                     await queue.put({'result': delta["text"]})
                             except json.JSONDecodeError:
                                 continue
 
         except asyncio.CancelledError:
+            tracing.add_event(lm_span, 'cancelled')
             raise
         except Exception as e:
             logging.exception(f'generate_audio_stream failed: {e}')
+            tracing.record_exception(lm_span, e)
             queue.put_nowait({'error': str(e)})
         finally:
+            tracing.end_span(lm_span, attrs={'lm.deltas': n_deltas})
             # unbounded queue -> put_nowait cannot block or raise, and is safe to run
             # while the task is being cancelled. A duplicate terminator is harmless:
             # the consumer stops at the first one and drops the queue.
@@ -535,7 +806,14 @@ async def stream_speech(
         # Block on the queue rather than spinning on get_nowait()/sleep(1e-9): the spin
         # burns a full core on the single-threaded event loop, and if the producer ever
         # dies without a terminator it spins forever and starves every other request.
-        return await queue.get()
+        if not traced:
+            return await queue.get()
+        t0 = time.perf_counter()
+        out = await queue.get()
+        # The vLLM wait from the consumer's side: how long the stitcher had nothing to
+        # decode. Big here => the LM is what the request is waiting on, not the codec.
+        stats['tts.lm_wait_s'] += time.perf_counter() - t0
+        return out
 
     async def audio_stream_crossfade():
         """Streaming decode with context-primed windows + a raised-cosine crossfade
@@ -620,35 +898,51 @@ async def stream_speech(
                 e = len(all_ids)
             ds = max(0, s - past_ctx)
             de = len(all_ids) if is_last else min(len(all_ids), e + ctx)
-            _, a = await decode_speech_token("".join(f"<|s_{i}|>" for i in all_ids[ds:de]))
-            if len(a) == 0:
-                return None
-            off = ds * samples_per_token
-            bk = s * samples_per_token        # boundary with the previous window
-            be = e * samples_per_token        # boundary with the next window
-            parts = []
-            if s == 0:
-                emit_lo = 0
-            else:
-                cx = a[bk - half - off: bk + half - off]
-                n = min(len(cx), len(prev_xf) if prev_xf is not None else 0)
-                if n > 0:
-                    r = cos_ramp(n)
-                    parts.append(prev_xf[:n] * (1.0 - r) + cx[:n] * r)
-                emit_lo = bk + half
-            if is_last:
-                parts.append(a[emit_lo - off:])
-                prev_xf = None
-            else:
-                parts.append(a[emit_lo - off: be - half - off])
-                prev_xf = a[be - half - off: be + half - off].copy()
-            y = np.concatenate(parts) if len(parts) != 1 else parts[0]
-            if len(y) == 0:
-                return None
-            if DEBUG_AUDIO:
-                sf.write(f'/app/app/{count}.wav', y, sr)
-                count += 1
-            return to_bytes(y)
+            # one span per emitted chunk: the unit a client actually waits for, and the
+            # parent of the decode so the batching stages hang off the right chunk.
+            with tracing.span('tts.chunk', parent=stream_ctx, attrs={
+                'chunk.index': stats['tts.chunks'],
+                'chunk.tokens': e - s,
+                'chunk.decode_tokens': de - ds,
+                'chunk.is_last': is_last,
+            }) as chunk_span:
+                _, a = await decode_counted(
+                    "".join(f"<|s_{i}|>" for i in all_ids[ds:de]),
+                    parent=tracing.context_with(chunk_span),
+                )
+                if len(a) == 0:
+                    return None
+                off = ds * samples_per_token
+                bk = s * samples_per_token        # boundary with the previous window
+                be = e * samples_per_token        # boundary with the next window
+                parts = []
+                if s == 0:
+                    emit_lo = 0
+                else:
+                    cx = a[bk - half - off: bk + half - off]
+                    n = min(len(cx), len(prev_xf) if prev_xf is not None else 0)
+                    if n > 0:
+                        r = cos_ramp(n)
+                        parts.append(prev_xf[:n] * (1.0 - r) + cx[:n] * r)
+                    emit_lo = bk + half
+                if is_last:
+                    parts.append(a[emit_lo - off:])
+                    prev_xf = None
+                else:
+                    parts.append(a[emit_lo - off: be - half - off])
+                    prev_xf = a[be - half - off: be + half - off].copy()
+                y = np.concatenate(parts) if len(parts) != 1 else parts[0]
+                if len(y) == 0:
+                    return None
+                if DEBUG_AUDIO:
+                    sf.write(f'/app/app/{count}.wav', y, sr)
+                    count += 1
+                b = to_bytes(y)
+                tracing.set_attributes(chunk_span, {
+                    'chunk.samples': len(y),
+                    'chunk.audio_bytes': len(b),
+                })
+                return b
 
         while True:
             output = await next_output()
@@ -669,7 +963,7 @@ async def stream_speech(
             while seg_start + seg_len + ctx <= len(all_ids):
                 b = await emit_step(seg_start, seg_start + seg_len, is_last=False)
                 if b:
-                    yield b
+                    yield counted(b)
                     await asyncio.sleep(0)
                 seg_start += seg_len
                 seg_len = min(int(seg_len * max(1.0, STREAM_CHUNK_GROWTH)), max_seg_tokens)
@@ -678,10 +972,10 @@ async def stream_speech(
         if seg_start < len(all_ids):
             b = await emit_step(seg_start, len(all_ids), is_last=True)
             if b:
-                yield b
+                yield counted(b)
                 await asyncio.sleep(0)
         elif prev_xf is not None and len(prev_xf):
-            yield to_bytes(prev_xf)
+            yield counted(to_bytes(prev_xf))
             await asyncio.sleep(0)
 
     async def audio_stream_legacy():
@@ -704,7 +998,7 @@ async def stream_speech(
             buffer.append(output)
 
             if len(buffer) % chunk_size == 0:
-                _, y = await decode_speech_token("".join(buffer))
+                _, y = await decode_counted("".join(buffer))
                 if len(y) == 0:
                     continue
                 y_ = y[to_yield : -overlap_chunk]
@@ -716,7 +1010,7 @@ async def stream_speech(
                 if DEBUG_AUDIO:
                     sf.write(f'/app/app/{count}.wav', trimmed, sr)
 
-                yield (trimmed * 32767).astype(np.int16).tobytes()
+                yield counted((trimmed * 32767).astype(np.int16).tobytes())
                 await asyncio.sleep(0)
 
                 if to_yield == 0:
@@ -726,9 +1020,9 @@ async def stream_speech(
                 count += 1
 
         if len(buffer):
-            _, y = await decode_speech_token("".join(buffer))
+            _, y = await decode_counted("".join(buffer))
             if len(y) == 0 and len(leftover):
-                yield (leftover * 32767).astype(np.int16).tobytes()
+                yield counted((leftover * 32767).astype(np.int16).tobytes())
                 await asyncio.sleep(0)
                 return
             elif len(y) == 0:
@@ -740,10 +1034,10 @@ async def stream_speech(
             if DEBUG_AUDIO:
                 sf.write(f'/app/app/{count}.wav', y_, sr)
 
-            yield (y_ * 32767).astype(np.int16).tobytes()
+            yield counted((y_ * 32767).astype(np.int16).tobytes())
             await asyncio.sleep(0)
         elif len(leftover):
-            yield (leftover * 32767).astype(np.int16).tobytes()
+            yield counted((leftover * 32767).astype(np.int16).tobytes())
             await asyncio.sleep(0)
 
     def with_producer_cleanup(gen):
@@ -757,9 +1051,15 @@ async def stream_speech(
             try:
                 async for chunk in gen:
                     yield chunk
+            except Exception as e:
+                tracing.record_exception(stream_span, e)
+                raise
             finally:
                 if not producer_task.done():
                     producer_task.cancel()
+                # the only place that runs for every exit path of the response,
+                # streaming or not -- so it is where `tts.stream` ends.
+                tracing.end_span(stream_span, attrs=stats)
         return _wrapped()
 
     func = with_producer_cleanup(
@@ -977,25 +1277,44 @@ async def normalize_request_text(data, fallback_to_rule=False):
     sanitization, replace mappings) around the LLM call. With fallback_to_rule
     (TTS path) an LLM failure degrades to the rule-based pipeline instead of
     failing the whole speech request."""
-    if data.mode == NormalizerMode.llm:
-        if not (OPENAI_BASE_URL and OPENAI_MODEL_NAME):
-            if not fallback_to_rule:
-                raise HTTPException(
-                    status_code=400,
-                    detail='mode="llm" requires OPENAI_BASE_URL and OPENAI_MODEL_NAME to be configured',
-                )
-            logging.warning('llm normalizer not configured, falling back to rule-based')
-        else:
-            s = _pre_normalize(data.input)
-            try:
-                s = await llm_normalize(s)
-                logging.info(f'out from llm normalizer: {s}')
-                return _post_normalize(s)
-            except LLMNormalizerError as e:
+    with tracing.span('tts.normalize', attrs={
+        'normalizer.mode': data.mode.value,
+        'normalizer.malaysian': data.normalize_malaysian,
+        'normalizer.chars_in': len(data.input),
+    }) as sp:
+        if data.mode == NormalizerMode.llm:
+            if not (OPENAI_BASE_URL and OPENAI_MODEL_NAME):
                 if not fallback_to_rule:
-                    raise HTTPException(status_code=502, detail=f'llm normalizer failed: {e}')
-                logging.warning(f'llm normalizer failed, falling back to rule-based: {e}')
-    return normalize_malaysian_text(data.input, normalize_malaysian=data.normalize_malaysian)
+                    raise HTTPException(
+                        status_code=400,
+                        detail='mode="llm" requires OPENAI_BASE_URL and OPENAI_MODEL_NAME to be configured',
+                    )
+                logging.warning('llm normalizer not configured, falling back to rule-based')
+                tracing.set_attributes(sp, {'normalizer.fallback': 'unconfigured'})
+            else:
+                s = _pre_normalize(data.input)
+                try:
+                    # its own span: an unreachable/slow LLM endpoint is a common cause of
+                    # a TTS request that looks stalled before a single token is generated.
+                    with tracing.span('normalize.llm', attrs={
+                        'llm.model': OPENAI_MODEL_NAME,
+                        'llm.url': OPENAI_BASE_URL,
+                        'llm.timeout_s': OPENAI_TIMEOUT,
+                    }):
+                        s = await llm_normalize(s)
+                    logging.info(f'out from llm normalizer: {s}')
+                    s = _post_normalize(s)
+                    tracing.set_attributes(sp, {'normalizer.chars_out': len(s)})
+                    return s
+                except LLMNormalizerError as e:
+                    if not fallback_to_rule:
+                        raise HTTPException(status_code=502, detail=f'llm normalizer failed: {e}')
+                    logging.warning(f'llm normalizer failed, falling back to rule-based: {e}')
+                    tracing.set_attributes(sp, {'normalizer.fallback': 'error'})
+        with tracing.span('normalize.rule'):
+            s = normalize_malaysian_text(data.input, normalize_malaysian=data.normalize_malaysian)
+        tracing.set_attributes(sp, {'normalizer.chars_out': len(s)})
+        return s
 
 
 @app.post('/v1/audio/normalize')
@@ -1082,7 +1401,8 @@ async def vc_stream(
     request: Request = None
 ):
     file_like = io.BytesIO(reference_audio)
-    y, _ = librosa.load(file_like, sr=16000)
+    with tracing.span('vc.load_audio', attrs={'audio.bytes': len(reference_audio)}):
+        y, _ = librosa.load(file_like, sr=16000)
 
     codes = await encode_audio(y)
 

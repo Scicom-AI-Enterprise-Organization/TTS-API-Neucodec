@@ -16,9 +16,13 @@
 #     Python 3.9 (py3.10 `X | Y` syntax) and also breaks transformers. NeuCodec
 #     only needs torchtune's RotaryPositionalEmbeddings, which is vendored in
 #     app/neucodec/_rope.py instead.
-#   * The gradio / malaya / fasttext-language-detection / sentry / loki / wandb /
+#   * The gradio / fasttext-language-detection / sentry / loki / wandb /
 #     tensorboard extras are dropped: not needed for the decode+serving path, and
 #     fasttext/librosa/loki/sentry are imported optionally in app/main.py.
+#   * malaya is not a dependency anywhere any more: the normalizer is vendored under
+#     app/normalizer/ and its one remaining malaya call (the sastrawi stemmer) now goes
+#     straight to PySastrawi. Add pysastrawi here if elongated-word stemming is wanted;
+#     without it stem_sastrawi() returns the word unchanged.
 # ---------------------------------------------------------------------------
 
 # --- core: matched torch + Ascend adapter (install from PyPI; CPU build of torch
