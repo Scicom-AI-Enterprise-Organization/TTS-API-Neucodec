@@ -61,7 +61,27 @@ from app.neucodec import NeuCodec
 from app import bsio_health
 
 if sentry_sdk is not None and len(SENTRY_DSN):
-    sentry_sdk.init(dsn=SENTRY_DSN, send_default_pii=True)
+    from sentry_sdk.integrations.asyncio import AsyncioIntegration
+
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        environment=SENTRY_ENVIRONMENT,
+        release=SENTRY_RELEASE or None,
+        traces_sample_rate=SENTRY_TRACES_SAMPLE_RATE,
+        shutdown_timeout=2,
+        # Keeps request headers, client IP and user on the event -- a real share of what
+        # makes a captured 500 diagnosable. Dropping it should be a decision, not a slip.
+        send_default_pii=True,
+        # Neither a default nor an auto-enabling integration, so it must be listed by
+        # name. Without it a background task that dies is reported nowhere at all:
+        # app.state holds the task references (see create_task below), so asyncio never
+        # garbage-collects them and never surfaces the exception either. The task factory
+        # installs here only because uvicorn <0.47 imports this module from inside the
+        # running loop (measured 0.35-0.52, in every worker under --workers N) -- the
+        # same fact the module-scope create_task() already depends on.
+        integrations=[AsyncioIntegration()],
+    )
+    sentry_sdk.set_tag('service', SENTRY_SERVICE)
 
 def _suppress_asgi_message_spans():
     """Default OTel's ASGI middleware to dropping its per-message spans.
@@ -136,6 +156,12 @@ if wan is not None:
 # Likewise deferred until logging exists, so "spans are off because nothing collects
 # them" is actually visible instead of being swallowed by the unconfigured root logger.
 tracing.log_status()
+# Deferred for exactly the reason tracing.log_status() is: wan.patch() is what configures
+# logging, so emitting this beside sentry_sdk.init() above would hand it to an
+# unconfigured root logger and drop it -- the trap tracing.py documents having been burned
+# by once already.
+if sentry_sdk is not None and len(SENTRY_DSN):
+    logging.info('sentry error reporting enabled')
 
 torch.set_grad_enabled(False)
 

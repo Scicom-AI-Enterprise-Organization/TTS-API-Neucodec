@@ -46,7 +46,16 @@ Copy [.env_example](.env_example) to `.env` and adjust as needed. See [app/env.p
 | `CUDA_GRAPH_BATCH` | `[]` (eager) | CUDA graph token-length buckets (seconds ×50). Must cover grown windows (`STREAM_MAX_CHUNK_S`+`STREAM_PAST_CONTEXT_S` ≈ 13.5 s) or oversize decodes fall back to eager, e.g. `[0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 10.0, 13.5]` |
 | `TORCH_COMPILE` | `false` | Use torch.compile instead of CUDA Graphs |
 | `DEBUG_AUDIO` | `false` | Save intermediate audio chunks to disk |
-| `SENTRY_DSN` | ` ` | Sentry DSN for error tracking |
+| `SENTRY_DSN` | ` ` | Sentry-protocol DSN for error tracking. Points at bettersentryio (`https://<key>@bsio-ingest.aies.scicom.dev/<project_id>`) or sentry.io — the SDK is the same either way |
+| `SENTRY_ENVIRONMENT` | `BSIO_ENV`, else `production` | Tag on every event. Defaults to `BSIO_ENV` so errors and heartbeats share one environment key |
+| `SENTRY_RELEASE` | ` ` | Git SHA or image tag. Empty sends none |
+| `SENTRY_TRACES_SAMPLE_RATE` | `0` | Leave at 0. bettersentryio drops transaction items (APM is a non-goal there) and spans already go to Tempo via `wan` |
+| `BSIO_URL` / `BSIO_KEY` | ` ` (off) | bettersentryio engine + ingest key for **heartbeats** (`app/bsio_health.py`). Unset = wedge detection off entirely. Same key as the one inside `SENTRY_DSN` — one credential, two protocols |
+| `BSIO_ENV` | `production` | Environment key monitor state is stored under |
+| `BSIO_MONITOR` | `tts-api-decode` | Monitor name prefix; each uvicorn worker claims a slot (`.0`–`.N`) via flock and beats its own monitor |
+| `BSIO_EVERY` / `BSIO_GRACE` | `30` / `30` | Heartbeat interval and its slack. `LATE` after `every`, `MISSING` after another `grace` |
+| `BSIO_STALL_WINDOW` | `180` | Seconds the pipeline may hold work with **nothing completing** before `STALLED`. Progress = completed + idle-confirmations, so a quiet night does not false-positive; only held-and-frozen work does |
+| `BSIO_WORKERS` / `BSIO_SLOT_DIR` | `4` / `/tmp/bsio-slots` | Slot range (must match `--workers`) and where the flock files live |
 | `ENABLE_TRACING_SPANS` | `true` | Hot-path spans: dynamic-batch wait, vLLM wait, codec decode. **Also needs an exporter configured** (`OTLP_ENDPOINT` etc.) or spans are not built at all. See [Tracing](#tracing-loki--tempo) |
 | `TRACING_SPANS_REQUIRE_EXPORTER` | `true` | The gate above. Set `false` only when a span processor is installed in code rather than via environment |
 | `TRACE_ASGI_MESSAGE_SPANS` | `false` | Keep the OTel ASGI `http receive`/`http send` span per ASGI message. Off because streaming made it ~500 empty spans per request |

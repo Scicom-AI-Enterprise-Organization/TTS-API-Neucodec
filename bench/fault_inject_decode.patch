@@ -1,18 +1,17 @@
 --- a/app/main.py
 +++ b/app/main.py
-@@ -204,9 +204,15 @@
-             # log it, keep the worker alive.
-             logging.exception(f'{item[0]}, compute_thread_fn failed: {e}')
-             thread_safe_set_exception(loop, item[3], e)
-+
+@@ -361,8 +361,14 @@
+             # The exception itself is reported separately by the error hooks.
+             bsio_health.tts.done(failed=failed)
+ 
 +import os as _os, itertools as _it
 +_FAULT_N = int(_os.environ.get('FAULT_INJECT_DECODE_N', '0'))
 +_fault_count = _it.count(1)
- 
++
  def _compute_one(loop, item):
-         uuid_str, padded_token, padded_token_len, futures = item
+         uuid_str, padded_token, padded_token_len, futures, metas = item
 +        if _FAULT_N and next(_fault_count) == _FAULT_N:
 +            raise RuntimeError('injected decode fault (FAULT_INJECT_DECODE_N)')
          logging.debug(f'{uuid_str}, enter compute_thread_fn')
+         t_compute = tracing.now_ns()
          shapes = padded_token.shape
- 
