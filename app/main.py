@@ -63,14 +63,12 @@ from app import bsio_health
 if sentry_sdk is not None and len(SENTRY_DSN):
     from sentry_sdk.integrations.asyncio import AsyncioIntegration
 
-    sentry_sdk.init(
-        dsn=SENTRY_DSN,
-        environment=SENTRY_ENVIRONMENT,
-        release=SENTRY_RELEASE or None,
+    _sentry_extras = dict(
         traces_sample_rate=SENTRY_TRACES_SAMPLE_RATE,
         shutdown_timeout=2,
         # Keeps request headers, client IP and user on the event -- a real share of what
-        # makes a captured 500 diagnosable. Dropping it should be a decision, not a slip.
+        # makes a captured 500 diagnosable. wan defaults this to False; overriding it
+        # should be a decision, not a slip, and this is that decision.
         send_default_pii=True,
         # Neither a default nor an auto-enabling integration, so it must be listed by
         # name. Without it a background task that dies is reported nowhere at all:
@@ -79,8 +77,43 @@ if sentry_sdk is not None and len(SENTRY_DSN):
         # installs here only because uvicorn <0.47 imports this module from inside the
         # running loop (measured 0.35-0.52, in every worker under --workers N) -- the
         # same fact the module-scope create_task() already depends on.
+        #
+        # Passing `integrations` replaces the explicit LoggingIntegration wan would
+        # configure, but sentry_sdk auto-enables LoggingIntegration with the same
+        # defaults (breadcrumbs at INFO, events at ERROR), so nothing is lost.
         integrations=[AsyncioIntegration()],
     )
+    try:
+        # wan >= 0.2 owns the Sentry init: same sentry_sdk.init underneath, plus a
+        # before_send that stamps every event with the correlation id, the OpenTelemetry
+        # trace id (replacing the one Sentry mints, which matches nothing), and clickable
+        # Grafana links -- so an issue pivots straight to its Tempo trace and Loki lines.
+        # Calling it HERE, before wan.patch(), flips wan's _initialised guard; patch()
+        # then skips its own setup_sentry() instead of re-initing and clobbering the
+        # extras above. ignore_loggers keeps wan's request logger from double-reporting
+        # every 5xx (it logs them at ERROR with the traceback; the FastAPI integration
+        # already captures the same exception).
+        from wan import REQUEST_LOGGER_NAME, setup_sentry
+        from wan.os_env import GRAFANA_URL as _GRAFANA_URL
+
+        setup_sentry(
+            dsn=SENTRY_DSN,
+            service_name=SENTRY_SERVICE,
+            environment=SENTRY_ENVIRONMENT,
+            release=SENTRY_RELEASE or None,
+            grafana_url=_GRAFANA_URL,
+            ignore_loggers=(REQUEST_LOGGER_NAME,),
+            **_sentry_extras,
+        )
+    except ImportError:
+        # Older wan (pre-sentry) or none at all (bare NPU box): plain init, same fields,
+        # no correlation stamping -- errors still arrive, just without the Grafana pivot.
+        sentry_sdk.init(
+            dsn=SENTRY_DSN,
+            environment=SENTRY_ENVIRONMENT,
+            release=SENTRY_RELEASE or None,
+            **_sentry_extras,
+        )
     sentry_sdk.set_tag('service', SENTRY_SERVICE)
 
 def _suppress_asgi_message_spans():
