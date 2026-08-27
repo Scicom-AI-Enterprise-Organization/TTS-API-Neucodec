@@ -127,7 +127,7 @@ def run_case(url, out, case, take):
 
     for cond in ('nocontext', 'context', 'continue'):
         rid = f"ab-{case['name']}-{take}-{cond}-{uuid.uuid4().hex[:8]}" if cond != 'nocontext' else None
-        fields = {'context_mode': cond} if cond != 'nocontext' else {}
+        fields = {'context_mode': {'context': 'turns', 'continue': 'continue'}[cond]} if cond != 'nocontext' else {}
         parts, infos = [], []
         for i, text in enumerate(case['chunks']):
             pcm, info = speak(url, text, case['voice'], request_id=rid, **fields)
