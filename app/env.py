@@ -90,6 +90,29 @@ OPENAI_TIMEOUT = float(os.environ.get('OPENAI_TIMEOUT', '10'))
 DEBUG_AUDIO = os.environ.get('DEBUG_AUDIO', 'false').lower() == 'true'
 SENTRY_DSN = os.environ.get('SENTRY_DSN', '')
 
+# Cross-request speech context, keyed by the `request_id` field (alias `context_id`,
+# or the X-Context-Id header) on /v1/audio/speech -- see app/context.py. Requests that
+# share an id are prompted with the previous turns' text + speech tokens, so an agent
+# that chunks its text into sentence-sized TTS calls (LiveKit) gets one continuous
+# prosody instead of a cold start per chunk. Requests without an id are untouched.
+#   CONTEXT_STORE: 'file' (default) = one small JSON per id in CONTEXT_STORE_DIR, shared
+#     by every uvicorn worker on the host; 'memory' = this process only; 'off' = ignore ids.
+#   CONTEXT_STORE_DIR: '' = /dev/shm/tts-context (RAM) when /dev/shm exists, else
+#     $TMPDIR/tts-context. Must be the same directory for all workers.
+#   CONTEXT_MAX_S: seconds of previous speech tokens (x50) kept per id and put in the
+#     prompt, left-trimmed (oldest turns first). 20 s = 1000 LM tokens of the window.
+#   CONTEXT_TTL_S: idle seconds after which an id's history is dropped.
+#   CONTEXT_MIN_GEN_TOKENS: generation room the context may never squeeze below; past
+#     that, the request's max_tokens is clamped instead (vLLM rejects prompt+max_tokens
+#     > LM_MAX_MODEL_LEN with a 400 rather than truncating).
+#   LM_MAX_MODEL_LEN: the LM server's --max-model-len (vllm.yaml: 4096).
+CONTEXT_STORE = os.environ.get('CONTEXT_STORE', 'file')
+CONTEXT_STORE_DIR = os.environ.get('CONTEXT_STORE_DIR', '')
+CONTEXT_MAX_S = float(os.environ.get('CONTEXT_MAX_S', '20'))
+CONTEXT_TTL_S = float(os.environ.get('CONTEXT_TTL_S', '600'))
+CONTEXT_MIN_GEN_TOKENS = int(os.environ.get('CONTEXT_MIN_GEN_TOKENS', '1000'))
+LM_MAX_MODEL_LEN = int(os.environ.get('LM_MAX_MODEL_LEN', '4096'))
+
 # Hot-path OpenTelemetry spans: how long a request spent queued in dynamic batching,
 # waiting on vLLM, and inside the codec decode. On by default (~19 spans per request), but
 # only when something will actually collect them -- both this AND an exporter are needed.

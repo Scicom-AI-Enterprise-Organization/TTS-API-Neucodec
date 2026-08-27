@@ -54,6 +54,18 @@ Same-sentence loudness across 8 rooms, before/after `STREAM_NORMALIZE` (now defa
 The spread comes from the LM's sampled tokens (temperature 0.6–0.7), not LiveKit or the
 decoder: temp-0 runs are byte-identical, and the same spread reproduces over plain curl.
 
+## Chunking and the `request_id` speech context
+
+livekit-agents wraps the non-streaming `openai.TTS` plugin in a `StreamAdapter`: the reply is
+cut into sentence chunks (≥ 20 chars, often 5–6 words) and each is synthesized with its own
+`/v1/audio/speech` request, strictly one after the other. Each chunk used to be generated cold,
+so prosody reset at every join. `stress_agent.py` now sends the room name as the `X-Context-Id`
+header (via `openai.AsyncClient(default_headers=...)` passed as `client=` to the plugin), which
+is the API's `request_id`: every chunk is prompted with the previous chunks' text + speech
+tokens (see the main README, "Speech context"). `TTS_CONTEXT=0` disables it for an A/B run. The
+response headers `X-Context-Turns` / `X-Context-Tokens` on each request (visible in the API's
+logs as `context <room>: N turns …`) show how much history each chunk got.
+
 ## Gotchas
 
 - On a box with high CPU load (e.g. colocated training), the worker reports its load to

@@ -34,6 +34,21 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   crossfade + loudness normalization, before pcm/wav/SSE), stateful across chunks with ~55 ms
   lookahead; 1.0 bypasses it. Pure numpy — `tests/test_timestretch.py` runs without GPU. Output
   is bit-identical regardless of chunking, which the tests rely on; keep it that way.
+- `app/context.py` — **cross-request speech context** behind the `request_id` field (alias
+  `context_id`, or `X-Context-Id` header) on `/v1/audio/speech`. Chunked callers (LiveKit's
+  StreamAdapter sends each ~sentence as its own request, sequentially) got a cold LM start per
+  chunk ⇒ prosody reset at every join. Requests sharing an id are prompted multi-turn, VC-style:
+  `<|im_start|>{voice}: {prev text}<|speech_start|>{prev tokens}<|im_end|>` × turns, then the new
+  turn; only the new turn is generated/decoded. The LM reader in `stream_speech()` commits
+  `(text, ids)` when the stream ends with `finish_reason != length`, **synchronously, before**
+  the `None` terminator — so chunk N is stored before its response can complete (ordering
+  across workers for free). History is left-trimmed to `CONTEXT_MAX_S` (20 s = 1000 tokens;
+  oldest whole turns first, then the oldest kept turn's tail with proportional text) and
+  `fit_context()` clamps `max_tokens` so prompt + generation ≤ `LM_MAX_MODEL_LEN` (vLLM 400s
+  otherwise). Shared across `--workers N` via `CONTEXT_STORE=file`: one JSON per id under
+  `/dev/shm/tts-context`, atomic replace + directory flock, TTL sweep — no leader worker, no
+  redis. `memory` / `off` alternatives. Importable without torch; `tests/test_context.py` runs
+  anywhere. `GET`/`DELETE /v1/audio/context/{id}` to inspect/forget. Design writeup: `SPEECH_CONTEXT.md`.
 - `app/neucodec/` — **vendored** NeuCodec (`from app.neucodec import NeuCodec`; *not* the pip package).
 - `app/normalizer/`, `app/rules.py` — Malaysian/multilingual text normalization + markdown sanitization.
 - `app/llm_normalizer.py`, `app/prompt.py` — **LLM-based normalizer** (`mode: "llm"` on
@@ -111,6 +126,7 @@ for ~4.6 s of audio (RTF ≈0.15).
 | `DEFAULT_PLAYBACK_SPEED` (default `2.0`) | Size of the **first** decode window only (×50 tokens ⇒ 2 s); later windows grow via `STREAM_CHUNK_GROWTH`/`STREAM_MAX_CHUNK_S`, with `STREAM_PAST_CONTEXT_S` of past tokens primed into every window. Larger first window ⇒ higher first-chunk latency, better first-window decode. |
 | `TORCH_COMPILE=true` | Use `torch.compile` instead of CUDA graphs (alternative codepath). |
 | `DEFAULT_SPEAKING_RATE` (default `1.0`) | Default for the `speaking_rate` request field: WSOLA time stretch of the output audio (1.3 = 30% faster, pitch unchanged). Not a decode knob — the token count and every decode are the same; only the emitted PCM is shorter/longer. ~1–2 ms CPU per 2 s chunk on the event loop when ≠ 1.0. |
+| `CONTEXT_STORE` (`file`\|`memory`\|`off`, default `file`), `CONTEXT_STORE_DIR`, `CONTEXT_MAX_S` (`20`), `CONTEXT_TTL_S` (`600`), `CONTEXT_MIN_GEN_TOKENS` (`1000`), `LM_MAX_MODEL_LEN` (`4096`) | Speech context for `request_id` (see `app/context.py` above). Not a decode knob: it lengthens the LM **prompt** by up to ~1000 speech tokens + text (prefill on the ~12.8k tok/s LM, i.e. tens of ms), leaves the codec path untouched, and costs nothing for requests without an id. `LM_MAX_MODEL_LEN` must match vLLM's `--max-model-len` or context requests 400. |
 | `STREAM_NORMALIZE` (default `true`) | Per-utterance loudness normalization in the crossfade stitcher (running active-RMS → gain toward `TARGET_RMS_DB`, slew `GAIN_SLEW_DB`/chunk, clamp `MAX_GAIN_DB`); per-request override via `stream_normalize` on `/v1/audio/speech`. The LM's sampled tokens carry loudness — same text at temp 0.6–0.7 spreads 3–10 dB active-RMS (and different voices sit ~5 dB apart in natural level), and ~half of hot utterances clip at full scale; this collapses the spread to <2 dB (verified through a LiveKit agent at concurrency 8, see `bench/livekit/`). Boosts are capped by running-peak headroom and peaks are rounded by a tanh soft-knee limiter (knee 0.85, drive 1.4) — RMS-boosting a peaky voice (crest ~19 dB) through the old hard clip crackled audibly. The gain locks after the first ~1s of voiced audio (one static trim per utterance): a continuously-adapting causal AGC drifted ±0.75 dB mid-utterance, audible as "damping". Residual streaming loudness ripple (~0.7–1.5 dB envelope tilt vs a single big decode window) is the non-causal decoder's window effect — shrink it with larger `playback_speed`/`playback_overlap_speed` (e.g. `playback_speed=10` for non-realtime requests). |
 | uvicorn `--workers N` (deploy) | Run N app processes to beat the GIL ceiling. **Requires NVIDIA MPS** to share the GPU without context-thrash collapse at high concurrency. |
 | `TRACE_ASGI_MESSAGE_SPANS` (default `false`) / `DISCONNECT_POLL_S` (`0.25`) | Suppress OTel's per-ASGI-message `http receive`/`http send` spans, and throttle the disconnect poll that generates them. See the gotcha below — without these one streaming request emits ~500 empty spans. |
@@ -162,6 +178,7 @@ python -m pytest tests/ -v                        # 623 pass / 35 skip with a li
 python -m pytest tests/test_sanitize_markdown.py -v   # no GPU deps
 python -m pytest tests/test_timestretch.py -v         # no GPU deps (speaking_rate WSOLA)
 uv run --with pytest --with opentelemetry-sdk -- pytest tests/test_tracing.py -v  # no GPU deps
+uv run --with pytest -- pytest tests/test_context.py -v                    # no GPU deps (request_id speech context)
 uv run --with aiohttp --with pytest -- pytest tests/test_llm_normalizer.py -v  # no GPU deps; `set -a; source .env; set +a` first to include the live LLM tests
 
 # local docker stack
@@ -207,6 +224,12 @@ python bench/cer_eval.py --wav-dir /tmp/eval --out /tmp/cer.json   # needs faste
   time each hop; `compute_queue` items are `(uuid, tokens, lens, futures, metas)`. Adding a field
   means touching all of `dynamic_batching` / `_batch_one` / `_compute_one` (and the `vc_*` twins)
   — an arity mismatch there wedges every decode with the error only visible in the worker log.
+- **`request_id` context and multiple hosts.** `CONTEXT_STORE=file` shares history between
+  workers *on one host* (same `CONTEXT_STORE_DIR`). Behind a load balancer over several boxes,
+  chunks of one call must be pinned to one box (sticky routing on the id/header) or they
+  silently generate without context — the `X-Context-Turns: 0` response header shows it.
+  And in vLLM `repetition_penalty` also spans prompt tokens, so context turns are penalized
+  like VC reference tokens; same as `/v1/audio/vc` has always done.
 - NeuCodec downloads `facebook/w2v-bert-2.0` + `neuphonic/neucodec` from HF on first start — cache them.
 - **`MODEL_NAME` ≠ `OPENAI_MODEL_NAME`.** `MODEL_NAME` is the TTS model vLLM serves (`TTS-model`);
   the LLM normalizer's model goes in `OPENAI_MODEL_NAME`. Setting `MODEL_NAME=google/gemma-...` in

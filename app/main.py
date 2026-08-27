@@ -5,7 +5,7 @@ import torch
 torch._dynamo.config.recompile_limit = 128
 torch.set_float32_matmul_precision('high')
 
-from typing import Literal
+from typing import Literal, Optional
 import re
 import json
 import base64
@@ -25,6 +25,10 @@ from app.normalizer import load as load_normalizer, to_cardinal
 from app.normalizer.chinese import normalize_chinese, is_chinese_dominant, CJK_RE, KANA_RE
 from app.llm_normalizer import llm_normalize, LLMNormalizerError, NormalizerMode
 from app import tracing
+from app.context import (
+    make_store, RequestContext, build_prompt, fit_context, select_voice,
+    seconds_to_tokens, total_tokens,
+)
 import torch.cuda as cuda
 import uuid
 import bisect
@@ -136,6 +140,20 @@ if wan is not None:
 # them" is actually visible instead of being swallowed by the unconfigured root logger.
 tracing.log_status()
 
+# Cross-request speech context (`request_id` on /v1/audio/speech), shared across
+# worker processes -- see app/context.py for the why and the format.
+CONTEXT_MAX_TOKENS = seconds_to_tokens(CONTEXT_MAX_S)
+context_store = make_store(CONTEXT_STORE, CONTEXT_STORE_DIR, CONTEXT_TTL_S, CONTEXT_MAX_TOKENS)
+if context_store is None:
+    logging.info('speech context: off (CONTEXT_STORE=off) -- request_id is ignored')
+else:
+    logging.info(
+        f'speech context: {CONTEXT_STORE} store'
+        f'{" at " + context_store.directory if hasattr(context_store, "directory") else ""}, '
+        f'keeps {CONTEXT_MAX_S:g}s ({CONTEXT_MAX_TOKENS} speech tokens) per id, '
+        f'ttl {CONTEXT_TTL_S:g}s, LM window {LM_MAX_MODEL_LEN}'
+    )
+
 torch.set_grad_enabled(False)
 
 if DEVICE:
@@ -189,6 +207,7 @@ logging.info('loading audio encoder')
 codec = NeuCodec.from_pretrained("neuphonic/neucodec").eval().to(device)
 codebook_size = 50
 sr = 24000
+TOKEN_RE = re.compile(r'<\|s_(\d+)\|>')
 
 logging.info('done load audio encoder')
 
@@ -582,7 +601,13 @@ async def stream_speech(
     stream_format="audio",
     stream_normalize=STREAM_NORMALIZE,
     speaking_rate=DEFAULT_SPEAKING_RATE,
+    context=None,
+    extra_headers=None,
 ):
+    """`context` is the request's RequestContext (app/context.py) or None: when set,
+    the prompt already carries the previous turns and the LM reader commits this
+    turn's tokens to the store once generation finishes cleanly. `extra_headers`
+    are added to every response shape (the X-Context-* headers)."""
     headers = {
         'accept': 'application/json',
         'Content-Type': 'application/json',
@@ -617,6 +642,9 @@ async def stream_speech(
         'tts.stream_normalize': stream_normalize,
         'tts.speaking_rate': speaking_rate,
         'tts.crossfade': STREAM_CROSSFADE,
+        'tts.context_id': context.key if context is not None else '',
+        'tts.context_turns': len(context.turns) if context is not None else 0,
+        'tts.context_tokens': context.tokens if context is not None else 0,
     })
     stream_ctx = tracing.context_with(stream_span)
     t_stream_start = time.perf_counter() if traced else 0.0
@@ -678,6 +706,12 @@ async def stream_speech(
         })
         lm_ctx = tracing.context_with(lm_span)
         n_deltas = 0
+        # Speech context (`request_id`): everything the LM emits, saved as the next
+        # turn once the stream ended cleanly. A `length` finish means the tokens stop
+        # short of the text -- a misaligned pair is worse context than none.
+        lm_text = []
+        lm_done = False
+        finish_reason = None
         # `request.is_disconnected()` performs a real ASGI receive on every call, and
         # aiohttp yields two lines per SSE event (the data line and the blank one), so
         # polling it per line meant ~2 receives per speech token -- pure overhead on the
@@ -736,10 +770,12 @@ async def stream_speech(
                         if line.startswith(b"data: "):
                             data_str = line.decode("utf-8").strip()[6:]
                             if data_str == "[DONE]":
+                                lm_done = True
                                 break
                             try:
                                 data_json = json.loads(data_str)
                                 delta = data_json["choices"][0]
+                                finish_reason = delta.get("finish_reason") or finish_reason
                                 if "text" in delta:
                                     if not n_deltas:
                                         # prefill: what the request actually waited for
@@ -748,6 +784,8 @@ async def stream_speech(
                                             parent=lm_ctx,
                                         )
                                     n_deltas += 1
+                                    if context is not None:
+                                        lm_text.append(delta["text"])
                                     await queue.put({'result': delta["text"]})
                             except json.JSONDecodeError:
                                 continue
@@ -760,7 +798,27 @@ async def stream_speech(
             tracing.record_exception(lm_span, e)
             queue.put_nowait({'error': str(e)})
         finally:
-            tracing.end_span(lm_span, attrs={'lm.deltas': n_deltas})
+            tracing.end_span(lm_span, attrs={
+                'lm.deltas': n_deltas, 'lm.finish_reason': finish_reason or '',
+            })
+            if context is not None:
+                if lm_done and finish_reason != 'length':
+                    # Synchronous and *before* the terminator below: the stitcher
+                    # cannot finish the response until it sees None, so by the time
+                    # the client has chunk N, chunk N is in the store for chunk N+1
+                    # -- whichever worker that one lands on.
+                    ids = [int(m) for m in TOKEN_RE.findall(''.join(lm_text))]
+                    turns = context.commit(ids)
+                    if turns is not None:
+                        logging.info(
+                            f'context {context.key}: +{len(ids)} tokens -> '
+                            f'{len(turns)} turns / {total_tokens(turns)} tokens stored'
+                        )
+                else:
+                    logging.info(
+                        f'context {context.key}: turn not stored '
+                        f'(lm_done={lm_done}, finish_reason={finish_reason})'
+                    )
             # unbounded queue -> put_nowait cannot block or raise, and is safe to run
             # while the task is being cancelled. A duplicate terminator is harmless:
             # the consumer stops at the first one and drops the queue.
@@ -780,7 +838,6 @@ async def stream_speech(
     xf = max(2, min(xf, ctx * samples_per_token, (chunk_size * samples_per_token) // 2))
     half = xf // 2
 
-    TOKEN_RE = re.compile(r'<\|s_(\d+)\|>')
     all_ids = []
 
     def cos_ramp(n):
@@ -1071,6 +1128,8 @@ async def stream_speech(
         'Cache-Control': 'no-cache, no-store',
         'X-Accel-Buffering': 'no',
     }
+    if extra_headers:
+        stream_headers.update(extra_headers)
 
     # OpenAI-compatible SSE streaming (stream_format="sse"). The livekit
     # openai TTS plugin (>=1.x) requests this and parses speech.audio.delta /
@@ -1134,6 +1193,8 @@ async def stream_speech(
                 "Accept-Ranges": "bytes",
                 "Content-Length": str(len(wav_bytes)),
             }
+            if extra_headers:
+                resp_headers.update(extra_headers)
             return Response(content=wav_bytes, headers=resp_headers)
 
         else:
@@ -1143,7 +1204,8 @@ async def stream_speech(
             return FileResponse(
                 path=tmp.name,
                 media_type="audio/L16; rate=24000; channels=1",
-                filename="merged_audio.pcm"
+                filename="merged_audio.pcm",
+                headers=dict(extra_headers or {}),
             )
 
 class NormalizeRequest(BaseModel):
@@ -1177,6 +1239,16 @@ class TTSRequest(NormalizeRequest):
     speaking_rate: float = Field(
         DEFAULT_SPEAKING_RATE, ge=MIN_RATE, le=MAX_RATE,
         validation_alias=AliasChoices('speaking_rate', 'speed'),
+    )
+    # Cross-request speech context (app/context.py): requests that share a request_id
+    # are prompted with the previous turns' text + speech tokens, so text an agent
+    # chunks into several TTS calls (LiveKit sentence chunks) keeps one continuous
+    # prosody instead of restarting cold at every chunk. Alias `context_id`; the
+    # `X-Context-Id` request header works too, for clients that cannot add body
+    # fields. Omit it for independent utterances. Ignored when CONTEXT_STORE=off.
+    request_id: Optional[str] = Field(
+        None, max_length=256,
+        validation_alias=AliasChoices('request_id', 'context_id'),
     )
 
 # pydantic does not validate defaults, so a bad env value would bypass the range above.
@@ -1342,9 +1414,83 @@ async def normalize_text(data: NormalizeRequest):
 async def speaker():
     return SPEAKERS
 
+def load_context(key, voice, text, max_tokens):
+    """Read a context id's history and size it for this request (app/context.py).
+
+    Returns (RequestContext, max_tokens): the turns that go into the prompt -- the
+    trailing run in this voice, left-trimmed to CONTEXT_MAX_S and to the LM window --
+    and the request's max_tokens clamped so prompt + generation fit LM_MAX_MODEL_LEN.
+    A store read failure degrades to no context rather than failing the request.
+    """
+    with tracing.span('tts.context', attrs={'context.id': key}) as sp:
+        try:
+            history = context_store.get(key)
+        except Exception as e:
+            logging.warning(f'context {key}: store read failed, generating without context: {e}')
+            history = []
+        turns, fitted = fit_context(
+            select_voice(history, voice), text, max_tokens,
+            LM_MAX_MODEL_LEN, CONTEXT_MAX_TOKENS, CONTEXT_MIN_GEN_TOKENS,
+        )
+        ctx = RequestContext(store=context_store, key=key, voice=voice, text=text, turns=turns)
+        logging.info(
+            f'context {key}: {len(turns)}/{len(history)} turns, {ctx.tokens} speech tokens in prompt'
+            + (f', max_tokens {max_tokens} -> {fitted}' if fitted != max_tokens else '')
+        )
+        tracing.set_attributes(sp, {
+            'context.history_turns': len(history),
+            'context.turns': len(turns),
+            'context.tokens': ctx.tokens,
+            'context.max_tokens': fitted,
+        })
+        return ctx, fitted
+
+
+def prompt_for_log(prompt):
+    """Collapse speech-token runs so a context prompt (thousands of tokens) logs as one line."""
+    return re.sub(
+        r'(?:<\|s_\d+\|>)+',
+        lambda m: f'<{m.group(0).count("<|s_")} speech tokens>',
+        prompt,
+    )
+
+
+@app.get('/v1/audio/context/{context_id}')
+async def get_context(context_id: str):
+    """Inspect a context id: the stored turns (text + token counts, not the tokens)."""
+    if context_store is None:
+        raise HTTPException(status_code=400, detail='speech context is disabled (CONTEXT_STORE=off)')
+    turns = context_store.get(context_id)
+    return {
+        'context_id': context_id,
+        'turns': [
+            {'voice': t.voice, 'text': t.text, 'tokens': len(t.tokens), 'ts': t.ts}
+            for t in turns
+        ],
+        'tokens': total_tokens(turns),
+        'max_tokens': CONTEXT_MAX_TOKENS,
+        'ttl_s': CONTEXT_TTL_S,
+    }
+
+
+@app.delete('/v1/audio/context/{context_id}')
+async def delete_context(context_id: str):
+    """Forget a context id (e.g. when the agent session ends); the next request on it
+    starts cold. Idle ids expire by themselves after CONTEXT_TTL_S."""
+    if context_store is None:
+        raise HTTPException(status_code=400, detail='speech context is disabled (CONTEXT_STORE=off)')
+    return {'context_id': context_id, 'deleted': context_store.delete(context_id)}
+
+
 @app.post('/v1/audio/speech')
 async def tts_stream(data: TTSRequest, request: Request = None):
     speaker = data.voice
+    max_tokens = data.max_tokens
+    context = None
+    # body field first; the header is for clients that cannot add body fields
+    context_key = data.request_id or (
+        request.headers.get('x-context-id') if request is not None else None
+    )
 
     if DUMMY_TOKENS_FILE:
         # tokens are replayed from DUMMY_TOKENS_FILE; the prompt is unused.
@@ -1352,13 +1498,16 @@ async def tts_stream(data: TTSRequest, request: Request = None):
     else:
         s = await normalize_request_text(data, fallback_to_rule=True)
         logging.info(f'normalized: {s}')
-        prompt = f'<|im_start|>{speaker}: {s}<|speech_start|>'
-        logging.info(f'prompt: {prompt}')
+        if context_key and context_store is not None:
+            context, max_tokens = load_context(context_key, speaker, s, data.max_tokens)
+        # with no context turns this is exactly the plain single-turn prompt
+        prompt = build_prompt(context.turns if context is not None else [], speaker, s)
+        logging.info(f'prompt: {prompt_for_log(prompt)}')
 
     return await stream_speech(
         prompt=prompt,
         model=data.model,
-        max_tokens=data.max_tokens,
+        max_tokens=max_tokens,
         temperature=data.temperature,
         repetition_penalty=data.repetition_penalty,
         playback_speed=data.playback_speed,
@@ -1369,6 +1518,8 @@ async def tts_stream(data: TTSRequest, request: Request = None):
         stream_format=data.stream_format,
         stream_normalize=data.stream_normalize,
         speaking_rate=data.speaking_rate,
+        context=context,
+        extra_headers=context.headers() if context is not None else None,
     )
 
 def batch_encode(ys):

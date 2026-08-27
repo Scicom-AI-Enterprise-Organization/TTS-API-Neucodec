@@ -59,6 +59,12 @@ Copy [.env_example](.env_example) to `.env` and adjust as needed. See [app/env.p
 | `OPENAI_API_KEY` | ` ` | API key for `OPENAI_BASE_URL` |
 | `OPENAI_MODEL_NAME` | ` ` | Model to use on `OPENAI_BASE_URL` (e.g. `google/gemma-4-31b-it`). **Not** `MODEL_NAME`, which is the TTS model |
 | `OPENAI_TIMEOUT` | `10` | LLM normalizer request timeout (seconds); bounds the TTS stall before rule-based fallback |
+| `CONTEXT_STORE` | `file` | Where the cross-request speech context (`request_id`) lives: `file` = one small JSON per id in `CONTEXT_STORE_DIR`, shared by every uvicorn worker on the host; `memory` = this process only; `off` = ignore `request_id`. See [Speech context](#speech-context-request_id) |
+| `CONTEXT_STORE_DIR` | ` ` | Directory for `CONTEXT_STORE=file`. Empty = `/dev/shm/tts-context` (RAM) when `/dev/shm` exists, else `$TMPDIR/tts-context`. All workers must see the same directory |
+| `CONTEXT_MAX_S` | `20` | Seconds of previous speech tokens (×50) kept per id and prepended to the prompt, left-trimmed oldest-first |
+| `CONTEXT_TTL_S` | `600` | Idle seconds after which an id's history is forgotten |
+| `CONTEXT_MIN_GEN_TOKENS` | `1000` | Generation room (LM tokens, = 20 s of speech) the context may never squeeze below; beyond that the request's `max_tokens` is clamped instead |
+| `LM_MAX_MODEL_LEN` | `4096` | The LM server's `--max-model-len` ([vllm.yaml](vllm.yaml)). vLLM rejects prompt + `max_tokens` beyond it with a 400, so context requests are sized against it |
 
 ### 3. Run the API
 
@@ -261,6 +267,7 @@ Accepts JSON body.
 | `mode` | `rule` \| `llm` | `DEFAULT_NORMALIZER_MODE` (`rule`) | Normalization engine (see `/v1/audio/normalize`); `llm` falls back to `rule` if the LLM call fails, so speech is still produced |
 | `stream_normalize` | bool | `STREAM_NORMALIZE` (`true`) | Per-utterance loudness normalization toward `TARGET_RMS_DB` |
 | `speaking_rate` | float | `DEFAULT_SPEAKING_RATE` (`1.0`) | Speaking rate, `0.5`–`2.0`: `1.3` speaks 30% faster, `0.8` slower, **pitch unchanged**. Also accepted as `speed` (OpenAI-compatible clients). See [Speaking rate](#speaking-rate) |
+| `request_id` | string | none | Speech-context id: requests sharing it are generated **in the context of the previous ones** (their text + speech tokens go into the prompt), so an agent that splits one reply into several TTS calls gets one continuous prosody. Alias `context_id`; also accepted as the `X-Context-Id` request header. See [Speech context](#speech-context-request_id) |
 
 **Example:**
 
@@ -303,6 +310,74 @@ curl -X POST 'http://localhost:9091/v1/audio/speech' -H 'Content-Type: applicati
   -d '{"input": "Hello there, how can I help you?", "voice": "husein", "speaking_rate": 1.3,
        "response_format": "wav", "stream": false}' --output fast.wav
 ```
+
+#### Speech context (`request_id`)
+
+Streaming agents do not send one utterance per TTS call. LiveKit's `StreamAdapter`, for
+example, cuts the LLM's reply into sentence-ish chunks (≥ 20 chars, so often 5–6 words) and
+synthesizes each with its **own** request, strictly one after the other. Every chunk therefore
+starts the LM cold — it has no memory of how the previous chunk sounded — so pitch register,
+pace and energy reset at each join and the reply sounds stitched together, even though the model
+handles the same paragraph fine in a single request.
+
+`request_id` gives the LM that memory. Send the same id on consecutive chunks and each one is
+prompted with the previous turns in the model's own multi-turn format (the one `/v1/audio/vc`
+uses to prime a reference voice) — the text that was spoken **and the speech tokens the LM
+produced for it** — followed by the new text:
+
+```
+<|im_start|>husein: hello my name is husein,<|speech_start|><|s_…|>…<|s_…|><|im_end|>
+<|im_start|>husein: i like to eat chicken rice.<|speech_start|>          ← generated
+```
+
+Only the new turn's tokens are generated, decoded and streamed; the LM continues in the
+prosodic state it left off in. When a turn finishes cleanly its (text, tokens) pair is appended
+to the id's history for the next chunk (a turn cut off by `max_tokens` — `finish_reason:
+length` — is not stored: misaligned text/audio is worse context than none). A `request_id` with
+no history behaves exactly like a request without one, so the first chunk pays nothing.
+
+```bash
+# chunk 1 (no history yet -> plain prompt) …
+curl -s -X POST localhost:9091/v1/audio/speech -H 'Content-Type: application/json' \
+  -d '{"input":"hello my name is husein,","voice":"husein","request_id":"room-42","response_format":"wav","stream":false}' -o c1.wav
+# … chunk 2 is generated in the context of chunk 1
+curl -s -D - -X POST localhost:9091/v1/audio/speech -H 'Content-Type: application/json' \
+  -d '{"input":"i like to eat chicken rice.","voice":"husein","request_id":"room-42","response_format":"wav","stream":false}' -o c2.wav
+#   X-Context-Id: room-42
+#   X-Context-Turns: 1          <- turns in the prompt
+#   X-Context-Tokens: 137       <- their speech tokens (2.7 s)
+curl -s localhost:9091/v1/audio/context/room-42        # inspect: stored turns (text + token counts)
+curl -s -X DELETE localhost:9091/v1/audio/context/room-42   # forget (else idle ids expire after CONTEXT_TTL_S)
+```
+
+The id is whatever identifies one continuous speaker session on the client — a LiveKit room /
+agent session, a call id. Clients that cannot add body fields (the livekit `openai.TTS` plugin
+drives the stock `openai` client) send it as the **`X-Context-Id` header** instead:
+`openai.TTS(client=openai.AsyncClient(base_url=..., api_key=..., default_headers={"X-Context-Id": ctx.room.name}))`
+— see [`bench/livekit/stress_agent.py`](bench/livekit/stress_agent.py). The full design
+walkthrough (prompt format, trim rules, worker sharing, why not a leader worker) is in
+[`SPEECH_CONTEXT.md`](SPEECH_CONTEXT.md).
+
+**Left trim.** A call can run for minutes while the LM window is fixed (`LM_MAX_MODEL_LEN`, 4096
+tokens ≈ 80 s of speech end to end), so the history is capped at `CONTEXT_MAX_S` (20 s = 1000
+speech tokens) per id: whole oldest turns are dropped first, then the oldest kept turn is cut to
+its last N tokens with its text shortened in proportion, so one long previous utterance still
+contributes its tail — the most recent seconds are what continuity needs. `max_tokens` is then
+clamped so prompt + generation fit the window (vLLM 400s instead of truncating); the context
+only shrinks further if that would leave under `CONTEXT_MIN_GEN_TOKENS` of generation room. A
+voice switch on the same id starts cold (priming with another voice's tokens is voice
+conversion, not continuity).
+
+**Multi-worker.** With `uvicorn --workers N` consecutive chunks land on arbitrary workers, so the
+history lives outside the process: `CONTEXT_STORE=file` (default) keeps one ~1–6 KB JSON per id
+under `CONTEXT_STORE_DIR` (`/dev/shm`, i.e. RAM, by default; docker's default 64 MB `/dev/shm` holds ~10k ids) — atomic replace-on-write, one
+`flock` around each append, TTL sweep — which every worker on the host sees with no leader
+election, extra port, or new dependency. A turn is committed **before** the LM reader signals
+end-of-stream to the audio stitcher, so by the time a client has received chunk N in full, chunk
+N is in the store for chunk N+1 whichever worker that one hits (and LiveKit does wait for chunk
+N before requesting N+1). Overlapping requests on one id are kept in request-arrival order.
+Note `repetition_penalty` in vLLM also covers prompt tokens, so a context request penalizes the
+previous turns' codes exactly as `/v1/audio/vc` does with its reference tokens.
 
 ### `POST /v1/audio/vc` — Voice Conversion
 
@@ -377,6 +452,9 @@ python -m pytest tests/ -v
 # run only markdown sanitization tests (no dependencies beyond app/rules.py)
 python -m pytest tests/test_sanitize_markdown.py -v
 
+# run the speech-context tests (no GPU deps)
+uv run --with pytest -- pytest tests/test_context.py -v
+
 # run the tracing helper tests (no GPU; add opentelemetry-sdk for the enabled-path tests)
 uv run --with pytest --with opentelemetry-sdk -- pytest tests/test_tracing.py -v
 
@@ -409,10 +487,11 @@ python -m pytest tests/test_normalize_api.py -v
 | `tests/test_normalizer.py` | 150 | `app/normalizer`, `app/rules` | Text normalization with exact input/output checks in both Malay and English: email (`husein.zol05@gmail.com` -> `HUSEIN dot ZOL kosong lima di GMAIL dot COM`), URL, phone, IC number, money (RM/USD), time, percentage, units (kg, km, celsius, liter, MB), dates, cardinals, ordinals, fractions, multipliers, hingga/range, contractions, alpha-num splitting, replace mappings, and combined markdown+normalizer pipeline. |
 | `tests/test_malaysian_rules.py` | 208 | `app/normalizer`, `app/rules` | Stress tests for Malaysian normalization rules. Exhaustive coverage of: money (RM whole/sen/zero/sentence, USD with K/M suffixes), IC numbers (standard/young/zeros/multiple), phone numbers (mobile 012/011, landline 03, multiple), email (basic/subdomain/sentence/multiple), URL (https/www/path/IP), time (AM/PM/midnight/morning/late night), percentages (decimal/100/small), units (celsius/kg/g/km/liter/ml/mb/gb), dates, zero-prefix numbers, passports, year normalization (tahun 2024/1999/2000/1945), pada hari bulan, ordinals (ke-1/ke-100/Roman), cardinals, fractions, multiplier (x kali), hingga, Hijri year, elongated words, tak prefix, all 51 pronunciation replacements (dr/mr/mrs/Sdn Bhd/LRT/MRT/KL/PDRM/CCTV/UMNO/5G/US), pattern ranges (100-200 ringgit), all contractions, alpha-num splitting, replace mappings, and 12 complex multi-type sentence tests simulating the full pipeline. |
 | `tests/test_multilingual.py` | 76 | `app/normalizer`, `app/rules` | Multilingual passthrough tests for Chinese (Simplified/Traditional), Korean, Tamil, Arabic, Japanese (Hiragana/Katakana/Kanji), Thai, Hindi/Devanagari, and emoji. Verifies non-Latin scripts pass through untouched while ASCII content (RM, phone, email, URL, IC, time, %) is still normalized. Tests mixed-script sentences, markdown stripping with multilingual text, and the non-ASCII-attached-to-ASCII edge case (e.g. `价格是RM500` passes through raw vs `价格是 RM500` normalizes). |
-| `tests/test_tts_vc_api.py` | 50 | Live API (`TTS_TEST_URL`, default `http://localhost:9091`) | Integration tests for TTS (`POST /v1/audio/speech`) and VC (`POST /v1/audio/vc`) endpoints. **TTS tests** (29): WAV/PCM format validation (sample rate 24000, mono, 16-bit), streaming vs buffered, all speakers (husein/jenny/idayu), speaker list endpoint, markdown/HTML/link sanitization, Malaysian normalization with numbers, temperature/speed/max_tokens parameters, `speaking_rate` (valid wav, SSE streaming, 2.0 shorter than 0.5, `speed` alias, 422 out of range), short/long/English/multilingual text. **VC tests** (21): uses `jenny.wav` with reference text, WAV/PCM format validation, streaming vs buffered, Malay/English/long/short generate text, markdown/HTML/link/code sanitization in both reference_text and generate_text, temperature/speed/max_tokens/speaking_rate parameters. Auto-skipped when the API is not reachable. |
+| `tests/test_tts_vc_api.py` | 57 | Live API (`TTS_TEST_URL`, default `http://localhost:9091`) | Integration tests for TTS (`POST /v1/audio/speech`) and VC (`POST /v1/audio/vc`) endpoints. **TTS tests** (29): WAV/PCM format validation (sample rate 24000, mono, 16-bit), streaming vs buffered, all speakers (husein/jenny/idayu), speaker list endpoint, markdown/HTML/link sanitization, Malaysian normalization with numbers, temperature/speed/max_tokens parameters, `speaking_rate` (valid wav, SSE streaming, 2.0 shorter than 0.5, `speed` alias, 422 out of range), short/long/English/multilingual text. **Context tests** (7): `request_id` speech context — no headers without an id, second chunk reports the first as `X-Context-Turns: 1` with a token count matching its duration, `GET`/`DELETE /v1/audio/context/{id}`, `X-Context-Id` header and `context_id` alias, voice switch starts cold, headers on pcm/SSE streaming; skipped when the server runs `CONTEXT_STORE=off`. **VC tests** (21): uses `jenny.wav` with reference text, WAV/PCM format validation, streaming vs buffered, Malay/English/long/short generate text, markdown/HTML/link/code sanitization in both reference_text and generate_text, temperature/speed/max_tokens/speaking_rate parameters. Auto-skipped when the API is not reachable. |
 | `tests/test_normalize_api.py` | 35 | In-process app import (GPU/models) | Integration tests for `POST /v1/audio/normalize` endpoint. Auto-skipped when the app cannot be imported. Tests `normalize_malaysian=false` (sanitize only), `normalize_malaysian=true` (full normalization), and the `mode` enum (`rule` default, `llm`, invalid → 422). |
 | `tests/test_tracing.py` | 12 | `pytest` only (no GPU/torch; 8 need `opentelemetry-sdk`) | Unit tests for the hot-path spans (`app/tracing.py`): disabled by default, disabled helpers are no-ops returning a single shared `nullcontext`, and — with the OTel SDK installed — spans nest, an explicitly passed parent beats the ambient context (what the batching threads rely on), `record_span` honours the given timestamps and drops a stage with no start time, attributes are cleaned, exceptions mark the span. |
 | `tests/test_timestretch.py` | 33 | `numpy` + `pytest` only (no GPU/torch) | Unit tests for the speaking-rate stretcher (`app/timestretch.py`): rate 1.0 is an exact identity, duration scales by the rate (0.5–2.0) to within one block, a steady tone keeps its frequency (pitch preserved), joins are continuous, output is bit-identical regardless of how the input is chunked (streaming), first chunk emitted promptly, empty/sub-block/silence/full-scale edge cases, PCM16 helpers. |
+| `tests/test_context.py` | 34 | `pytest` only (no GPU/torch) | Unit tests for the speech context (`app/context.py`): left trim (whole turns first, proportional tail cut of the oldest kept turn, min-partial threshold), voice filtering, the multi-turn prompt format, `fit_context` (prompt + `max_tokens` never exceed the LM window, generation floor wins over context), memory and file stores (shared between instances, trim on append, TTL + sweep, corrupt-file recovery, hostile keys, 8 concurrent writers with no lost updates / torn reads), `X-Context-*` headers latin-1 safe. |
 | `tests/test_llm_normalizer.py` | 28 | `aiohttp` + `pytest` only (no GPU/torch) | Unit tests for the LLM-based normalizer (`app/llm_normalizer.py`): few-shot message building from `app/prompt.py`, strict JSON schema, reply parsing (clean/fenced/bare/plain-text/unusable), and full HTTP behaviour against a local fake OpenAI server (auth header, payload shape, 400 retry without `response_format`, 5xx/unreachable/unconfigured errors). 4 live tests hit the real `OPENAI_BASE_URL` (Malay money, English IC, Chinese money, passthrough) and are skipped unless `OPENAI_*` is set. |
 
 ## Benchmark — H100 SXM vs H200 SXM
@@ -474,6 +553,11 @@ of hot utterances clip at full scale. `STREAM_NORMALIZE=true` (default; per-requ
 utterance (locked after the first ~1 s of voiced audio — no mid-utterance drift), boost capped by
 running-peak headroom, and a tanh soft-knee limiter instead of a hard clip. Details and
 before/after numbers in [`bench/livekit/README.md`](bench/livekit/README.md).
+
+LiveKit also **chunks** each reply into sentence-sized TTS requests, which is why consecutive
+chunks used to sound disconnected: each was generated cold. The agent now passes the room name as
+`X-Context-Id` so every chunk is generated in the context of the previous ones — see
+[Speech context](#speech-context-request_id).
 
 Streaming decode quality itself is near one-shot: the stitcher decodes **growing windows** (first =
 `playback_speed`×50 tokens, ×`STREAM_CHUNK_GROWTH` per step up to `STREAM_MAX_CHUNK_S`) with
