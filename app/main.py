@@ -19,7 +19,7 @@ from tqdm import tqdm
 from torch.nn.utils.rnn import pad_sequence
 from fastapi import FastAPI, Request, HTTPException, File, Form
 from fastapi.responses import StreamingResponse, FileResponse, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, AliasChoices
 from huggingface_hub import hf_hub_download
 from app.normalizer import load as load_normalizer, to_cardinal
 from app.normalizer.chinese import normalize_chinese, is_chinese_dominant, CJK_RE, KANA_RE
@@ -56,6 +56,7 @@ except Exception:
         wan = None
 from app.rules import *
 from app.wrapper import CUDAGraphsWrapper
+from app.timestretch import WSOLA, float_to_pcm16, pcm16_to_float, MIN_RATE, MAX_RATE
 from app.neucodec import NeuCodec
 
 if sentry_sdk is not None and len(SENTRY_DSN):
@@ -556,6 +557,17 @@ async def decode_speech_token(speech_token, parent=None):
 
         return (sr, y_gen[0, 0].cpu().numpy())
 
+async def time_stretch_pcm16(gen, rate, sr):
+    """Apply a speaking-rate change to a stream of int16 PCM chunks (see app/timestretch.py)."""
+    ts = WSOLA(rate, sr)
+    async for chunk in gen:
+        b = float_to_pcm16(ts.process(pcm16_to_float(chunk)))
+        if b:
+            yield b
+    tail = float_to_pcm16(ts.flush())
+    if tail:
+        yield tail
+
 async def stream_speech(
     prompt,
     model,
@@ -569,6 +581,7 @@ async def stream_speech(
     request,
     stream_format="audio",
     stream_normalize=STREAM_NORMALIZE,
+    speaking_rate=DEFAULT_SPEAKING_RATE,
 ):
     headers = {
         'accept': 'application/json',
@@ -602,6 +615,7 @@ async def stream_speech(
         'tts.stream': stream,
         'tts.stream_format': stream_format,
         'tts.stream_normalize': stream_normalize,
+        'tts.speaking_rate': speaking_rate,
         'tts.crossfade': STREAM_CROSSFADE,
     })
     stream_ctx = tracing.context_with(stream_span)
@@ -614,7 +628,7 @@ async def stream_speech(
         'tts.decode_wait_s': 0.0,   # time it sat blocked on codec decodes
         'tts.decodes': 0,
         'tts.chunks': 0,
-        'tts.audio_bytes': 0,
+        'tts.audio_bytes': 0,       # decoded (pre speaking-rate stretch) bytes
         'tts.ttfb_s': None,
     }
 
@@ -1045,9 +1059,14 @@ async def stream_speech(
                 tracing.end_span(stream_span, attrs=stats)
         return _wrapped()
 
-    func = with_producer_cleanup(
-        audio_stream_crossfade() if STREAM_CROSSFADE else audio_stream_legacy()
-    )
+    stitched = audio_stream_crossfade() if STREAM_CROSSFADE else audio_stream_legacy()
+    if abs(speaking_rate - 1.0) > 1e-6:
+        # speaking rate = pitch-preserving WSOLA on the stitched PCM (app/timestretch.py).
+        # Sits after crossfade + loudness normalization and before the format/transport
+        # layers, so every response mode (pcm/wav, raw/SSE, buffered) gets it and the
+        # token/decode pipeline is untouched. Stateful across chunks, ~55 ms lookahead.
+        stitched = time_stretch_pcm16(stitched, speaking_rate, sr)
+    func = with_producer_cleanup(stitched)
     stream_headers = {
         'Cache-Control': 'no-cache, no-store',
         'X-Accel-Buffering': 'no',
@@ -1152,6 +1171,19 @@ class TTSRequest(NormalizeRequest):
     # per-request override of the STREAM_NORMALIZE env default (utterance loudness
     # normalization toward TARGET_RMS_DB in the crossfade stitcher).
     stream_normalize: bool = STREAM_NORMALIZE
+    # speaking rate: 1.0 = as generated, 1.3 = 30% faster, 0.8 = slower; pitch preserved
+    # (WSOLA time stretch on the decoded audio, app/timestretch.py). `speed` is accepted as
+    # an alias so OpenAI-compatible clients (e.g. the livekit openai TTS plugin) work as is.
+    speaking_rate: float = Field(
+        DEFAULT_SPEAKING_RATE, ge=MIN_RATE, le=MAX_RATE,
+        validation_alias=AliasChoices('speaking_rate', 'speed'),
+    )
+
+# pydantic does not validate defaults, so a bad env value would bypass the range above.
+if not MIN_RATE <= DEFAULT_SPEAKING_RATE <= MAX_RATE:
+    raise ValueError(
+        f'DEFAULT_SPEAKING_RATE={DEFAULT_SPEAKING_RATE} must be within [{MIN_RATE}, {MAX_RATE}]'
+    )
 
 def _pre_normalize(s):
     s = sanitize_markdown(s)
@@ -1336,6 +1368,7 @@ async def tts_stream(data: TTSRequest, request: Request = None):
         request=request,
         stream_format=data.stream_format,
         stream_normalize=data.stream_normalize,
+        speaking_rate=data.speaking_rate,
     )
 
 def batch_encode(ys):
@@ -1381,6 +1414,8 @@ async def vc_stream(
     stream: bool = Form(default=True, description="Stream response"),
     playback_speed: float = Form(default=DEFAULT_PLAYBACK_SPEED, description="Playback speed"),
     playback_overlap_speed: float = Form(default=DEFAULT_PLAYBACK_OVERLAP_SPEED, description="Playback overlap speed"),
+    speaking_rate: float = Form(default=DEFAULT_SPEAKING_RATE, ge=MIN_RATE, le=MAX_RATE,
+                                description="Speaking rate (1.0 = as generated, 1.3 = faster), pitch preserved"),
     request: Request = None
 ):
     file_like = io.BytesIO(reference_audio)
@@ -1407,6 +1442,7 @@ async def vc_stream(
         response_format=response_format,
         stream=stream,
         request=request,
+        speaking_rate=speaking_rate,
     )
 
 if len(SENTRY_DSN):
