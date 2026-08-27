@@ -36,7 +36,7 @@ def check_connection(base_url):
         return f"❌ Could not reach {base_url}: {e}", gr.update()
 
 
-def text_to_speech(base_url, text, voice, normalize_malaysian, temperature, playback_speed):
+def text_to_speech(base_url, text, voice, normalize_malaysian, temperature, playback_speed, speaking_rate):
     try:
         resp = requests.post(
             f"{base_url.rstrip('/')}/v1/audio/speech",
@@ -46,6 +46,7 @@ def text_to_speech(base_url, text, voice, normalize_malaysian, temperature, play
                 "normalize_malaysian": normalize_malaysian,
                 "temperature": temperature,
                 "playback_speed": playback_speed,
+                "speaking_rate": speaking_rate,
                 "response_format": "wav",
                 "stream": False,
             },
@@ -70,7 +71,7 @@ def normalize_text(base_url, text, normalize_malaysian):
         return "", f"❌ Request failed: {e}"
 
 
-def voice_conversion(base_url, reference_audio_path, reference_text, generate_text, temperature, playback_speed):
+def voice_conversion(base_url, reference_audio_path, reference_text, generate_text, temperature, playback_speed, speaking_rate):
     try:
         with open(reference_audio_path, "rb") as f:
             resp = requests.post(
@@ -81,6 +82,7 @@ def voice_conversion(base_url, reference_audio_path, reference_text, generate_te
                     "generate_text": generate_text,
                     "temperature": temperature,
                     "playback_speed": playback_speed,
+                    "speaking_rate": speaking_rate,
                     "response_format": "wav",
                     "stream": False,
                 },
@@ -107,13 +109,14 @@ with gr.Blocks(title="TTS-API tester") as demo:
         with gr.Row():
             tts_temperature = gr.Slider(label="Temperature", minimum=0.1, maximum=1.5, value=0.7, step=0.05)
             tts_playback_speed = gr.Slider(label="Playback speed", minimum=0.5, maximum=4.0, value=1.5, step=0.1)
+            tts_speaking_rate = gr.Slider(label="Speaking rate", minimum=0.5, maximum=2.0, value=1.0, step=0.05)
         tts_btn = gr.Button("Generate speech", variant="primary")
         tts_status = gr.Textbox(label="Status", interactive=False)
         tts_audio = gr.Audio(label="Output", type="filepath", show_download_button=True)
 
         tts_btn.click(
             text_to_speech,
-            inputs=[base_url, tts_text, tts_voice, tts_normalize, tts_temperature, tts_playback_speed],
+            inputs=[base_url, tts_text, tts_voice, tts_normalize, tts_temperature, tts_playback_speed, tts_speaking_rate],
             outputs=[tts_audio, tts_status],
         )
 
@@ -137,13 +140,14 @@ with gr.Blocks(title="TTS-API tester") as demo:
         with gr.Row():
             vc_temperature = gr.Slider(label="Temperature", minimum=0.1, maximum=1.5, value=0.7, step=0.05)
             vc_playback_speed = gr.Slider(label="Playback speed", minimum=0.5, maximum=4.0, value=1.5, step=0.1)
+            vc_speaking_rate = gr.Slider(label="Speaking rate", minimum=0.5, maximum=2.0, value=1.0, step=0.05)
         vc_btn = gr.Button("Generate", variant="primary")
         vc_status = gr.Textbox(label="Status", interactive=False)
         vc_audio = gr.Audio(label="Output", type="filepath", show_download_button=True)
 
         vc_btn.click(
             voice_conversion,
-            inputs=[base_url, vc_reference_audio, vc_reference_text, vc_generate_text, vc_temperature, vc_playback_speed],
+            inputs=[base_url, vc_reference_audio, vc_reference_text, vc_generate_text, vc_temperature, vc_playback_speed, vc_speaking_rate],
             outputs=[vc_audio, vc_status],
         )
 

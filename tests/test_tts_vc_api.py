@@ -57,6 +57,11 @@ def is_valid_wav(data: bytes) -> bool:
     return data[:4] == b'RIFF' and data[8:12] == b'WAVE'
 
 
+def wav_duration_s(data: bytes) -> float:
+    with wave.open(io.BytesIO(data), 'rb') as w:
+        return w.getnframes() / w.getframerate()
+
+
 def is_valid_pcm(data: bytes) -> bool:
     """Check if bytes look like valid PCM int16 data (non-empty, even length)."""
     return len(data) > 0 and len(data) % 2 == 0
@@ -287,6 +292,60 @@ class TestTTSParameters:
         })
         assert r.status_code == 200
         assert is_valid_wav(r.content)
+
+    def test_tts_speaking_rate(self):
+        r = client.post('/v1/audio/speech', json={
+            'input': 'Hello, how can I help you today?',
+            'speaking_rate': 1.3,
+            'stream': False,
+            'response_format': 'wav',
+        })
+        assert r.status_code == 200
+        assert is_valid_wav(r.content)
+
+    def test_tts_speaking_rate_streaming_sse(self):
+        r = client.post('/v1/audio/speech', json={
+            'input': 'Hello, how can I help you today?',
+            'speaking_rate': 1.3,
+            'stream': True,
+            'stream_format': 'sse',
+        })
+        assert r.status_code == 200
+        assert 'speech.audio.delta' in r.text
+        assert '[DONE]' in r.text
+
+    def test_tts_speaking_rate_faster_is_shorter(self):
+        # Sampling makes per-request duration vary (~+/-30%), so compare the extremes of
+        # the allowed range (a 4x gap) rather than a precise ratio.
+        text = 'The quick brown fox jumps over the lazy dog, again and again.'
+        slow = client.post('/v1/audio/speech', json={
+            'input': text, 'speaking_rate': 0.5, 'stream': False, 'response_format': 'wav',
+        })
+        fast = client.post('/v1/audio/speech', json={
+            'input': text, 'speaking_rate': 2.0, 'stream': False, 'response_format': 'wav',
+        })
+        assert slow.status_code == 200 and fast.status_code == 200
+        assert wav_duration_s(fast.content) < wav_duration_s(slow.content)
+
+    def test_tts_speed_alias(self):
+        # OpenAI-compatible clients send `speed`; it maps onto speaking_rate.
+        r = client.post('/v1/audio/speech', json={
+            'input': 'Hello.',
+            'speed': 1.2,
+            'stream': False,
+            'response_format': 'wav',
+        })
+        assert r.status_code == 200
+        assert is_valid_wav(r.content)
+
+    def test_tts_speaking_rate_out_of_range(self):
+        for bad in (0.1, 3.0):
+            r = client.post('/v1/audio/speech', json={
+                'input': 'Hello.',
+                'speaking_rate': bad,
+                'stream': False,
+            })
+            assert r.status_code == 422, (bad, r.status_code, r.text[:200])
 
 
 @skipif_no_app
@@ -604,6 +663,30 @@ class TestVCParameters:
         })
         assert r.status_code == 200
         assert is_valid_wav(r.content)
+
+    def test_vc_speaking_rate(self, jenny_audio):
+        r = client.post('/v1/audio/vc', files={
+            'reference_audio': ('jenny.wav', jenny_audio, 'audio/wav'),
+        }, data={
+            'reference_text': JENNY_REF_TEXT,
+            'generate_text': 'Hello world, how are you today?',
+            'speaking_rate': '1.3',
+            'stream': 'false',
+            'response_format': 'wav',
+        })
+        assert r.status_code == 200
+        assert is_valid_wav(r.content)
+
+    def test_vc_speaking_rate_out_of_range(self, jenny_audio):
+        r = client.post('/v1/audio/vc', files={
+            'reference_audio': ('jenny.wav', jenny_audio, 'audio/wav'),
+        }, data={
+            'reference_text': JENNY_REF_TEXT,
+            'generate_text': 'Hello world.',
+            'speaking_rate': '3.0',
+            'stream': 'false',
+        })
+        assert r.status_code == 422
 
     def test_vc_max_tokens(self, jenny_audio):
         r = client.post('/v1/audio/vc', files={

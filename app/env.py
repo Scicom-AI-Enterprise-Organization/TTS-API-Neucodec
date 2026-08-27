@@ -6,8 +6,8 @@ if '/v1/completions' not in TTS_API:
     TTS_API = TTS_API + '/v1/completions'
 TTS_API_KEY = os.environ.get('TTS_API_KEY', '')
 MODEL_NAME = os.environ.get('MODEL_NAME', 'TTS-model')
-DEFAULT_SPEAKER = os.environ.get('DEFAULT_SPEAKER', 'TM_English')
-SPEAKERS = os.environ.get('SPEAKERS', 'TM_Mandarin,TM_English')
+DEFAULT_SPEAKER = os.environ.get('DEFAULT_SPEAKER', 'husein')
+SPEAKERS = os.environ.get('SPEAKERS', 'husein,idayu')
 # 0.6 is what the Whisper-CER guardrail and all bench results were measured at;
 # higher temperatures also increase utterance-to-utterance loudness/prosody variance.
 DEFAULT_TEMPERATURE = float(os.environ.get('DEFAULT_TEMPERATURE', '0.6'))
@@ -16,6 +16,10 @@ DEFAULT_MAX_TOKENS = int(os.environ.get('DEFAULT_MAX_TOKENS', '3072'))
 # 2.0 => first decode window = 100 tokens = 2.0s of audio.
 DEFAULT_PLAYBACK_SPEED = float(os.environ.get('DEFAULT_PLAYBACK_SPEED', '2.0'))
 DEFAULT_PLAYBACK_OVERLAP_SPEED = float(os.environ.get('DEFAULT_PLAYBACK_OVERLAP_SPEED', '0.2'))
+# Speaking rate: 1.0 = as generated, 1.3 = 30% faster, 0.8 = slower. Pitch-preserving WSOLA
+# time stretch applied to the decoded PCM stream (app/timestretch.py); the LM itself has no
+# rate control. Requests override it with `speaking_rate` (alias `speed`), range 0.5-2.0.
+DEFAULT_SPEAKING_RATE = float(os.environ.get('DEFAULT_SPEAKING_RATE', '1.0'))
 # Request-level normalization defaults (overridable per request). DEFAULT_NORMALIZER_MODE
 # must be 'rule' or 'llm' (validated against NormalizerMode in app/main.py at import).
 DEFAULT_NORMALIZE_MALAYSIAN = os.environ.get('DEFAULT_NORMALIZE_MALAYSIAN', 'false').lower() == 'true'

@@ -33,6 +33,7 @@ Copy [.env_example](.env_example) to `.env` and adjust as needed. See [app/env.p
 | `STREAM_MAX_CHUNK_S` | `10.0` | Cap on grown decode windows (seconds) |
 | `STREAM_PAST_CONTEXT_S` | `3.0` | Past tokens included in every decode window then sliced off (no latency cost; pulls windowed decode toward one-shot) |
 | `DEFAULT_PLAYBACK_OVERLAP_SPEED` | `0.2` | Overlap speed for crossfading |
+| `DEFAULT_SPEAKING_RATE` | `1.0` | Default speaking rate (`speaking_rate` request field): 1.3 = 30% faster, 0.8 = slower, pitch preserved (WSOLA time stretch on the decoded audio, see below) |
 | `DEFAULT_NORMALIZE_MALAYSIAN` | `false` | Default for the `normalize_malaysian` request field |
 | `DEFAULT_NORMALIZER_MODE` | `rule` | Default for the `mode` request field (`rule` or `llm`) |
 | `STREAM_CROSSFADE` | `true` | Context-primed windows + raised-cosine crossfade at chunk boundaries (removes the boundary click; `false` = legacy hard cut) |
@@ -259,6 +260,7 @@ Accepts JSON body.
 | `normalize_malaysian` | bool | `DEFAULT_NORMALIZE_MALAYSIAN` (`false`) | Apply Malaysian text normalization |
 | `mode` | `rule` \| `llm` | `DEFAULT_NORMALIZER_MODE` (`rule`) | Normalization engine (see `/v1/audio/normalize`); `llm` falls back to `rule` if the LLM call fails, so speech is still produced |
 | `stream_normalize` | bool | `STREAM_NORMALIZE` (`true`) | Per-utterance loudness normalization toward `TARGET_RMS_DB` |
+| `speaking_rate` | float | `DEFAULT_SPEAKING_RATE` (`1.0`) | Speaking rate, `0.5`–`2.0`: `1.3` speaks 30% faster, `0.8` slower, **pitch unchanged**. Also accepted as `speed` (OpenAI-compatible clients). See [Speaking rate](#speaking-rate) |
 
 **Example:**
 
@@ -274,9 +276,32 @@ curl -X POST 'http://localhost:9091/v1/audio/speech' \
     "stream": true,
     "playback_speed": 0.5,
     "playback_overlap_speed": 0.1,
+    "speaking_rate": 1.2,
     "normalize_malaysian": true
   }' \
   --output output.wav
+```
+
+#### Speaking rate
+
+`speaking_rate` (alias `speed`) changes how fast the voice talks **without changing its pitch**.
+The LM has no rate control and speech tokens are a fixed 50 Hz, so this is done after NeuCodec
+decode, on the PCM stream, with WSOLA (waveform-similarity overlap-add — the SoundTouch-style
+tempo change, `app/timestretch.py`): the audio is copied out in ~40 ms blocks whose input hop is
+`rate`× the output hop, so whole pitch periods are dropped (faster) or repeated (slower) while the
+samples inside each block are untouched; each block's start is searched ±7.5 ms for the best
+waveform match to the previous block's tail and the two are crossfaded over 8 ms. Plain
+resampling would shorten every period too (chipmunk effect). It is a stage on the stitched stream
+(after crossfade + loudness normalization, before the pcm/wav/SSE layers), stateful across
+chunks with ~55 ms of lookahead — so it works for streaming, adds no measurable latency to the
+2 s first chunk, and leaves the token/decode/batching pipeline untouched. `1.0` bypasses it
+entirely. Range `0.5`–`2.0` (422 outside): beyond that WSOLA on speech starts to buzz / drop
+consonants.
+
+```bash
+curl -X POST 'http://localhost:9091/v1/audio/speech' -H 'Content-Type: application/json' \
+  -d '{"input": "Hello there, how can I help you?", "voice": "husein", "speaking_rate": 1.3,
+       "response_format": "wav", "stream": false}' --output fast.wav
 ```
 
 ### `POST /v1/audio/vc` — Voice Conversion
@@ -298,6 +323,7 @@ Accepts multipart form data. Clones the reference voice and generates speech for
 | `stream` | bool | `true` | Stream audio response |
 | `playback_speed` | float | `2.0` | First decode window (×50 tokens) |
 | `playback_overlap_speed` | float | `0.2` | Overlap for crossfading |
+| `speaking_rate` | float | `DEFAULT_SPEAKING_RATE` (`1.0`) | Speaking rate `0.5`–`2.0`, pitch preserved (see [Speaking rate](#speaking-rate)) |
 
 **Example:**
 
@@ -315,6 +341,7 @@ curl -X POST 'http://localhost:9091/v1/audio/vc' \
   --form 'stream=true' \
   --form 'playback_speed=1.5' \
   --form 'playback_overlap_speed=0.2' \
+  --form 'speaking_rate=1.0' \
   --output vc.wav
 ```
 
@@ -374,7 +401,7 @@ python -m pytest tests/test_normalize_api.py -v
 
 ### Test files
 
-**583 passed, 35 skipped** on a full run with a live API and `OPENAI_*` configured.
+**623 passed, 35 skipped** on a full run with a live API and `OPENAI_*` configured.
 
 | File | Tests | Dependencies | Description |
 |---|---|---|---|
@@ -382,9 +409,10 @@ python -m pytest tests/test_normalize_api.py -v
 | `tests/test_normalizer.py` | 150 | `app/normalizer`, `app/rules` | Text normalization with exact input/output checks in both Malay and English: email (`husein.zol05@gmail.com` -> `HUSEIN dot ZOL kosong lima di GMAIL dot COM`), URL, phone, IC number, money (RM/USD), time, percentage, units (kg, km, celsius, liter, MB), dates, cardinals, ordinals, fractions, multipliers, hingga/range, contractions, alpha-num splitting, replace mappings, and combined markdown+normalizer pipeline. |
 | `tests/test_malaysian_rules.py` | 208 | `app/normalizer`, `app/rules` | Stress tests for Malaysian normalization rules. Exhaustive coverage of: money (RM whole/sen/zero/sentence, USD with K/M suffixes), IC numbers (standard/young/zeros/multiple), phone numbers (mobile 012/011, landline 03, multiple), email (basic/subdomain/sentence/multiple), URL (https/www/path/IP), time (AM/PM/midnight/morning/late night), percentages (decimal/100/small), units (celsius/kg/g/km/liter/ml/mb/gb), dates, zero-prefix numbers, passports, year normalization (tahun 2024/1999/2000/1945), pada hari bulan, ordinals (ke-1/ke-100/Roman), cardinals, fractions, multiplier (x kali), hingga, Hijri year, elongated words, tak prefix, all 51 pronunciation replacements (dr/mr/mrs/Sdn Bhd/LRT/MRT/KL/PDRM/CCTV/UMNO/5G/US), pattern ranges (100-200 ringgit), all contractions, alpha-num splitting, replace mappings, and 12 complex multi-type sentence tests simulating the full pipeline. |
 | `tests/test_multilingual.py` | 76 | `app/normalizer`, `app/rules` | Multilingual passthrough tests for Chinese (Simplified/Traditional), Korean, Tamil, Arabic, Japanese (Hiragana/Katakana/Kanji), Thai, Hindi/Devanagari, and emoji. Verifies non-Latin scripts pass through untouched while ASCII content (RM, phone, email, URL, IC, time, %) is still normalized. Tests mixed-script sentences, markdown stripping with multilingual text, and the non-ASCII-attached-to-ASCII edge case (e.g. `价格是RM500` passes through raw vs `价格是 RM500` normalizes). |
-| `tests/test_tts_vc_api.py` | 43 | Live API (`TTS_TEST_URL`, default `http://localhost:9091`) | Integration tests for TTS (`POST /v1/audio/speech`) and VC (`POST /v1/audio/vc`) endpoints. **TTS tests** (24): WAV/PCM format validation (sample rate 24000, mono, 16-bit), streaming vs buffered, all speakers (husein/jenny/idayu), speaker list endpoint, markdown/HTML/link sanitization, Malaysian normalization with numbers, temperature/speed/max_tokens parameters, short/long/English/multilingual text. **VC tests** (19): uses `jenny.wav` with reference text, WAV/PCM format validation, streaming vs buffered, Malay/English/long/short generate text, markdown/HTML/link/code sanitization in both reference_text and generate_text, temperature/speed/max_tokens parameters. Auto-skipped when the API is not reachable. |
+| `tests/test_tts_vc_api.py` | 50 | Live API (`TTS_TEST_URL`, default `http://localhost:9091`) | Integration tests for TTS (`POST /v1/audio/speech`) and VC (`POST /v1/audio/vc`) endpoints. **TTS tests** (29): WAV/PCM format validation (sample rate 24000, mono, 16-bit), streaming vs buffered, all speakers (husein/jenny/idayu), speaker list endpoint, markdown/HTML/link sanitization, Malaysian normalization with numbers, temperature/speed/max_tokens parameters, `speaking_rate` (valid wav, SSE streaming, 2.0 shorter than 0.5, `speed` alias, 422 out of range), short/long/English/multilingual text. **VC tests** (21): uses `jenny.wav` with reference text, WAV/PCM format validation, streaming vs buffered, Malay/English/long/short generate text, markdown/HTML/link/code sanitization in both reference_text and generate_text, temperature/speed/max_tokens/speaking_rate parameters. Auto-skipped when the API is not reachable. |
 | `tests/test_normalize_api.py` | 35 | In-process app import (GPU/models) | Integration tests for `POST /v1/audio/normalize` endpoint. Auto-skipped when the app cannot be imported. Tests `normalize_malaysian=false` (sanitize only), `normalize_malaysian=true` (full normalization), and the `mode` enum (`rule` default, `llm`, invalid → 422). |
 | `tests/test_tracing.py` | 12 | `pytest` only (no GPU/torch; 8 need `opentelemetry-sdk`) | Unit tests for the hot-path spans (`app/tracing.py`): disabled by default, disabled helpers are no-ops returning a single shared `nullcontext`, and — with the OTel SDK installed — spans nest, an explicitly passed parent beats the ambient context (what the batching threads rely on), `record_span` honours the given timestamps and drops a stage with no start time, attributes are cleaned, exceptions mark the span. |
+| `tests/test_timestretch.py` | 33 | `numpy` + `pytest` only (no GPU/torch) | Unit tests for the speaking-rate stretcher (`app/timestretch.py`): rate 1.0 is an exact identity, duration scales by the rate (0.5–2.0) to within one block, a steady tone keeps its frequency (pitch preserved), joins are continuous, output is bit-identical regardless of how the input is chunked (streaming), first chunk emitted promptly, empty/sub-block/silence/full-scale edge cases, PCM16 helpers. |
 | `tests/test_llm_normalizer.py` | 28 | `aiohttp` + `pytest` only (no GPU/torch) | Unit tests for the LLM-based normalizer (`app/llm_normalizer.py`): few-shot message building from `app/prompt.py`, strict JSON schema, reply parsing (clean/fenced/bare/plain-text/unusable), and full HTTP behaviour against a local fake OpenAI server (auth header, payload shape, 400 retry without `response_format`, 5xx/unreachable/unconfigured errors). 4 live tests hit the real `OPENAI_BASE_URL` (Malay money, English IC, Chinese money, passthrough) and are skipped unless `OPENAI_*` is set. |
 
 ## Benchmark — H100 SXM vs H200 SXM
