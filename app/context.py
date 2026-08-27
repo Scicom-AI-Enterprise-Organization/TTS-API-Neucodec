@@ -63,6 +63,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass, asdict, field
 from typing import Optional
@@ -230,10 +231,45 @@ def tokens_to_str(tokens: list[int]) -> str:
     return ''.join(f'<|s_{i}|>' for i in tokens)
 
 
-def build_prompt(turns: list[Turn], voice: str, text: str) -> str:
-    """The multi-turn prompt: each context turn closed with <|im_end|>, then the new
-    turn open at <|speech_start|> for the LM to continue. With no turns this is exactly
-    the plain single-turn TTS prompt."""
+CONTEXT_MODES = ('turns', 'continue')
+
+
+def join_texts(texts: list[str]) -> str:
+    """Previous chunk texts as one running utterance (continue mode).
+
+    The rule normalizer closes every chunk with '.', so a chunk that ended mid-sentence
+    ("hello my name is husein,") was prompted as "hello my name is husein,." -- fine as
+    a standalone turn, but inside one utterance that reads as a full stop. Drop a '.'
+    that directly follows other punctuation.
+    """
+    s = ' '.join(t.strip() for t in texts if t and t.strip())
+    return re.sub(r'([,;:!?\u2026])\.(?=\s|$)', r'\1', s)
+
+
+def build_prompt(turns: list[Turn], voice: str, text: str, mode: str = 'turns') -> str:
+    """The prompt for a request with `turns` of context.
+
+    `turns` (default): each context turn is a closed <|im_start|>...<|im_end|> block --
+    the format `/v1/audio/vc` primes a reference voice with -- then the new turn is
+    opened at <|speech_start|> for the LM to fill. The LM gets the previous speech as
+    conditioning but starts a *new utterance*.
+
+    `continue`: ONE turn whose text is every previous chunk plus the new text, with the
+    previous chunks' speech tokens already in place after <|speech_start|>. The LM is
+    resumed mid-utterance -- exactly the state it is in while generating a long text --
+    and emits the tokens for the remaining text. The previous tokens are the prefix, so
+    only the new speech is generated and decoded, as in turns mode.
+
+    With no turns both modes are exactly the plain single-turn TTS prompt.
+    """
+    if mode not in CONTEXT_MODES:
+        raise ValueError(f'context mode {mode!r}: expected one of {CONTEXT_MODES}')
+    if not turns:
+        return f'<|im_start|>{voice}: {text}<|speech_start|>'
+    if mode == 'continue':
+        prev_text = join_texts([t.text for t in turns])
+        prev_tokens = ''.join(tokens_to_str(t.tokens) for t in turns)
+        return f'<|im_start|>{voice}: {prev_text} {text}<|speech_start|>{prev_tokens}'
     parts = [
         f'<|im_start|>{t.voice}: {t.text}<|speech_start|>{tokens_to_str(t.tokens)}<|im_end|>'
         for t in turns
@@ -440,6 +476,7 @@ class RequestContext:
     text: str
     turns: list[Turn] = field(default_factory=list)
     ts: float = field(default_factory=time.time)
+    mode: str = 'turns'
 
     @property
     def tokens(self) -> int:
@@ -465,6 +502,7 @@ class RequestContext:
             key = quote(key, safe='')
         return {
             'X-Context-Id': key,
+            'X-Context-Mode': self.mode,
             'X-Context-Turns': str(len(self.turns)),
             'X-Context-Tokens': str(self.tokens),
         }

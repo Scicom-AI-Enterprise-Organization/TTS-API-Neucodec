@@ -4,11 +4,13 @@ Emulates what a chunking agent (LiveKit StreamAdapter) does to one reply: the te
 into short chunks and each chunk is a separate /v1/audio/speech request, played back to
 back. Three conditions per (text, voice):
 
-  A  nocontext  each chunk generated cold (today's behaviour)
-  B  context    each chunk with the same request_id -> generated in the context of the
-                previous chunks (the feature under test)
-  C  oneshot    the whole text in a single request (reference: what the model does when
-                nobody chunks the text)
+  A   nocontext  each chunk generated cold (today's behaviour)
+  B1  context    each chunk with the same request_id, context_mode=turns -> the previous
+                 chunks as closed VC-style turns, the new chunk as a new turn
+  B2  continue   same request_id, context_mode=continue -> one turn, all the text, the
+                 previous chunks' tokens as prefix: the LM resumes mid-utterance
+  C   oneshot    the whole text in a single request (reference: what the model does when
+                 nobody chunks the text)
 
 Writes per-chunk wavs, the back-to-back concatenation per condition, and a results.json
 with durations and the X-Context-Turns/Tokens the server reported per chunk (the turns
@@ -103,6 +105,7 @@ def speak(url, text, voice, request_id=None, **fields):
         'text': text,
         'latency_s': round(dt, 3),
         'audio_s': round(len(pcm) / 2 / SR, 3),
+        'context_mode': r.headers.get('X-Context-Mode'),
         'context_turns': r.headers.get('X-Context-Turns'),
         'context_tokens': r.headers.get('X-Context-Tokens'),
     }
@@ -122,11 +125,12 @@ def run_case(url, out, case, take):
     os.makedirs(d, exist_ok=True)
     res = {'case': case['name'], 'voice': case['voice'], 'take': take, 'conditions': {}}
 
-    for cond in ('nocontext', 'context'):
-        rid = f"ab-{case['name']}-{take}-{uuid.uuid4().hex[:8]}" if cond == 'context' else None
+    for cond in ('nocontext', 'context', 'continue'):
+        rid = f"ab-{case['name']}-{take}-{cond}-{uuid.uuid4().hex[:8]}" if cond != 'nocontext' else None
+        fields = {'context_mode': cond} if cond != 'nocontext' else {}
         parts, infos = [], []
         for i, text in enumerate(case['chunks']):
-            pcm, info = speak(url, text, case['voice'], request_id=rid)
+            pcm, info = speak(url, text, case['voice'], request_id=rid, **fields)
             write_wav(os.path.join(d, f'{cond}_chunk{i}.wav'), pcm)
             parts.append(pcm)
             infos.append(info)

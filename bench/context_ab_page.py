@@ -48,7 +48,8 @@ def mp3_data_uri(wav_path):
 
 COND_META = {
     'nocontext': ('A', 'No context', 'every chunk generated cold — today’s behaviour'),
-    'context':   ('B', 'With request_id', 'each chunk prompted with the previous chunks’ text + speech tokens'),
+    'context':   ('B1', 'request_id · turns', 'previous chunks as closed VC-style turns, then the new chunk as a new turn'),
+    'continue':  ('B2', 'request_id · continue', 'one turn: all the text, previous chunks’ tokens as prefix — the LM resumes mid-utterance'),
     'oneshot':   ('C', 'One request', 'the whole text in a single call — the reference'),
 }
 
@@ -56,11 +57,16 @@ COND_META = {
 def build(out_dir):
     with open(os.path.join(out_dir, 'results.json')) as f:
         doc = json.load(f)
+    metrics = None
+    mpath = os.path.join(out_dir, 'metrics.json')
+    if os.path.exists(mpath):
+        with open(mpath) as f:
+            metrics = json.load(f)
     cases = []
     for res in doc['results']:
         d = os.path.join(out_dir, f"{res['case']}_take{res['take']}")
         conds = []
-        for key in ('nocontext', 'context', 'oneshot'):
+        for key in ('nocontext', 'context', 'continue', 'oneshot'):
             c = res['conditions'][key]
             wav = os.path.join(d, f'{key}.wav')
             y = read_pcm(wav)
@@ -71,7 +77,13 @@ def build(out_dir):
                     t += ch['audio_s']
                     joins.append(round(t, 3))
             code, label, blurb = COND_META[key]
+            jm = None
+            if metrics:
+                for tk in metrics['takes']:
+                    if tk['case'] == res['case'] and tk['take'] == res['take']:
+                        jm = tk['joins'].get(key)
             conds.append({
+                'join_metrics': jm,
                 'key': key, 'code': code, 'label': label, 'blurb': blurb,
                 'src': mp3_data_uri(wav),
                 'peaks': peaks(y),
@@ -84,7 +96,8 @@ def build(out_dir):
             'texts': [ch['text'] for ch in res['conditions']['context']['chunks']],
             'conds': conds,
         })
-    return {'generated': doc['generated'], 'url': doc['url'], 'cases': cases}
+    return {'generated': doc['generated'], 'url': doc['url'], 'cases': cases,
+            'metrics': metrics['summary'] if metrics else None, 'metrics_window_s': metrics['window_s'] if metrics else None}
 
 
 HTML = r'''<title>Chunk Join Listening Test</title>
@@ -94,7 +107,7 @@ HTML = r'''<title>Chunk Join Listening Test</title>
 :root{
   --bg:#EEF0F3; --surface:#FFFFFF; --surface-2:#E3E7EC; --line:#C9D0D8; --line-strong:#98A3AF;
   --ink:#1B2229; --ink-2:#4B5661; --ink-3:#7A8590;
-  --a:#6F7E8C; --b:#C9921F; --c:#2E7F8A;           /* A slate, B ochre (the feature), C teal */
+  --a:#6F7E8C; --b:#C9921F; --b2:#7E5FA8; --c:#2E7F8A;   /* A slate, B1 ochre, B2 violet, C teal */
   --b-soft:rgba(201,146,31,.14); --join:#B4261F; --play:#1B2229;
   --focus:#C9921F;
 }
@@ -102,14 +115,14 @@ HTML = r'''<title>Chunk Join Listening Test</title>
   :root:not([data-theme="light"]){
     --bg:#14181D; --surface:#1B2128; --surface-2:#232B33; --line:#2F3941; --line-strong:#4A5661;
     --ink:#E7EBEF; --ink-2:#AEB8C2; --ink-3:#7E8993;
-    --a:#8E9CAA; --b:#E0B04A; --c:#4FB0BC;
+    --a:#8E9CAA; --b:#E0B04A; --b2:#A78BD0; --c:#4FB0BC;
     --b-soft:rgba(224,176,74,.14); --join:#F0645B; --play:#E7EBEF; --focus:#E0B04A;
   }
 }
 :root[data-theme="dark"]{
   --bg:#14181D; --surface:#1B2128; --surface-2:#232B33; --line:#2F3941; --line-strong:#4A5661;
   --ink:#E7EBEF; --ink-2:#AEB8C2; --ink-3:#7E8993;
-  --a:#8E9CAA; --b:#E0B04A; --c:#4FB0BC;
+  --a:#8E9CAA; --b:#E0B04A; --b2:#A78BD0; --c:#4FB0BC;
   --b-soft:rgba(224,176,74,.14); --join:#F0645B; --play:#E7EBEF; --focus:#E0B04A;
 }
 *{box-sizing:border-box}
@@ -124,6 +137,14 @@ header{display:grid;gap:10px;padding-bottom:28px;border-bottom:1px solid var(--l
 .legend{display:flex;flex-wrap:wrap;gap:10px 22px;margin-top:18px;font-size:14px;color:var(--ink-2)}
 .legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:8px;vertical-align:-1px;background:var(--sw)}
 .legend .j::before{width:2px;height:12px;border-radius:0;background:var(--join)}
+.metrics{margin-top:26px;padding:18px 22px;background:var(--surface);border:1px solid var(--line);border-radius:6px}
+.mgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:12px}
+.mcell{display:grid;gap:4px;padding:12px 14px;border-radius:4px;background:var(--surface-2);border-left:3px solid var(--sw)}
+.mcell .mk{font-family:"Barlow Condensed",sans-serif;font-weight:600;font-size:18px;line-height:1.1}
+.mcell .mv{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:13px;color:var(--ink-2);font-variant-numeric:tabular-nums;display:flex;justify-content:space-between;gap:10px}
+.mcell .mv b{color:var(--ink);font-weight:500;font-size:20px;font-family:"Barlow Condensed",sans-serif}
+.mcell .mv small{color:var(--ink-3)}
+.mnote{font-size:13px;color:var(--ink-3);margin:12px 0 0;max-width:80ch}
 .toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin:26px 0 8px;font-size:14px;color:var(--ink-2)}
 .toolbar label{display:inline-flex;align-items:center;gap:8px;cursor:pointer}
 .toolbar input{accent-color:var(--b);width:16px;height:16px}
@@ -184,18 +205,30 @@ footer code{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:12px;ba
   <p class="lede">A LiveKit agent cuts each reply into short chunks and sends every chunk as its own TTS request,
   played back to back. Each row below is the <b>same chunks, same voice, same text</b>, joined with no gap.
   Listen across the red join marks: does pitch, pace and energy carry over, or does every chunk restart?
-  <b>A</b> is what ships today. <b>B</b> is the branch: the same request with a <code>request_id</code>, so each chunk is
-  generated in the context of the ones before it. <b>C</b> is the whole text in one request — the ceiling.</p>
+  <b>A</b> is what ships today. <b>B1</b> and <b>B2</b> are the branch — the same requests with a <code>request_id</code>, so each
+  chunk is generated in the context of the ones before it — in its two prompt modes: <b>B1</b> hands the LM the previous chunks
+  as closed turns (VC-style conditioning; the new chunk is still a new utterance), <b>B2</b> puts all the text in one turn with the
+  previous chunks’ speech tokens already in place, so the LM resumes mid-utterance. <b>C</b> is the whole text in one request — the ceiling.</p>
   <div class="legend">
     <span style="--sw:var(--a)">A · no context</span>
-    <span style="--sw:var(--b)">B · with request_id</span>
+    <span style="--sw:var(--b)">B1 · request_id, turns</span>
+    <span style="--sw:var(--b2)">B2 · request_id, continue</span>
     <span style="--sw:var(--c)">C · one request</span>
     <span class="j">chunk join (where a new request started)</span>
   </div>
 </header>
 
+<div class="metrics" id="metrics" hidden>
+  <div class="eyebrow">Measured at the joins · median over all takes</div>
+  <div class="mgrid" id="mgrid"></div>
+  <p class="mnote">For each join: the last voiced ~<span id="mwin"></span> s before it vs the first voiced ~<span id="mwin2"></span> s after it —
+  pitch jump in semitones (median F0) and level jump in dB (RMS). A speaker carrying a thought across a phrase boundary moves a little;
+  a cold restart jumps. C has no request joins — it is measured at the same points in its one-shot audio, i.e. what a natural
+  phrase boundary looks like under this metric.</p>
+</div>
+
 <div class="toolbar">
-  <label><input type="checkbox" id="blind"> Blind mode — hide labels and shuffle A/B/C within each case</label>
+  <label><input type="checkbox" id="blind"> Blind mode — hide labels and shuffle the rows within each case</label>
   <span class="meta" id="meta"></span>
 </div>
 
@@ -216,7 +249,22 @@ request’s begins.</footer>
   const data = JSON.parse(document.getElementById('data').textContent);
   const root = document.getElementById('cases');
   document.getElementById('meta').textContent = data.generated + ' · ' + data.cases.length + ' takes';
-  const COLORS = {nocontext:'var(--a)', context:'var(--b)', oneshot:'var(--c)'};
+  const COLORS = {nocontext:'var(--a)', context:'var(--b)', continue:'var(--b2)', oneshot:'var(--c)'};
+  const NAMES = {nocontext:'A · no context', context:'B1 · request_id, turns', continue:'B2 · request_id, continue', oneshot:'C · one request'};
+  const ORDER = {nocontext:0, context:1, continue:2, oneshot:3};
+  const CODES = {nocontext:'A', context:'B1', continue:'B2', oneshot:'C'};
+  if (data.metrics){
+    const m = document.getElementById('metrics'); m.hidden = false;
+    document.getElementById('mwin').textContent = data.metrics_window_s; document.getElementById('mwin2').textContent = data.metrics_window_s;
+    const g = document.getElementById('mgrid');
+    for (const k of ['nocontext','context','continue','oneshot']){ const s = data.metrics[k]; if(!s) continue;
+      const cell = document.createElement('div'); cell.className='mcell'; cell.style.setProperty('--sw', COLORS[k]);
+      cell.innerHTML = `<div class="mk">${NAMES[k]}</div>
+        <div class="mv"><span>pitch jump</span><span><b>${s.df0_semitones_median.toFixed(1)}</b> st <small>p90 ${s.df0_semitones_p90.toFixed(1)}</small></span></div>
+        <div class="mv"><span>level jump</span><span><b>${s.drms_db_median.toFixed(1)}</b> dB <small>p90 ${s.drms_db_p90.toFixed(1)}</small></span></div>
+        <div class="mv"><small>${s.joins} joins measured</small></div>`;
+      g.appendChild(cell); }
+  }
   const pretty = n => n.replace(/_/g,' ').replace(/\btake(\d+)/,'take $1');
 
   let rafs = [];
@@ -243,6 +291,7 @@ request’s begins.</footer>
   }
 
   function fmt(s){ return s.toFixed(2)+' s'; }
+  function med(a){ const b=[...a].sort((x,y)=>x-y); const n=b.length; return n? (n%2? b[(n-1)/2] : (b[n/2-1]+b[n/2])/2) : 0; }
 
   for (const c of data.cases){
     const sec = document.createElement('section'); sec.className='case';
@@ -255,18 +304,20 @@ request’s begins.</footer>
     for (const cond of c.conds){
       const row = document.createElement('div'); row.className='cond'; row.dataset.key = cond.key;
       row.style.setProperty('--sw', COLORS[cond.key]);
-      const ctxTurns = cond.key==='context' ? cond.chunks.map(ch=>ch.context_turns).join('→') : '';
-      const ctxTok = cond.key==='context' ? cond.chunks.map(ch=>ch.context_tokens).join('→') : '';
+      const isCtx = cond.key==='context' || cond.key==='continue';
+      const ctxTurns = isCtx ? cond.chunks.map(ch=>ch.context_turns).join('→') : '';
+      const ctxTok = isCtx ? cond.chunks.map(ch=>ch.context_tokens).join('→') : '';
       row.innerHTML = `<div class="tag"><span class="code">${cond.code}</span><span class="lbl">${cond.label}</span><span class="blurb">${cond.blurb}</span></div>
         <div class="body">
           <div class="wave" tabindex="0" role="slider" aria-label="${cond.label} waveform, click to seek"><canvas></canvas></div>
           <div class="row"><audio controls preload="metadata" src="${cond.src}"></audio>
             <div class="stats"><span><b>${fmt(cond.duration)}</b> total</span>
               ${cond.key!=='oneshot' ? `<span><b>${cond.joins.length}</b> joins</span>` : ''}
-              ${cond.key==='context' ? `<span class="ctx">turns <b>${ctxTurns}</b></span><span class="ctx">tokens <b>${ctxTok}</b></span>` : ''}
+              ${cond.join_metrics && cond.join_metrics.length ? `<span>at joins: pitch <b>${med(cond.join_metrics.map(m=>m.df0_semitones)).toFixed(1)}</b> st · level <b>${med(cond.join_metrics.map(m=>m.drms_db)).toFixed(1)}</b> dB</span>` : ''}
+              ${isCtx ? `<span class="ctx">turns <b>${ctxTurns}</b></span><span class="ctx">tokens <b>${ctxTok}</b></span>` : ''}
             </div></div>
-          ${cond.key!=='oneshot' ? `<details><summary>per-chunk detail</summary><div class="tbl-wrap"><table><tr><th>#</th><th>chunk</th><th class="n">audio</th><th class="n">latency</th>${cond.key==='context'?'<th class="n">turns in prompt</th><th class="n">tokens in prompt</th>':''}</tr>
-            ${cond.chunks.map((ch,i)=>`<tr><td>${i+1}</td><td>${ch.text.replace(/</g,'&lt;')}</td><td class="n">${ch.audio_s.toFixed(2)} s</td><td class="n">${ch.latency_s.toFixed(2)} s</td>${cond.key==='context'?`<td class="n hi">${ch.context_turns}</td><td class="n hi">${ch.context_tokens}</td>`:''}</tr>`).join('')}
+          ${cond.key!=='oneshot' ? `<details><summary>per-chunk detail</summary><div class="tbl-wrap"><table><tr><th>#</th><th>chunk</th><th class="n">audio</th><th class="n">latency</th>${isCtx?'<th class="n">turns in prompt</th><th class="n">tokens in prompt</th>':''}${cond.join_metrics?'<th class="n">pitch jump after</th><th class="n">level jump after</th>':''}</tr>
+            ${cond.chunks.map((ch,i)=>`<tr><td>${i+1}</td><td>${ch.text.replace(/</g,'&lt;')}</td><td class="n">${ch.audio_s.toFixed(2)} s</td><td class="n">${ch.latency_s.toFixed(2)} s</td>${isCtx?`<td class="n hi">${ch.context_turns}</td><td class="n hi">${ch.context_tokens}</td>`:''}${cond.join_metrics?`<td class="n">${cond.join_metrics[i]?cond.join_metrics[i].df0_semitones.toFixed(1)+' st':'—'}</td><td class="n">${cond.join_metrics[i]?cond.join_metrics[i].drms_db.toFixed(1)+' dB':'—'}</td>`:''}</tr>`).join('')}
           </table></div></details>` : ''}
         </div>`;
       conds.appendChild(row);
@@ -299,8 +350,8 @@ request’s begins.</footer>
       const rows = [...cs.children];
       if (blind.checked){ for (let i=rows.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [rows[i],rows[j]]=[rows[j],rows[i]]; }
         rows.forEach((r,i)=>{ r.querySelector('.code').textContent = String(i+1); cs.appendChild(r); }); }
-      else { const order = {nocontext:0, context:1, oneshot:2}; rows.sort((a,b)=>order[a.dataset.key]-order[b.dataset.key]);
-        rows.forEach(r=>{ r.querySelector('.code').textContent = {nocontext:'A',context:'B',oneshot:'C'}[r.dataset.key]; cs.appendChild(r); }); }
+      else { rows.sort((a,b)=>ORDER[a.dataset.key]-ORDER[b.dataset.key]);
+        rows.forEach(r=>{ r.querySelector('.code').textContent = CODES[r.dataset.key]; cs.appendChild(r); }); }
     });
     redrawAll();
   });

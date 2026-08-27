@@ -27,7 +27,7 @@ from app.llm_normalizer import llm_normalize, LLMNormalizerError, NormalizerMode
 from app import tracing
 from app.context import (
     make_store, RequestContext, build_prompt, fit_context, select_voice,
-    seconds_to_tokens, total_tokens,
+    seconds_to_tokens, total_tokens, CONTEXT_MODES,
 )
 import torch.cuda as cuda
 import uuid
@@ -143,6 +143,8 @@ tracing.log_status()
 # Cross-request speech context (`request_id` on /v1/audio/speech), shared across
 # worker processes -- see app/context.py for the why and the format.
 CONTEXT_MAX_TOKENS = seconds_to_tokens(CONTEXT_MAX_S)
+if CONTEXT_MODE not in CONTEXT_MODES:
+    raise ValueError(f'CONTEXT_MODE={CONTEXT_MODE!r} must be one of {CONTEXT_MODES}')
 context_store = make_store(CONTEXT_STORE, CONTEXT_STORE_DIR, CONTEXT_TTL_S, CONTEXT_MAX_TOKENS)
 if context_store is None:
     logging.info('speech context: off (CONTEXT_STORE=off) -- request_id is ignored')
@@ -643,6 +645,7 @@ async def stream_speech(
         'tts.speaking_rate': speaking_rate,
         'tts.crossfade': STREAM_CROSSFADE,
         'tts.context_id': context.key if context is not None else '',
+        'tts.context_mode': context.mode if context is not None else '',
         'tts.context_turns': len(context.turns) if context is not None else 0,
         'tts.context_tokens': context.tokens if context is not None else 0,
     })
@@ -1250,6 +1253,10 @@ class TTSRequest(NormalizeRequest):
         None, max_length=256,
         validation_alias=AliasChoices('request_id', 'context_id'),
     )
+    # how the history is prompted (see app/context.py build_prompt): "turns" = closed
+    # VC-style turns then a new turn; "continue" = one turn, previous tokens as prefix,
+    # the LM resumes mid-utterance. Default CONTEXT_MODE.
+    context_mode: Literal['turns', 'continue'] = CONTEXT_MODE
 
 # pydantic does not validate defaults, so a bad env value would bypass the range above.
 if not MIN_RATE <= DEFAULT_SPEAKING_RATE <= MAX_RATE:
@@ -1414,7 +1421,7 @@ async def normalize_text(data: NormalizeRequest):
 async def speaker():
     return SPEAKERS
 
-def load_context(key, voice, text, max_tokens):
+def load_context(key, voice, text, max_tokens, mode=CONTEXT_MODE):
     """Read a context id's history and size it for this request (app/context.py).
 
     Returns (RequestContext, max_tokens): the turns that go into the prompt -- the
@@ -1432,12 +1439,13 @@ def load_context(key, voice, text, max_tokens):
             select_voice(history, voice), text, max_tokens,
             LM_MAX_MODEL_LEN, CONTEXT_MAX_TOKENS, CONTEXT_MIN_GEN_TOKENS,
         )
-        ctx = RequestContext(store=context_store, key=key, voice=voice, text=text, turns=turns)
+        ctx = RequestContext(store=context_store, key=key, voice=voice, text=text, turns=turns, mode=mode)
         logging.info(
-            f'context {key}: {len(turns)}/{len(history)} turns, {ctx.tokens} speech tokens in prompt'
+            f'context {key} ({mode}): {len(turns)}/{len(history)} turns, {ctx.tokens} speech tokens in prompt'
             + (f', max_tokens {max_tokens} -> {fitted}' if fitted != max_tokens else '')
         )
         tracing.set_attributes(sp, {
+            'context.mode': mode,
             'context.history_turns': len(history),
             'context.turns': len(turns),
             'context.tokens': ctx.tokens,
@@ -1499,9 +1507,12 @@ async def tts_stream(data: TTSRequest, request: Request = None):
         s = await normalize_request_text(data, fallback_to_rule=True)
         logging.info(f'normalized: {s}')
         if context_key and context_store is not None:
-            context, max_tokens = load_context(context_key, speaker, s, data.max_tokens)
+            context, max_tokens = load_context(context_key, speaker, s, data.max_tokens, data.context_mode)
         # with no context turns this is exactly the plain single-turn prompt
-        prompt = build_prompt(context.turns if context is not None else [], speaker, s)
+        prompt = build_prompt(
+            context.turns if context is not None else [], speaker, s,
+            mode=context.mode if context is not None else 'turns',
+        )
         logging.info(f'prompt: {prompt_for_log(prompt)}')
 
     return await stream_speech(

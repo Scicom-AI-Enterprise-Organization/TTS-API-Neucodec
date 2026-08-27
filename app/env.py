@@ -106,7 +106,13 @@ SENTRY_DSN = os.environ.get('SENTRY_DSN', '')
 #     that, the request's max_tokens is clamped instead (vLLM rejects prompt+max_tokens
 #     > LM_MAX_MODEL_LEN with a 400 rather than truncating).
 #   LM_MAX_MODEL_LEN: the LM server's --max-model-len (vllm.yaml: 4096).
+#   CONTEXT_MODE: how the history is put in the prompt (request field `context_mode`
+#     overrides). 'turns' = previous chunks as closed <|im_start|>..<|im_end|> turns
+#     (VC-style conditioning; the new chunk is still a new utterance). 'continue' = one
+#     turn with all the text and the previous speech tokens as prefix, so the LM resumes
+#     mid-utterance. See app/context.py build_prompt() and SPEECH_CONTEXT.md.
 CONTEXT_STORE = os.environ.get('CONTEXT_STORE', 'file')
+CONTEXT_MODE = os.environ.get('CONTEXT_MODE', 'turns')
 CONTEXT_STORE_DIR = os.environ.get('CONTEXT_STORE_DIR', '')
 CONTEXT_MAX_S = float(os.environ.get('CONTEXT_MAX_S', '20'))
 CONTEXT_TTL_S = float(os.environ.get('CONTEXT_TTL_S', '600'))

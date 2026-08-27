@@ -334,3 +334,38 @@ class TestFactoryAndRequestContext:
                 raise OSError('disk on fire')
         ctx = RequestContext(store=Broken(60, 100), key='k', voice='v', text='t')
         assert ctx.commit([1, 2]) is None
+
+
+class TestContinueMode:
+    def test_join_texts_drops_normalizer_stop_after_punctuation(self):
+        from app.context import join_texts
+        assert join_texts(['hello my name is husein,.', 'I like to eat chicken rice.']) == \
+            'hello my name is husein, I like to eat chicken rice.'
+        assert join_texts(['Is it you?.', 'Yes!.', 'Sure.']) == 'Is it you? Yes! Sure.'
+        assert join_texts(['a.', '', '  ', 'b.']) == 'a. b.'
+        assert join_texts(['version 2.0.']) == 'version 2.0.'        # a real decimal survives
+
+    def test_continue_prompt_is_one_turn_with_prefix_tokens(self):
+        prev = Turn(text='hello my name is husein,.', tokens=[1, 2, 3], voice='husein')
+        p = build_prompt([prev], 'husein', 'I like to eat chicken rice.', mode='continue')
+        assert p == ('<|im_start|>husein: hello my name is husein, I like to eat chicken rice.'
+                     '<|speech_start|><|s_1|><|s_2|><|s_3|>')
+        assert '<|im_end|>' not in p
+
+    def test_continue_prompt_multiple_turns_in_order(self):
+        turns = [Turn('one.', [1], 'v', ts=1), Turn('two.', [2, 3], 'v', ts=2)]
+        p = build_prompt(turns, 'v', 'three.', mode='continue')
+        assert p == '<|im_start|>v: one. two. three.<|speech_start|><|s_1|><|s_2|><|s_3|>'
+
+    def test_no_turns_identical_in_both_modes(self):
+        assert build_prompt([], 'v', 'hi.', mode='continue') == build_prompt([], 'v', 'hi.', mode='turns') \
+            == '<|im_start|>v: hi.<|speech_start|>'
+
+    def test_bad_mode_rejected(self):
+        with pytest.raises(ValueError):
+            build_prompt([], 'v', 'hi.', mode='sideways')
+
+    def test_headers_carry_mode(self):
+        ctx = RequestContext(store=MemoryContextStore(60, 100), key='k', voice='v', text='t', mode='continue')
+        assert ctx.headers()['X-Context-Mode'] == 'continue'
+        assert RequestContext(store=MemoryContextStore(60, 100), key='k', voice='v', text='t').headers()['X-Context-Mode'] == 'turns'
