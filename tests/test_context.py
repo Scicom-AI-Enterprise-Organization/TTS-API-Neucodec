@@ -316,7 +316,7 @@ class TestFactoryAndRequestContext:
         ctx = RequestContext(store=st, key='room', voice='husein', text='i like to eat chicken rice.',
                              turns=st.get('room'))
         assert ctx.tokens == 3
-        assert ctx.headers() == {'X-Context-Id': 'room', 'X-Context-Turns': '1', 'X-Context-Tokens': '3'}
+        assert ctx.headers() == {'X-Context-Id': 'room', 'X-Context-Mode': 'turns', 'X-Context-Turns': '1', 'X-Context-Tokens': '3'}
         turns = ctx.commit([4, 5, 6, 7])
         assert [t.text for t in turns] == ['hello my name is husein,', 'i like to eat chicken rice.']
         assert st.get('room')[-1].tokens == [4, 5, 6, 7]
