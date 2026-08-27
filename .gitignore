@@ -7,3 +7,5 @@ scicom
 # generated test/inference audio (keep the folder via audio/.gitkeep)
 audio/*.wav
 audio/*.pcm
+# request_id A/B listening-test output (bench/context_ab.py)
+audio/context_ab/
