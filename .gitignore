@@ -8,4 +8,4 @@ scicom
 audio/*.wav
 audio/*.pcm
 # request_id A/B listening-test output (bench/context_ab.py)
-audio/context_ab/
+audio/context_ab*/
