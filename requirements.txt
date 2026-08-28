@@ -8,6 +8,7 @@ ipykernel>=6.30.1
 ipython>=9.4.0
 json-logging>=1.5.1
 librosa>=0.11.0
+local-attention
 matplotlib>=3.10.5
 numpy==1.26.4
 protobuf==3.20.3
@@ -32,4 +33,3 @@ vector-quantize-pytorch==1.17.8
 wandb>=0.21.0
 distilcodec @ git+https://github.com/mesolitica/DistilCodec
 wan @ git+https://github.com/Scicom-AI-Enterprise-Organization/wan
-neucodec @ git+https://github.com/Scicom-AI-Enterprise-Organization/neucodec

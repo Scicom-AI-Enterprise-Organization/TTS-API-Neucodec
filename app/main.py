@@ -60,7 +60,49 @@ from app.timestretch import WSOLA, float_to_pcm16, pcm16_to_float, MIN_RATE, MAX
 from app.neucodec import NeuCodec
 
 if sentry_sdk is not None and len(SENTRY_DSN):
-    sentry_sdk.init(dsn=SENTRY_DSN, send_default_pii=True)
+    # bettersentryio's ingest only accepts gzip-compressed envelopes; with the SDK's
+    # default compression nothing arrives at all, so this is load-bearing on both paths.
+    _sentry_extras = dict(
+        send_default_pii=True,
+        _experiments={'transport_compression_algo': 'gzip'},
+    )
+    try:
+        # wan >= 0.2 owns the Sentry init: same sentry_sdk.init underneath, plus a
+        # before_send that stamps every event with the correlation id and the
+        # OpenTelemetry trace id (replacing the one Sentry mints, which matches nothing
+        # in Tempo or Loki), and attaches clickable Grafana links -- so an issue pivots
+        # straight to its Tempo trace and Loki lines. Calling it HERE, before
+        # `app = FastAPI()` and wan.patch(), flips wan's _initialised guard; patch()
+        # then skips its own setup_sentry() instead of re-initing and dropping the
+        # gzip override above. ignore_loggers keeps wan's request logger from
+        # double-reporting every 5xx (it logs them at ERROR with the traceback; the
+        # FastAPI integration already captures the same exception).
+        from wan import REQUEST_LOGGER_NAME, setup_sentry
+        from wan import os_env as _wan_env
+
+        setup_sentry(
+            dsn=SENTRY_DSN,
+            service_name=_wan_env.SERVICE_NAME,
+            environment=_wan_env.SENTRY_ENVIRONMENT,
+            release=_wan_env.SENTRY_RELEASE or None,
+            grafana_url=_wan_env.GRAFANA_URL,
+            loki_selector=_wan_env.GRAFANA_LOKI_SELECTOR,
+            dashboard_uid=_wan_env.GRAFANA_DASHBOARD_UID,
+            logs_datasource={
+                'type': _wan_env.GRAFANA_LOGS_DATASOURCE_TYPE,
+                'uid': _wan_env.GRAFANA_LOGS_DATASOURCE_UID,
+            },
+            trace_datasource={
+                'type': _wan_env.GRAFANA_TRACE_DATASOURCE_TYPE,
+                'uid': _wan_env.GRAFANA_TRACE_DATASOURCE_UID,
+            },
+            ignore_loggers=(REQUEST_LOGGER_NAME,),
+            **_sentry_extras,
+        )
+    except ImportError:
+        # Older wan (pre-sentry) or none at all: plain init, same fields, no
+        # correlation stamping -- errors still arrive, just without the Grafana pivot.
+        sentry_sdk.init(dsn=SENTRY_DSN, **_sentry_extras)
 
 def _suppress_asgi_message_spans():
     """Default OTel's ASGI middleware to dropping its per-message spans.
