@@ -65,6 +65,8 @@ Copy [.env_example](.env_example) to `.env` and adjust as needed. See [app/env.p
 | `CONTEXT_TTL_S` | `600` | Idle seconds after which an id's history is forgotten |
 | `CONTEXT_MIN_GEN_TOKENS` | `1000` | Generation room (LM tokens, = 20 s of speech) the context may never squeeze below; beyond that the request's `max_tokens` is clamped instead |
 | `LM_MAX_MODEL_LEN` | `4096` | The LM server's `--max-model-len` ([vllm.yaml](vllm.yaml)). vLLM rejects prompt + `max_tokens` beyond it with a 400, so context requests are sized against it |
+| `CONTEXT_FALLBACK` | `true` | If the LM, prompted with history, stops before a text-proportional minimum of speech tokens (it "decided the utterance was over" — 13/40 `continue` and 3/40 `turns` chunks in the tm-h20 A/B), regenerate that chunk without context instead of returning near-silence. One extra LM call on those chunks only; no added latency otherwise |
+| `CONTEXT_MODE` | `turns` | Default for the `context_mode` request field: how the history is prompted — `turns` (previous chunks as closed VC-style turns, new chunk = new turn) or `continue` (one turn, all the text, previous tokens as prefix: the LM resumes mid-utterance). See [Speech context](#speech-context-request_id) |
 
 ### 3. Run the API
 
@@ -268,6 +270,7 @@ Accepts JSON body.
 | `stream_normalize` | bool | `STREAM_NORMALIZE` (`true`) | Per-utterance loudness normalization toward `TARGET_RMS_DB` |
 | `speaking_rate` | float | `DEFAULT_SPEAKING_RATE` (`1.0`) | Speaking rate, `0.5`–`2.0`: `1.3` speaks 30% faster, `0.8` slower, **pitch unchanged**. Also accepted as `speed` (OpenAI-compatible clients). See [Speaking rate](#speaking-rate) |
 | `request_id` | string | none | Speech-context id: requests sharing it are generated **in the context of the previous ones** (their text + speech tokens go into the prompt), so an agent that splits one reply into several TTS calls gets one continuous prosody. Alias `context_id`; also accepted as the `X-Context-Id` request header. See [Speech context](#speech-context-request_id) |
+| `context_mode` | `turns` \| `continue` | `CONTEXT_MODE` (`turns`) | How the history is prompted: `turns` = previous chunks as closed turns then a new turn (style conditioning, new utterance); `continue` = one turn with all the text and the previous tokens as prefix (the LM resumes mid-utterance). Only matters with a `request_id` |
 
 **Example:**
 
@@ -330,9 +333,27 @@ produced for it** — followed by the new text:
 <|im_start|>husein: i like to eat chicken rice.<|speech_start|>          ← generated
 ```
 
-Only the new turn's tokens are generated, decoded and streamed; the LM continues in the
-prosodic state it left off in. When a turn finishes cleanly its (text, tokens) pair is appended
-to the id's history for the next chunk (a turn cut off by `max_tokens` — `finish_reason:
+That is `context_mode: "turns"` (the default): the previous chunks are closed turns, the new
+chunk opens a new turn — the LM is conditioned on how the previous chunks sounded but still
+starts a new utterance. `context_mode: "continue"` instead builds **one** turn with all the text
+and the previous chunks' tokens already after `<|speech_start|>`:
+
+```
+<|im_start|>husein: hello my name is husein, i like to eat chicken rice.<|speech_start|><|s_…|>…<|s_…|>   ← generated from here
+```
+
+so the LM is resumed in exactly the state it is in while generating a long text and emits the
+tokens for the remaining words. Which one sounds better is what `bench/context_ab.py` measures
+(A/B1/B2/C listening page + join pitch/level jumps, `bench/context_ab_metrics.py`).
+
+In both modes only the new turn's tokens are generated, decoded and streamed. Both modes also
+share a **fallback** (`CONTEXT_FALLBACK`, default on): with history in the prompt the LM
+sometimes decides the utterance is already over and emits end-of-speech after a handful of
+tokens, so the LM reader holds the first tokens back (4 per word, 0.2–1 s — always under the
+first decode window, so nothing is delayed) and, if the LM stops before that, regenerates the
+chunk from the plain prompt. The client never sees the switch; it is logged and marked
+`tts.context_fallback` on the `tts.stream` span. When a turn
+finishes cleanly its (text, tokens) pair is appended to the id's history for the next chunk (a turn cut off by `max_tokens` — `finish_reason:
 length` — is not stored: misaligned text/audio is worse context than none). A `request_id` with
 no history behaves exactly like a request without one, so the first chunk pays nothing.
 
@@ -344,6 +365,7 @@ curl -s -X POST localhost:9091/v1/audio/speech -H 'Content-Type: application/jso
 curl -s -D - -X POST localhost:9091/v1/audio/speech -H 'Content-Type: application/json' \
   -d '{"input":"i like to eat chicken rice.","voice":"husein","request_id":"room-42","response_format":"wav","stream":false}' -o c2.wav
 #   X-Context-Id: room-42
+#   X-Context-Mode: turns
 #   X-Context-Turns: 1          <- turns in the prompt
 #   X-Context-Tokens: 137       <- their speech tokens (2.7 s)
 curl -s localhost:9091/v1/audio/context/room-42        # inspect: stored turns (text + token counts)

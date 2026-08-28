@@ -63,6 +63,44 @@ That is exactly what a chunked conversation needs, with the previous chunk(s) as
 Where the history comes from: when a turn's LM stream finishes cleanly, its
 `(text, token_ids)` pair is appended to the id's history for the next chunk.
 
+### 2b. Two ways to put the history in the prompt (`context_mode`)
+
+The format above is `context_mode: "turns"` (default `CONTEXT_MODE=turns`). The first A/B on
+tm-h20 (§9) showed its limit: the LM gets the previous chunks as *conditioning*, but a new
+`<|im_start|>` turn is still a new utterance — the sentence-initial pitch/energy reset at each
+join did not shrink. Hence a second mode, `"continue"`, which builds **one** turn:
+
+```
+<|im_start|>husein: hello my name is husein, i like to eat chicken rice.<|speech_start|><|s_1834|>…<|s_77|>
+                                                                                         ↑ previous chunk's tokens, then the LM generates
+```
+
+All the text (previous chunks + new), and the previous chunks' speech tokens already after
+`<|speech_start|>`. That is *exactly* the state the LM is in while generating a long text — it
+simply resumes and emits the tokens for the remaining words. `join_texts()` strips the `.` the
+rule normalizer appends to a chunk that ended in `,` (`"husein,."` → `"husein,"`) so the joined
+text reads as one sentence; the new chunk keeps its final `.` so the LM terminates. Everything
+else (store, trim, `fit_context`, commit, headers) is shared; `X-Context-Mode` says which mode
+served a response. Trade-off to listen for in `continue`: the previous tokens end with whatever
+final fall/pause the LM produced when it believed the chunk was the whole utterance, so the
+resume happens *after* that — the join is a pause, not a cold restart, but it is still a pause.
+
+### 2c. The fallback guard (`CONTEXT_FALLBACK`)
+
+Both modes share one failure the first runs exposed (§9): with history in the prompt the LM
+sometimes decides the utterance is *already over* and emits end-of-speech after 0–8 tokens —
+in `continue` mode because the prefix ends with the previous chunk's terminal fall and
+silence (the very tokens after which it emitted `<|im_end|>` last time), in `turns` mode
+occasionally for the same reason one turn later. Without context this never happened
+(0/40). So the LM reader **holds the first tokens back** — `4 × words`, floored at 10 (0.2 s)
+and capped at 50 (1 s), always below the first decode window of 110 tokens so nothing is
+delayed — and if the stream ends before that many have arrived, it discards them and
+re-issues the request with the plain single-turn prompt: exactly what a request without
+`request_id` would have produced. Nothing has reached the stitcher at that point, so the
+client sees a normal chunk; the switch is logged, an event on `lm.generate`, and
+`tts.context_fallback=true` on `tts.stream`. A real rendering runs ~15–20 tokens per word,
+so the threshold only trips on the collapse. Cost: one extra LM call on those chunks.
+
 ## 3. Request lifecycle
 
 ```
@@ -281,8 +319,51 @@ curl -s -X DELETE localhost:9091/v1/audio/context/room-42  # forget now (else TT
 | `CONTEXT_TTL_S` | `600` | Idle seconds before an id is forgotten |
 | `CONTEXT_MIN_GEN_TOKENS` | `1000` | Generation room the context may never squeeze below |
 | `LM_MAX_MODEL_LEN` | `4096` | vLLM's `--max-model-len`; prompt + `max_tokens` are sized against it |
+| `CONTEXT_MODE` | `turns` | `turns` (closed VC-style turns, new chunk = new turn) or `continue` (one turn, previous tokens as prefix); request field `context_mode` overrides |
+| `CONTEXT_FALLBACK` | `true` | Regenerate a chunk without history if the LM stops before `4 × words` tokens (§2c) |
 
-## 9. Verification and open points
+## 9. What the tm-h20 A/B showed (2026-08-28)
+
+Setup: branch running as slurm job on GPU 2 of tm-h20 (2 uvicorn workers, file store, same
+vLLM engine as prod, rule normalizer, temperature 0.6), `bench/context_ab.py`: 4 texts
+(EN husein, MS idayu, EN TM_English_Normal, the chicken-rice pair) × 2 takes × conditions
+A (no context) / B1 (`turns`) / B2 (`continue`) / C (one request), 40 chunks per condition.
+`bench/context_ab_metrics.py` measures, at every chunk join, the pitch jump (median F0,
+semitones) and level jump (RMS, dB) between the last voiced ~0.3 s before and the first
+voiced ~0.3 s after. The listening page (`bench/context_ab_page.py`) is what to actually
+judge by — the metric is crude (pyin on 300 ms windows, sampled speech, per-chunk loudness
+normalization in the stitcher) and its noise floor turned out to be ~5 semitones.
+
+| run | A no context | B1 turns | B2 continue | C one request | note |
+|---|---|---|---|---|---|
+| 1 (turns only) | 5.6 st / 5.8 dB | 6.1 st / 5.8 dB | — | 2.7 st / 3.1 dB | B1 no better than A at the joins → added `continue` |
+| 3 (both modes, no fallback) | 5.2 st / 4.5 dB | 5.7 st / 7.1 dB | 5.2 st / 5.3 dB | 5.2 st / 3.6 dB | **B2: 13/40 chunks empty (0 tokens), B1: 3/40 near-empty, A: 0/40** → added the fallback |
+| 4 (both modes + fallback) | 5.6 st / 4.5 dB | 6.2 st / 5.1 dB | **4.3 st** / 8.1 dB | 3.6 st / 3.6 dB | **0 empty chunks** in 240; B1 still overran twice (8.9 s and 6.6 s for ~3 s sentences); B2 none. Latency p90 (chunks 2+): A 1.15 s, B1 1.00 s, B2 0.51 s |
+
+Findings that matter more than the medians:
+
+1. **The LM can decide the utterance is over.** Given the previous chunk's tokens — which end
+   in a sentence-final fall and silence because that chunk was generated as a complete
+   utterance — the LM frequently emits end-of-speech at once for the next text in `continue`
+   mode (and once it does, every following chunk of that take too, since each resumes from
+   the same kind of prefix). `turns` mode does it less often but not never. This is why the
+   fallback exists; with it, no chunk in the smoke run (32) or run 4 (240) came back empty.
+   Run 4 is the one on the listening page: A / B1 / B2 / C, 8 takes, with the join metrics
+   under each row. Reading it: B2 has the smallest pitch jump of the chunked conditions
+   (4.3 st, vs 5.6 cold and 3.6 for one request) and no failures; B1 gives no measurable
+   benefit and still overruns; the level-jump column is dominated by the per-request gain
+   (point 4). The ears decide — that is what the page is for.
+2. **`continue` chunks are shorter** than their cold twins (e.g. 1.62 vs 2.28 s, 1.60 vs 1.84 s),
+   consistent with mid-utterance pace and no sentence-initial/final pauses — the desired
+   effect — but the listening test has to confirm no words are dropped.
+3. **`turns` mode occasionally overruns** (one 6.2 s rendering of a 2.4 s sentence) — the
+   VC-style history seems to invite the LM to keep going. Not guarded yet.
+4. The per-chunk loudness normalization (`STREAM_NORMALIZE`) applies one gain **per
+   request**, so part of the level jump at every join in A/B1/B2 is the stitcher's, not the
+   LM's; C gets one gain for the whole text. A context-aware gain (carry the locked gain of
+   the previous chunk through the store) is an obvious follow-up if B is adopted.
+
+## 10. Verification and open points
 
 - `uv run --with pytest -- pytest tests/test_context.py` — 34 tests, no GPU: trim semantics,
   proportional tail cut (words and CJK), voice filtering, prompt format, `fit_context`
