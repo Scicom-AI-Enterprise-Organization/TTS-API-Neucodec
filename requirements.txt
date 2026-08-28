@@ -22,6 +22,10 @@ dateparser>=1.2.0
 num2words>=0.5.14
 Unidecode>=1.3.0
 sentry-sdk[fastapi]>=2.34.1
+# opentelemetry-instrumentation (pulled in by wan) imports pkg_resources, which
+# Python 3.12 venvs no longer ship and setuptools >= 81 no longer provides. Without
+# this pin a fresh install crashes at wan.patch() on startup.
+setuptools<81
 snac>=1.2.1
 soundfile>=0.13.1
 tensorboard>=2.20.0
