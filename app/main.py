@@ -747,51 +747,98 @@ async def stream_speech(
                             await asyncio.sleep(DUMMY_TOKEN_DELAY)
                 return
 
-            t_post = tracing.now_ns()
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    TTS_API,
-                    headers=headers,
-                    json=json_data,
-                ) as resp:
-                    t_headers = tracing.now_ns()
-                    tracing.record_span(
-                        'lm.connect', t_post, t_headers, parent=lm_ctx,
-                        attrs={'http.response.status_code': resp.status},
-                    )
-                    tracing.set_attributes(lm_span, {'http.response.status_code': resp.status})
-                    if resp.status != 200:
-                        error_text = await resp.text()
-                        logging.error(f"Backend error: {resp.status} - {error_text}")
-                        queue.put_nowait({'error': f'backend returned {resp.status}: {error_text[:200]}'})
-                        return
+            # Speech context: with history in the prompt the LM sometimes decides the
+            # utterance is already over and emits end-of-speech after a handful of tokens
+            # (see FALLBACK_* in app/context.py). Hold the first tokens back -- always
+            # fewer than the first decode window, so nothing is delayed -- and if the LM
+            # stops before that many, regenerate this chunk from the plain prompt: what
+            # a request without request_id would have produced. Nothing has reached the
+            # stitcher yet, so the switch is invisible to the client.
+            hold_tokens = (
+                context.fallback_hold_tokens()
+                if (CONTEXT_FALLBACK and context is not None) else 0
+            )
+            attempt_prompt = prompt
+            fallback_used = False
+            while True:
+                held = []                   # deltas withheld from the stitcher so far
+                held_tokens = 0
+                released = hold_tokens == 0
+                lm_text = []
+                lm_done = False
+                finish_reason = None
+                json_data['prompt'] = attempt_prompt
+                t_post = tracing.now_ns()
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        TTS_API,
+                        headers=headers,
+                        json=json_data,
+                    ) as resp:
+                        t_headers = tracing.now_ns()
+                        tracing.record_span(
+                            'lm.connect', t_post, t_headers, parent=lm_ctx,
+                            attrs={'http.response.status_code': resp.status},
+                        )
+                        tracing.set_attributes(lm_span, {'http.response.status_code': resp.status})
+                        if resp.status != 200:
+                            error_text = await resp.text()
+                            logging.error(f"Backend error: {resp.status} - {error_text}")
+                            queue.put_nowait({'error': f'backend returned {resp.status}: {error_text[:200]}'})
+                            return
 
-                    async for line in resp.content:
-                        if await client_gone():
-                            tracing.add_event(lm_span, 'client_disconnected')
-                            break
-                        if line.startswith(b"data: "):
-                            data_str = line.decode("utf-8").strip()[6:]
-                            if data_str == "[DONE]":
-                                lm_done = True
+                        async for line in resp.content:
+                            if await client_gone():
+                                tracing.add_event(lm_span, 'client_disconnected')
                                 break
-                            try:
-                                data_json = json.loads(data_str)
-                                delta = data_json["choices"][0]
-                                finish_reason = delta.get("finish_reason") or finish_reason
-                                if "text" in delta:
-                                    if not n_deltas:
-                                        # prefill: what the request actually waited for
-                                        tracing.record_span(
-                                            'lm.first_token', t_headers, tracing.now_ns(),
-                                            parent=lm_ctx,
-                                        )
-                                    n_deltas += 1
-                                    if context is not None:
-                                        lm_text.append(delta["text"])
-                                    await queue.put({'result': delta["text"]})
-                            except json.JSONDecodeError:
-                                continue
+                            if line.startswith(b"data: "):
+                                data_str = line.decode("utf-8").strip()[6:]
+                                if data_str == "[DONE]":
+                                    lm_done = True
+                                    break
+                                try:
+                                    data_json = json.loads(data_str)
+                                    delta = data_json["choices"][0]
+                                    finish_reason = delta.get("finish_reason") or finish_reason
+                                    if "text" in delta:
+                                        if not n_deltas:
+                                            # prefill: what the request actually waited for
+                                            tracing.record_span(
+                                                'lm.first_token', t_headers, tracing.now_ns(),
+                                                parent=lm_ctx,
+                                            )
+                                        n_deltas += 1
+                                        text = delta["text"]
+                                        if context is not None:
+                                            lm_text.append(text)
+                                        if released:
+                                            await queue.put({'result': text})
+                                        else:
+                                            held.append(text)
+                                            held_tokens += text.count('<|s_')
+                                            if held_tokens >= hold_tokens:
+                                                for h in held:
+                                                    await queue.put({'result': h})
+                                                held = []
+                                                released = True
+                                except json.JSONDecodeError:
+                                    continue
+
+                if not released and lm_done and context is not None and not fallback_used:
+                    logging.warning(
+                        f'context {context.key} ({context.mode}): LM stopped after '
+                        f'{held_tokens} speech tokens (< {hold_tokens}) -- regenerating without context'
+                    )
+                    tracing.add_event(lm_span, 'context_fallback', {
+                        'context.mode': context.mode, 'lm.tokens': held_tokens, 'lm.hold': hold_tokens,
+                    })
+                    tracing.set_attributes(stream_span, {'tts.context_fallback': True})
+                    fallback_used = True
+                    attempt_prompt = context.plain_prompt()
+                    continue
+                for h in held:              # short but final: release what there is
+                    await queue.put({'result': h})
+                break
 
         except asyncio.CancelledError:
             tracing.add_event(lm_span, 'cancelled')

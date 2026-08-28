@@ -369,3 +369,20 @@ class TestContinueMode:
         ctx = RequestContext(store=MemoryContextStore(60, 100), key='k', voice='v', text='t', mode='continue')
         assert ctx.headers()['X-Context-Mode'] == 'continue'
         assert RequestContext(store=MemoryContextStore(60, 100), key='k', voice='v', text='t').headers()['X-Context-Mode'] == 'turns'
+
+
+class TestFallbackGuard:
+    def test_hold_scales_with_text_and_is_bounded(self):
+        from app.context import FALLBACK_MIN_TOKENS, FALLBACK_MAX_TOKENS
+        st = MemoryContextStore(60, 1000)
+        hist = [Turn('prev.', [1, 2, 3], 'v')]
+        assert RequestContext(store=st, key='k', voice='v', text='hi.', turns=hist).fallback_hold_tokens() == FALLBACK_MIN_TOKENS
+        assert RequestContext(store=st, key='k', voice='v', text='I have checked your account,', turns=hist).fallback_hold_tokens() == 20
+        assert RequestContext(store=st, key='k', voice='v', text=' '.join(['w'] * 40), turns=hist).fallback_hold_tokens() == FALLBACK_MAX_TOKENS
+        # no history -> nothing to guard against, release immediately
+        assert RequestContext(store=st, key='k', voice='v', text='I have checked your account,').fallback_hold_tokens() == 0
+
+    def test_plain_prompt_drops_history(self):
+        ctx = RequestContext(store=MemoryContextStore(60, 1000), key='k', voice='husein',
+                             text='I like to eat chicken rice.', turns=[Turn('prev.', [1], 'husein')], mode='continue')
+        assert ctx.plain_prompt() == '<|im_start|>husein: I like to eat chicken rice.<|speech_start|>'

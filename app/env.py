@@ -113,6 +113,10 @@ SENTRY_DSN = os.environ.get('SENTRY_DSN', '')
 #     mid-utterance. See app/context.py build_prompt() and SPEECH_CONTEXT.md.
 CONTEXT_STORE = os.environ.get('CONTEXT_STORE', 'file')
 CONTEXT_MODE = os.environ.get('CONTEXT_MODE', 'turns')
+# If the LM, prompted with history, stops before a text-proportional minimum of speech
+# tokens (it "decided the utterance was over"), regenerate that chunk without context
+# instead of returning near-silence. Costs one extra LM call on those chunks only.
+CONTEXT_FALLBACK = os.environ.get('CONTEXT_FALLBACK', 'true').lower() == 'true'
 CONTEXT_STORE_DIR = os.environ.get('CONTEXT_STORE_DIR', '')
 CONTEXT_MAX_S = float(os.environ.get('CONTEXT_MAX_S', '20'))
 CONTEXT_TTL_S = float(os.environ.get('CONTEXT_TTL_S', '600'))

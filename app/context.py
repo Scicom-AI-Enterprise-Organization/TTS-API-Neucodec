@@ -86,6 +86,16 @@ NEW_TURN_SPECIAL_TOKENS = 2       # <|im_start|> <|speech_start|>
 # proportion heuristic is meaningless and the fragment gives the LM nothing.
 MIN_PARTIAL_TOKENS = TOKENS_PER_SECOND
 LM_WINDOW_MARGIN = 16             # slack on the LM-window estimate (BOS etc.)
+# Fallback guard (RequestContext.fallback_hold_tokens): with history in the prompt the LM
+# sometimes decides the utterance is already over and emits end-of-speech after 0-8
+# tokens (H20 A/B: 13/40 `continue` chunks, 3/40 `turns` chunks; 0/40 without context).
+# The LM reader holds the first tokens back until at least this many have arrived --
+# 4 per word of text, floored at 0.2 s and capped at 1 s so it always stays under the
+# first decode window (no added latency) -- and if the LM stops before that, the chunk
+# is regenerated without context. A real rendering runs ~15-20 tokens per word.
+FALLBACK_TOKENS_PER_WORD = 4
+FALLBACK_MIN_TOKENS = 10
+FALLBACK_MAX_TOKENS = TOKENS_PER_SECOND
 
 
 @dataclass
@@ -481,6 +491,18 @@ class RequestContext:
     @property
     def tokens(self) -> int:
         return total_tokens(self.turns)
+
+    def fallback_hold_tokens(self) -> int:
+        """Speech tokens the LM must produce for this text before its output is trusted
+        (see FALLBACK_TOKENS_PER_WORD). 0 when there is no history in the prompt."""
+        if not self.turns:
+            return 0
+        words = max(1, len(self.text.split()))
+        return int(min(FALLBACK_MAX_TOKENS, max(FALLBACK_MIN_TOKENS, FALLBACK_TOKENS_PER_WORD * words)))
+
+    def plain_prompt(self) -> str:
+        """This request without any history -- what it would have been with no request_id."""
+        return build_prompt([], self.voice, self.text)
 
     def commit(self, token_ids: list[int]) -> Optional[list[Turn]]:
         if not token_ids:
