@@ -182,6 +182,18 @@ CORPUS = [
     ('cs_4', 'cs', 'mixed', 'Your bill RM85.50 dah overdue since 15/3/2024, boleh settle hari ini?'),
     ('cs_5', 'cs', 'mixed', 'Encik boleh dapat 25% discount kalau bayar before 30 June.'),
     ('cs_6', 'cs', 'plain', 'Okay lah, nanti saya check dan inform you balik ya.'),
+    ('cs_7', 'cs', 'mixed', 'Nombor akaun anda ialah 1234, and your balance is RM50 today.'),
+    ('cs_8', 'cs', 'mixed', 'Please pay RM120 before 5pm, kalau tidak akaun anda akan digantung selama 3 hari.'),
+    ('cs_9', 'cs', 'mixed', 'Saya dah email invoice no. 4471 to you, please check by 15/3/2024.'),
+    ('cs_10', 'cs', 'mixed', 'Total 3 items, harga RM45.90 semuanya, delivered in 2 days.'),
+    ('cs_11', 'cs', 'mixed', 'Boleh call saya at 012-3456789 after 6pm, saya free.'),
+    ('cs_12', 'cs', 'mixed', 'Discount 20% untuk pelajar, RM15 sahaja per ticket.'),
+    ('cs_13', 'cs', 'mixed', 'Meeting pukul 10 pagi esok at level 12, jangan lupa bring 2 copies.'),
+    ('cs_14', 'cs', 'mixed', 'Order anda dah ship, tracking number ABC1234, sampai dalam 3-5 hari.'),
+    ('cs_15', 'cs', 'mixed', 'Your appointment on 5 Jun 2025 at 2.30pm, sila datang 15 minit awal.'),
+    ('cs_16', 'cs', 'mixed', 'Bayaran RM250 received, thank you, resit akan dihantar dalam 24 jam.'),
+    ('cs_17', 'cs', 'mixed', 'Sila tunggu, I will transfer you to extension 305 in 2 minutes.'),
+    ('cs_18', 'cs', 'mixed', 'The delivery fee is RM8, tapi free kalau order lebih daripada RM100.'),
 
     # ------------------------------------------------------------------ Mandarin
     ('zh_int_1', 'zh', 'int', '我们今天有3个选择给您。'),

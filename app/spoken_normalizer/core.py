@@ -15,7 +15,7 @@ called out inline. Score it with bench/normalizer_agreement.py.
 import re
 
 from . import numbers as N
-from .lang import detect_lang
+from .lang import detect_lang, latin_scores, local_lang
 
 # --------------------------------------------------------------------------- vocabulary
 V = {
@@ -86,7 +86,7 @@ _DIGIT_CONTEXT = {
     'zh': r'密码|编号|号码|订单|参考|账号|工单',
     'ta': r'அறை|no\.?|எண்|ஆர்டர்|pin|குறிப்பு|order|invoice|id',
 }
-_ALWAYS_DIGITS_CONTEXT = r'room|rooms|bilik|pin|அறை|密码'
+_ALWAYS_DIGITS_CONTEXT = r'room|rooms|bilik|pin|extension|ext|sambungan|அறை|密码'
 
 # Chinese: 2 before a measure word is 两 (两箱, 两点), not 二 -- except after 第 (第二次).
 _ZH_MEASURE = '个箱件位次点天人张份块条台辆间只杯瓶本层种批小周组套页颗粒根支'
@@ -257,17 +257,20 @@ DATE_MDY_RE = re.compile(r'(?<![A-Za-z])(' + _MONTH_ALT + r')(?![A-Za-z])\.?\s+(
                          re.IGNORECASE)
 
 
+_FULL_MONTHS = {m.lower() for lang_ in ('en', 'ms', 'ta') for m in MONTHS[lang_] if m}
+
+
 def _month_name_out(written, lang):
-    """The month as the sentence should say it: full name in the sentence language when the
-    input was an abbreviation, otherwise as written (the LLM keeps 'June' inside Malay)."""
+    """The month as the sentence should say it. An abbreviation ("Jan", "Sept") becomes the
+    full name in the sentence language; a full name in another language is kept as written
+    (the LLM says "tiga puluh June" inside Malay) -- except in English, where the Malay
+    names (Mac, Jun, Ogos, Disember) become the English ones."""
     key = written.lower().rstrip('.')
     num = _MONTH_NUM.get(key)
     if num is None:
         return written, None
-    if lang in ('en', 'ms', 'ta') and (len(key) <= 4 and key not in ('mac', 'mei', 'jun', 'may', 'june', 'july')):
+    if lang in MONTHS and (key not in _FULL_MONTHS or (lang == 'en' and key != MONTHS['en'][num].lower())):
         return MONTHS[lang][num], num
-    if lang == 'ta' and key in _MONTH_NUM and not any('஀' <= ch <= '௿' for ch in written):
-        return MONTHS['ta'][num] if written.lower() in ('jan', 'feb', 'mar', 'apr', 'aug', 'sep', 'sept', 'oct', 'nov', 'dec') else written, num
     return written, num
 
 
@@ -506,8 +509,9 @@ def _number(m, lang):
         return _num_words(whole, frac, lang)
     digits = whole.replace(',', '')
     before = m.string[:m.start()]
-    ctx = re.search(r'(?:\b|^)(' + _DIGIT_CONTEXT[lang] + r')\s*(?:[:#]\s*)?(?:is|ialah|adalah|number|nombor|no\.?)?\s*$',
-                    before[-24:], re.IGNORECASE)
+    # a digit-context word within the last four tokens: "Room 305", "akaun anda ialah 1234"
+    ctx = re.search(r'(?:^|(?<![A-Za-z0-9_]))(' + _DIGIT_CONTEXT[lang] + r')(?![A-Za-z0-9_])'
+                    r'(?:\s*[:#]?\s*[^\s\d,.;!?]+){0,3}\s*$', before[-48:], re.IGNORECASE)
     caps = re.search(r'(?<![A-Za-z])[A-Z]{2,}\s+$', before)
     if (',' not in whole) and (
             (caps and len(digits) >= 3)                                 # HTTP 404
@@ -548,8 +552,9 @@ ABBREVIATIONS = {
     'en': [(r'\bDr\.(?=\s)', 'Doctor'), (r'\bProf\.(?=\s)', 'Professor'), (r'\bvs\.?(?=\s)', 'versus'),
            (r'\bapprox\.(?=\s)', 'approximately'), (r'\bNo\.(?=\s)', 'Number')],
     'ms': [(r'\bDr\.(?=\s)', 'Doktor'), (r'\bJln\.?(?=\s)', 'Jalan'), (r'\bNo\.(?=\s)', 'Nombor'),
-           (r'\bno\.(?=\s)', 'nombor'), (r'\bcth\.', 'contohnya'), (r'\bdsb\.', 'dan sebagainya'),
-           (r'\bdll\.', 'dan lain-lain'), (r'\bTmn\.?(?=\s)', 'Taman'), (r'\bKg\.?(?=\s[A-Z])', 'Kampung')],
+           (r'\bno\.(?=\s)', 'nombor'), (r'\bcth\.(?=\s)', 'contohnya'), (r'\bcth\.$', 'contohnya.'),
+           (r'\bdsb\.(?=\s)', 'dan sebagainya'), (r'\bdsb\.$', 'dan sebagainya.'),
+           (r'\bdll\.(?=\s)', 'dan lain-lain'), (r'\bdll\.$', 'dan lain-lain.'), (r'\bTmn\.?(?=\s)', 'Taman'), (r'\bKg\.?(?=\s[A-Z])', 'Kampung')],
     'zh': [],
     'ta': [],
 }
@@ -572,18 +577,30 @@ PIPELINE = [
 
 
 def normalize(text, lang=None):
-    """Spoken form of `text`. lang: 'en' | 'ms' | 'zh' | 'ta', detected from the text when None."""
+    """Spoken form of `text`. lang: 'en' | 'ms' | 'zh' | 'ta', detected from the text when None.
+
+    In a Malay/English code-switched sentence (markers of both present and no explicit
+    lang) every number picks its own language from its neighbours (lang.local_lang)."""
     if not text or not re.search(r'\d|[@#%°℃℉]|www\.|https?://', text):
         return _abbreviations(text or '', lang or detect_lang(text or ''))
-    lang = lang or detect_lang(text)
+    base = lang or detect_lang(text)
+    pick = None
+    if lang is None and base in ('ms', 'en'):
+        ms, en = latin_scores(text)
+        if ms >= 1 and en >= 1:
+            tie = ms == en
+            pick = lambda m: local_lang(m.string, m.start(), m.end(), base, tie)   # noqa: E731
     s = text
-    if lang == 'zh':
+    if base == 'zh':
         s = _zh_particles(s)
     for pattern, handler in PIPELINE:
-        if handler is _ord_en and lang != 'en':
-            continue
-        s = _sub(pattern, handler, s, lang)
-    s = _abbreviations(s, lang)
+        if pick is None:
+            s = pattern.sub(lambda m: handler(m, base), s)
+        else:
+            s = pattern.sub(lambda m: handler(m, pick(m)), s)
+    s = _abbreviations(s, base)
+    if base == 'zh':
+        s = re.sub(r' (?=[。，！？；：、）])', '', s)      # no space before CJK punctuation
     return re.sub(r'[ \t]{2,}', ' ', s).strip()
 
 
