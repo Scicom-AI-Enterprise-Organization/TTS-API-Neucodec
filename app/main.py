@@ -1200,7 +1200,7 @@ def _post_normalize(s):
     for k, v in replace_mapping.items():
         s = s.replace(k, v)
 
-    if not s.endswith('.'):
+    if not s.endswith(('.', '。')):     # a Chinese full stop is already a sentence end
         s = s + '.'
 
     return re.sub(r'[ ]+', ' ', s).strip()
