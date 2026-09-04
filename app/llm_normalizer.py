@@ -21,8 +21,9 @@ from app.prompt import SYSTEM_PROMPT, EXAMPLES, JSON_SCHEMA
 
 
 class NormalizerMode(str, Enum):
-    rule = 'rule'
-    llm = 'llm'
+    rule = 'rule'        # legacy malaya-derived pipeline (app/normalizer)
+    llm = 'llm'          # OpenAI-compatible LLM with the prompt in app/prompt.py
+    spoken = 'spoken'    # rule-based replica of the LLM (app/spoken_normalizer), no network
 
 
 class LLMNormalizerError(Exception):
@@ -61,6 +62,60 @@ def parse_normalized(content):
     if isinstance(out, str):
         return out.strip() or None
     return None
+
+
+# ---------------------------------------------------------------------------
+# "Nothing to normalize" fast path
+# ---------------------------------------------------------------------------
+# One LLM round trip is ~0.55 s of TTFB (gemma-4-31b behind the serverless proxy, measured
+# from tm-h20 on 2026-09-04: mean 0.56 s, max 0.67 s over 21 sentences), and on plain
+# conversational text it hands the input back unchanged (19/19 plain evalset sentences
+# came back byte-identical). Everything SYSTEM_PROMPT asks the model to rewrite -- numbers,
+# money, IC/phone numbers, dates, times, percentages, decimals, ordinals, units, emails,
+# URLs -- plus what it expands in practice beyond that ("Dr." -> "Doctor", acronyms) leaves
+# a lexical trace: a digit, a symbol, a dotted or ALL-CAPS token, or a known abbreviation.
+# Text with none of those skips the call and gets the same pre/post cleanup the LLM path
+# applies, so the output is identical to a no-op LLM reply. Conservative on purpose: any
+# doubt still goes to the LLM (a wasted call costs latency, a wrong skip costs correctness).
+# main.py gates this behind LLM_NORMALIZER_SKIP_PLAIN; bench/normalizer_gate_eval.py
+# checks the assumption against the live LLM.
+
+_PLAIN_PUNCT = ".,!?;:'’‘\"“”()\\-–—…、。，！？；：「」『』（）"
+_NEEDS_LLM = re.compile(
+    r'\d'                                   # any digit (Unicode-aware)
+    rf'|[^\w\s{_PLAIN_PUNCT}]'              # any symbol beyond plain punctuation: % $ @ & / + = # * ...
+    r'|_'                                   # \w admits underscore (markdown, identifiers)
+    r'|\w\.\w'                              # dotted tokens: site.com, e.g., U.S.
+    r'|\b[A-Z]{2,}\b'                       # acronyms / all caps: IC, TNB, OTP, RM
+    # abbreviations that are rarely ordinary words: match bare
+    r'|(?i:\b(?:dr|mr|mrs|ms|prof|sdn|bhd|jln|tmn|hj|etc|eg|ie|vs|approx|dept|govt|tel|fax|'
+    r'ext|acct|amt|mth|yr|wk|sept|km|cm|mm|ml|kg|mg|gb|mb|kb|tb|hz|khz|mhz|ghz|mph|kph|kmh|'
+    r'lbs|oz|sq)\b)'
+    # ... and ones that are ordinary words too ("no", "am", "sat"): only when written with a period
+    r'|(?i:\b(?:no|st|rd|co|inc|ltd|corp|min|max|sec|hrs?|mins?|mon|tues?|wed|thur?s?|fri|sat|'
+    r'sun|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec|am|pm|en|pn|tn|cik|ir|ref|acc|bal|ave|'
+    r'blvd|ft)\.)'
+)
+
+
+def needs_normalization(text):
+    """True if `text` may contain something the LLM normalizer would rewrite.
+
+    False means the text is plain words and punctuation only, for which the LLM returns
+    its input unchanged -- so the caller can skip the call. See the note above.
+    """
+    return bool(_NEEDS_LLM.search(text or ''))
+
+
+_UNSPOKEN = re.compile(r'\d|[^\w\s' + re.escape(_PLAIN_PUNCT) + r']|\w\.\w')
+
+
+def has_unspoken(text):
+    """Narrower than needs_normalization(): only what is unspeakable as written (a digit, a
+    symbol, a dotted token). Acronyms and abbreviations do not count -- the TTS LM reads those
+    and the LLM leaves most of them alone. Used by LLM_NORMALIZER_RULE_FIRST to decide whether
+    the spoken normalizer left anything for the LLM to do."""
+    return bool(_UNSPOKEN.search(text or ''))
 
 
 async def llm_normalize(text, base_url=None, api_key=None, model=None, timeout=None):

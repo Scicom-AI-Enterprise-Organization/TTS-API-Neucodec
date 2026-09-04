@@ -21,7 +21,8 @@ DEFAULT_PLAYBACK_OVERLAP_SPEED = float(os.environ.get('DEFAULT_PLAYBACK_OVERLAP_
 # rate control. Requests override it with `speaking_rate` (alias `speed`), range 0.5-2.0.
 DEFAULT_SPEAKING_RATE = float(os.environ.get('DEFAULT_SPEAKING_RATE', '1.0'))
 # Request-level normalization defaults (overridable per request). DEFAULT_NORMALIZER_MODE
-# must be 'rule' or 'llm' (validated against NormalizerMode in app/main.py at import).
+# must be 'rule' (legacy pipeline), 'llm' or 'spoken' (rule-based replica of the LLM,
+# app/spoken_normalizer) -- validated against NormalizerMode in app/main.py at import.
 DEFAULT_NORMALIZE_MALAYSIAN = os.environ.get('DEFAULT_NORMALIZE_MALAYSIAN', 'false').lower() == 'true'
 DEFAULT_NORMALIZER_MODE = os.environ.get('DEFAULT_NORMALIZER_MODE', 'rule')
 # Streaming stitcher: overlap-add with context-primed windows + a raised-cosine
@@ -87,6 +88,18 @@ OPENAI_MODEL_NAME = os.environ.get('OPENAI_MODEL_NAME', '')
 # Bounds how long a TTS request can stall on a hung LLM-normalizer endpoint before
 # the rule-based fallback kicks in (normalize calls measure 1-2s in practice).
 OPENAI_TIMEOUT = float(os.environ.get('OPENAI_TIMEOUT', '10'))
+# Skip the LLM normalizer round trip (~0.55 s, all of it TTFB) when the pre-normalized
+# text has nothing it could rewrite: no digit, symbol, dotted/ALL-CAPS token or known
+# abbreviation (app/llm_normalizer.py needs_normalization). On such text the LLM returns
+# its input unchanged, so the output is identical either way. false = always call it.
+LLM_NORMALIZER_SKIP_PLAIN = os.environ.get('LLM_NORMALIZER_SKIP_PLAIN', 'true').lower() == 'true'
+# In mode=llm, run the spoken (rule) normalizer first and only call the LLM when it left
+# something unspeakable behind (a digit, a symbol, a dotted token -- see has_unspoken). The
+# rules agree with the LLM on ~85% of sentences verbatim and never leave a digit unread
+# (bench/normalizer_agreement.py), so with this on the LLM is reached almost never and the
+# ~0.55 s round trip disappears from TTFB; off by default because it changes what mode=llm
+# produces on the sentences where the two differ.
+LLM_NORMALIZER_RULE_FIRST = os.environ.get('LLM_NORMALIZER_RULE_FIRST', 'false').lower() == 'true'
 DEBUG_AUDIO = os.environ.get('DEBUG_AUDIO', 'false').lower() == 'true'
 SENTRY_DSN = os.environ.get('SENTRY_DSN', '')
 

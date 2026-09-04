@@ -28,14 +28,14 @@ Copy [.env_example](.env_example) to `.env` and adjust as needed. See [app/env.p
 | `DEFAULT_TEMPERATURE` | `0.6` | Sampling temperature |
 | `DEFAULT_REPETITION_PENALTY` | `1.15` | Repetition penalty |
 | `DEFAULT_MAX_TOKENS` | `3072` | Max output tokens |
-| `DEFAULT_PLAYBACK_SPEED` | `2.0` | First decode window in seconds ×50 tokens (2.0 ⇒ 100 tokens = 2 s) |
+| `DEFAULT_PLAYBACK_SPEED` | `2.0` | First decode window in seconds ×50 tokens (2.0 ⇒ 100 tokens = 2 s). The first audio byte waits for this many tokens (+ overlap) from the LM, so it is the TTFB knob: 2.0 ⇒ ~220 ms, 1.5 ⇒ ~170 ms, 0.75 ⇒ ~100 ms at 530 tok/s; 0.75 was verified transcript-identical to a one-shot decode, 0.5 skews the loudness normalizer +1 dB (see [CLAUDE.md](CLAUDE.md), *Time to first byte*) |
 | `STREAM_CHUNK_GROWTH` | `2.0` | Each later decode window grows by this factor (1.0 = fixed windows) |
 | `STREAM_MAX_CHUNK_S` | `10.0` | Cap on grown decode windows (seconds) |
 | `STREAM_PAST_CONTEXT_S` | `3.0` | Past tokens included in every decode window then sliced off (no latency cost; pulls windowed decode toward one-shot) |
 | `DEFAULT_PLAYBACK_OVERLAP_SPEED` | `0.2` | Overlap speed for crossfading |
 | `DEFAULT_SPEAKING_RATE` | `1.0` | Default speaking rate (`speaking_rate` request field): 1.3 = 30% faster, 0.8 = slower, pitch preserved (WSOLA time stretch on the decoded audio, see below) |
 | `DEFAULT_NORMALIZE_MALAYSIAN` | `false` | Default for the `normalize_malaysian` request field |
-| `DEFAULT_NORMALIZER_MODE` | `rule` | Default for the `mode` request field (`rule` or `llm`) |
+| `DEFAULT_NORMALIZER_MODE` | `rule` | Default for the `mode` request field: `rule` (legacy pipeline), `llm`, or `spoken` (rule-based replica of the LLM normalizer, see below) |
 | `STREAM_CROSSFADE` | `true` | Context-primed windows + raised-cosine crossfade at chunk boundaries (removes the boundary click; `false` = legacy hard cut) |
 | `CROSSFADE_MS` | `12.0` | Crossfade blend width in ms |
 | `STREAM_NORMALIZE` | `true` | Loudness-normalize streamed audio toward `TARGET_RMS_DB` (running per-utterance estimate; kills the 3–10 dB run-to-run LM loudness variance and full-scale clipping) |
@@ -59,6 +59,8 @@ Copy [.env_example](.env_example) to `.env` and adjust as needed. See [app/env.p
 | `OPENAI_API_KEY` | ` ` | API key for `OPENAI_BASE_URL` |
 | `OPENAI_MODEL_NAME` | ` ` | Model to use on `OPENAI_BASE_URL` (e.g. `google/gemma-4-31b-it`). **Not** `MODEL_NAME`, which is the TTS model |
 | `OPENAI_TIMEOUT` | `10` | LLM normalizer request timeout (seconds); bounds the TTS stall before rule-based fallback |
+| `LLM_NORMALIZER_SKIP_PLAIN` | `true` | Skip the LLM normalizer call (~0.55 s, all of it before the first audio byte) when the text has nothing to normalize: no digit, symbol, ALL-CAPS/dotted token or known abbreviation (`needs_normalization` in `app/llm_normalizer.py`). Output is identical either way (verified 51/51 sentences against the live LLM, `bench/normalizer_gate_eval.py`); `false` = always call |
+| `LLM_NORMALIZER_RULE_FIRST` | `false` | In `mode=llm`, run the `spoken` rules first and only call the LLM when they left something unspeakable behind (a digit, a symbol, a dotted token). Removes the ~0.55 s LLM round trip from TTFB on practically every request; off by default because it changes the output on the ~14% of sentences where the two differ |
 
 ### 3. Run the API
 
@@ -216,7 +218,7 @@ selected by `mode`:
 |---|---|---|---|
 | `input` | string | required | Text to normalize |
 | `normalize_malaysian` | bool | `DEFAULT_NORMALIZE_MALAYSIAN` (`false`) | Apply Malaysian text normalization (`rule` mode only) |
-| `mode` | `rule` \| `llm` | `DEFAULT_NORMALIZER_MODE` (`rule`) | Normalization engine |
+| `mode` | `rule` \| `llm` \| `spoken` | `DEFAULT_NORMALIZER_MODE` (`rule`) | Normalization engine. `spoken` = rule-based replica of the LLM normalizer (English, Malay, Mandarin, Tamil), no network |
 
 **Example:**
 
@@ -239,6 +241,30 @@ curl -X POST 'http://localhost:9091/v1/audio/normalize' \
 #   sembilan enam kosong tiga satu empat lapan tujuh lima kosong tujuh sembilan.","mode":"llm"}
 ```
 
+In `llm` mode the LLM is only called when the text contains something it could rewrite (a
+digit, a symbol, an ALL-CAPS or dotted token, a known abbreviation). Plain sentences such as
+`"Hello there, how can I help you today?"` come back unchanged from the LLM anyway, so they
+skip the ~0.55 s round trip and take the same pre/post cleanup path (`LLM_NORMALIZER_SKIP_PLAIN`,
+default on). On a TTS request that round trip sits entirely in front of the first audio byte.
+
+**`mode: "spoken"`** is a rule-based replica of the LLM normalizer (`app/spoken_normalizer/`,
+pure Python, ~25 µs): numbers, money (RM/sen, dollars), IC and phone numbers digit by digit,
+dates, times, percentages, decimals, ordinals, units, emails, URLs, ids and the abbreviations
+the LLM expands, verbalized in the sentence's language, Malay/English by marker words, Mandarin
+and Tamil by script. It was built against the LLM's own outputs on `bench/normalizer_corpus.py`
+(`bench/results/normalizer_truth.jsonl`) and agrees with them verbatim on 86% of sentences
+(English 91%, Malay 91%, Mandarin 90%, Tamil 72%, where most of the rest are LLM slips such as
+answering a Tamil sentence in English), never leaves a digit unread, and is what `mode: "llm"`
+falls back to. `bench/normalizer_agreement.py` re-scores it; `bench/normalizer_truth.py` extends
+the ground truth.
+
+```bash
+curl -X POST 'http://localhost:9091/v1/audio/normalize' -H 'Content-Type: application/json' \
+  -d '{"input": "Your total is RM1,250.50 and the meeting is at 3pm on 12/9/2026.", "mode": "spoken"}'
+# {"output":"Your total is one thousand two hundred fifty ringgit fifty sen and the meeting is at
+#   three p m on the twelfth of September twenty twenty six.","mode":"spoken"}
+```
+
 ### `POST /v1/audio/speech` — Text-to-Speech
 
 Accepts JSON body.
@@ -258,7 +284,7 @@ Accepts JSON body.
 | `playback_speed` | float | `2.0` | First decode window (×50 tokens; later windows grow per `STREAM_CHUNK_GROWTH`) |
 | `playback_overlap_speed` | float | `0.2` | Overlap for crossfading |
 | `normalize_malaysian` | bool | `DEFAULT_NORMALIZE_MALAYSIAN` (`false`) | Apply Malaysian text normalization |
-| `mode` | `rule` \| `llm` | `DEFAULT_NORMALIZER_MODE` (`rule`) | Normalization engine (see `/v1/audio/normalize`); `llm` falls back to `rule` if the LLM call fails, so speech is still produced |
+| `mode` | `rule` \| `llm` \| `spoken` | `DEFAULT_NORMALIZER_MODE` (`rule`) | Normalization engine (see `/v1/audio/normalize`); `llm` falls back to `spoken` if the LLM call fails or is not configured, so speech is still produced |
 | `stream_normalize` | bool | `STREAM_NORMALIZE` (`true`) | Per-utterance loudness normalization toward `TARGET_RMS_DB` |
 | `speaking_rate` | float | `DEFAULT_SPEAKING_RATE` (`1.0`) | Speaking rate, `0.5`–`2.0`: `1.3` speaks 30% faster, `0.8` slower, **pitch unchanged**. Also accepted as `speed` (OpenAI-compatible clients). See [Speaking rate](#speaking-rate) |
 

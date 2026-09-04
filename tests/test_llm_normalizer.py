@@ -26,6 +26,7 @@ from app.llm_normalizer import (
     build_messages,
     parse_normalized,
     llm_normalize,
+    needs_normalization,
     LLMNormalizerError,
     NormalizerMode,
 )
@@ -203,6 +204,64 @@ class TestNormalizerMode:
         assert NormalizerMode('llm') == NormalizerMode.llm
         with pytest.raises(ValueError):
             NormalizerMode('nope')
+
+
+class TestNeedsNormalization:
+    """The LLM-skip gate: plain text must be recognised as plain (the whole TTFB win),
+    and anything the prompt asks the model to rewrite must still reach the LLM."""
+
+    PLAIN = [
+        'Hello there, how can I help you today?',
+        'Thank you for calling our support line. Please tell me your account number and I will look into the issue right away.',
+        'Selamat pagi, apa yang boleh saya bantu encik hari ini?',
+        'Okay encik, your booking is confirmed, nanti saya hantar details melalui email ya.',
+        "Don't worry, we'll sort it out — it's no problem at all.",
+        'She said “thank you” and left… (quietly).',
+        'Sekiranya anda mempunyai sebarang pertanyaan lanjut, jangan teragak-agak untuk menghubungi kami.',
+        '你好，请问有什么可以帮您？',
+        '总共是一千二百五十令吉。',
+        'I am here; the meeting is at half past three in the afternoon.',
+        'Encik Ahmad akan datang esok pagi.',
+        'The first, second and third items are ready.',
+    ]
+    NEEDS = [
+        'Your total is RM1,250.50.',                 # digits
+        'Dr. Lim will call you.',                    # abbreviation (dotted)
+        'Dr Lim will call you.',                     # abbreviation (bare)
+        'Scicom Sdn Bhd',                            # abbreviation (bare)
+        'Please bring your IC and the OTP.',         # acronyms
+        'Up by twenty percent, or 20%.',             # digit + symbol
+        'up by twenty %',                            # symbol alone
+        'email me at husein@site.com',               # symbol + dotted token
+        'visit site.com for details',                # dotted token
+        'see e.g. the manual',                       # dotted token
+        '**bold** markdown and snake_case',          # markdown / underscore
+        'It is 3pm.',                                # digit
+        'Meet at St. John street',                   # dotted-only abbreviation
+        'Terima kasih Pn. Siti',                     # Malay honorific, dotted
+        'a few km away',                             # unit
+        '总共RM50',                                   # digits inside Chinese
+        '我叫侯赛因，身份证号是960314875079',
+        'Q&A session',                               # symbol
+        'price is 50/50',                            # digits + slash
+    ]
+
+    @pytest.mark.parametrize('text', PLAIN)
+    def test_plain_text_skips_llm(self, text):
+        assert not needs_normalization(text)
+
+    @pytest.mark.parametrize('text', NEEDS)
+    def test_normalizable_text_calls_llm(self, text):
+        assert needs_normalization(text)
+
+    def test_common_words_are_not_abbreviations(self):
+        # "no", "am", "sat", "min" are only abbreviations when written with a period
+        assert not needs_normalization('no problem, I am sure she sat there for a minute')
+        assert needs_normalization('ref no. 4471'.replace('4471', 'four'))   # "no." still gates
+
+    def test_empty(self):
+        assert not needs_normalization('')
+        assert not needs_normalization(None)
 
 
 LIVE_READY = all(os.environ.get(k) for k in ('OPENAI_BASE_URL', 'OPENAI_API_KEY', 'OPENAI_MODEL_NAME'))
