@@ -81,9 +81,13 @@ def parse_normalized(content):
 # checks the assumption against the live LLM.
 
 _PLAIN_PUNCT = ".,!?;:'’‘\"“”()\\-–—…、。，！？；：「」『』（）"
+# Tamil vowel signs and virama (U+0BBE..U+0BCD) are combining marks, which Python's \w does
+# not match -- without this every Tamil sentence looked like it contained symbols and went
+# to the LLM regardless of the gate. Whole Tamil block treated as letters.
+_TAMIL = '஀-௿'
 _NEEDS_LLM = re.compile(
     r'\d'                                   # any digit (Unicode-aware)
-    rf'|[^\w\s{_PLAIN_PUNCT}]'              # any symbol beyond plain punctuation: % $ @ & / + = # * ...
+    rf'|[^\w\s{_TAMIL}{_PLAIN_PUNCT}]'      # any symbol beyond plain punctuation: % $ @ & / + = # * ...
     r'|_'                                   # \w admits underscore (markdown, identifiers)
     r'|\w\.\w'                              # dotted tokens: site.com, e.g., U.S.
     r'|\b[A-Z]{2,}\b'                       # acronyms / all caps: IC, TNB, OTP, RM
@@ -107,7 +111,7 @@ def needs_normalization(text):
     return bool(_NEEDS_LLM.search(text or ''))
 
 
-_UNSPOKEN = re.compile(r'\d|[^\w\s' + re.escape(_PLAIN_PUNCT) + r']|\w\.\w')
+_UNSPOKEN = re.compile(r'\d|[^\w\s' + _TAMIL + re.escape(_PLAIN_PUNCT) + r']|\w\.\w')
 
 
 def has_unspoken(text):
