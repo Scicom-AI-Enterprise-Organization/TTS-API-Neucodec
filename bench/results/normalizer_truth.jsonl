@@ -1,0 +1,288 @@
+{"id": "en_int_1", "lang": "en", "category": "int", "text": "We have 3 options for you today.", "llm": "We have three options for you today."}
+{"id": "en_int_2", "lang": "en", "category": "int", "text": "The venue can seat 250 people comfortably.", "llm": "The venue can seat two hundred and fifty people comfortably."}
+{"id": "en_int_3", "lang": "en", "category": "int", "text": "Over 1,500 customers joined last month.", "llm": "Over one thousand five hundred customers joined last month."}
+{"id": "en_int_4", "lang": "en", "category": "int", "text": "The population is about 33,000,000 people.", "llm": "The population is about thirty-three million people."}
+{"id": "en_int_5", "lang": "en", "category": "int", "text": "Your parcel weighs 12 kilograms and contains 40 items.", "llm": "Your parcel weighs twelve kilograms and contains forty items."}
+{"id": "en_int_6", "lang": "en", "category": "int", "text": "There are 0 pending tickets in your queue.", "llm": "There are zero pending tickets in your queue."}
+{"id": "en_int_7", "lang": "en", "category": "int", "text": "Room 305 is on the third floor, next to room 310.", "llm": "Room three zero five is on the third floor, next to room three one zero."}
+{"id": "en_int_8", "lang": "en", "category": "int", "text": "The code is 1000 and the backup is 2000.", "llm": "The code is one thousand and the backup is two thousand."}
+{"id": "en_money_1", "lang": "en", "category": "money", "text": "Your balance is RM1,250.50 as of today.", "llm": "Your balance is one thousand two hundred fifty ringgit fifty sen as of today."}
+{"id": "en_money_2", "lang": "en", "category": "money", "text": "The fee is RM50 per month.", "llm": "The fee is fifty ringgit per month."}
+{"id": "en_money_3", "lang": "en", "category": "money", "text": "It costs RM12.05 including tax.", "llm": "It costs twelve ringgit five sen including tax."}
+{"id": "en_money_4", "lang": "en", "category": "money", "text": "The total comes to RM 3,400.", "llm": "The total comes to three thousand four hundred ringgit."}
+{"id": "en_money_5", "lang": "en", "category": "money", "text": "That will be $25 or about RM110.", "llm": "That will be twenty-five dollars or about one hundred ten ringgit."}
+{"id": "en_money_6", "lang": "en", "category": "money", "text": "You saved RM0.50 on this order.", "llm": "You saved zero ringgit fifty sen on this order."}
+{"id": "en_money_7", "lang": "en", "category": "money", "text": "The house is listed at RM1.2 million.", "llm": "The house is listed at one point two million ringgit."}
+{"id": "en_money_8", "lang": "en", "category": "money", "text": "Minimum top-up is USD 10.", "llm": "Minimum top-up is ten US dollars."}
+{"id": "en_money_9", "lang": "en", "category": "money", "text": "The deposit is 500 ringgit and the rent is RM1800.", "llm": "The deposit is five hundred ringgit and the rent is one thousand eight hundred ringgit."}
+{"id": "en_decimal_1", "lang": "en", "category": "decimal", "text": "Your temperature is 37.5 degrees.", "llm": "Your temperature is thirty-seven point five degrees."}
+{"id": "en_decimal_2", "lang": "en", "category": "decimal", "text": "The average rating is 4.8 out of 5.", "llm": "The average rating is four point eight out of five."}
+{"id": "en_decimal_3", "lang": "en", "category": "decimal", "text": "Interest is charged at 3.25 per annum.", "llm": "Interest is charged at three point two five per annum."}
+{"id": "en_decimal_4", "lang": "en", "category": "decimal", "text": "The package is 0.75 metres long.", "llm": "The package is zero point seven five metres long."}
+{"id": "en_percent_1", "lang": "en", "category": "percent", "text": "Sales went up by 25%.", "llm": "Sales went up by twenty-five percent."}
+{"id": "en_percent_2", "lang": "en", "category": "percent", "text": "Battery is at 100% and the discount is 12.5%.", "llm": "Battery is at one hundred percent and the discount is twelve point five percent."}
+{"id": "en_percent_3", "lang": "en", "category": "percent", "text": "Only 5 % of users saw the error.", "llm": "Only five percent of users saw the error."}
+{"id": "en_phone_1", "lang": "en", "category": "phone", "text": "Call me at 012-3456789 after lunch.", "llm": "Call me at zero one two three four five six seven eight nine after lunch."}
+{"id": "en_phone_2", "lang": "en", "category": "phone", "text": "Our hotline is 03-1234 5678.", "llm": "Our hotline is zero three one two three four five six seven eight."}
+{"id": "en_phone_3", "lang": "en", "category": "phone", "text": "Reach us on +60 12-345 6789 or 1-300-88-1234.", "llm": "Reach us on plus six zero one two three four five six seven eight nine or one three zero zero eight eight one two three four."}
+{"id": "en_phone_4", "lang": "en", "category": "phone", "text": "The number you dialled, 0198765432, is not in service.", "llm": "The number you dialled, zero one nine eight seven six five four three two, is not in service."}
+{"id": "en_ic_1", "lang": "en", "category": "ic", "text": "My IC is 960314875079.", "llm": "My IC is nine six zero three one four eight seven five zero seven nine."}
+{"id": "en_ic_2", "lang": "en", "category": "ic", "text": "Please confirm your IC number 960314-08-5079.", "llm": "Please confirm your IC number nine six zero three one four zero eight zero five zero seven nine."}
+{"id": "en_ic_3", "lang": "en", "category": "ic", "text": "Passport number A12345678 was verified.", "llm": "Passport number A one two three four five six seven eight was verified."}
+{"id": "en_date_1", "lang": "en", "category": "date", "text": "The meeting is on 15/3/2024 at the main office.", "llm": "The meeting is on the fifteenth of March twenty twenty-four at the main office."}
+{"id": "en_date_2", "lang": "en", "category": "date", "text": "Your delivery is scheduled for 2024-03-15.", "llm": "Your delivery is scheduled for March fifteenth twenty twenty-four."}
+{"id": "en_date_3", "lang": "en", "category": "date", "text": "The event runs from 1 March to 15 March 2024.", "llm": "The event runs from the first of March to the fifteenth of March twenty twenty-four."}
+{"id": "en_date_4", "lang": "en", "category": "date", "text": "Please pay before 30-06-2025.", "llm": "Please pay before the thirtieth of June twenty twenty-five."}
+{"id": "en_date_5", "lang": "en", "category": "date", "text": "She was born on March 15, 1998.", "llm": "She was born on March fifteenth, nineteen ninety-eight."}
+{"id": "en_date_6", "lang": "en", "category": "date", "text": "The deadline is 5 Jan 2026.", "llm": "The deadline is fifth of January twenty twenty-six."}
+{"id": "en_date_7", "lang": "en", "category": "date", "text": "Renewal falls on 01/12/2024.", "llm": "Renewal falls on the first of December twenty twenty-four."}
+{"id": "en_time_1", "lang": "en", "category": "time", "text": "The meeting starts at 10:45 AM sharp.", "llm": "The meeting starts at ten forty-five A M sharp."}
+{"id": "en_time_2", "lang": "en", "category": "time", "text": "We close at 5pm on weekdays and 1pm on Saturdays.", "llm": "We close at five p m on weekdays and one p m on Saturdays."}
+{"id": "en_time_3", "lang": "en", "category": "time", "text": "Your appointment is at 3:30 p.m. tomorrow.", "llm": "Your appointment is at three thirty p.m. tomorrow."}
+{"id": "en_time_4", "lang": "en", "category": "time", "text": "The train departs at 14:05.", "llm": "The train departs at fourteen zero five."}
+{"id": "en_time_5", "lang": "en", "category": "time", "text": "Please arrive by 9.30am.", "llm": "Please arrive by nine thirty a m."}
+{"id": "en_time_6", "lang": "en", "category": "time", "text": "The office opens at 8:00 and closes at 17:00.", "llm": "The office opens at eight o'clock and closes at seventeen o'clock."}
+{"id": "en_ordinal_1", "lang": "en", "category": "ordinal", "text": "You're 3rd in the queue.", "llm": "You're third in the queue."}
+{"id": "en_ordinal_2", "lang": "en", "category": "ordinal", "text": "This is your 1st reminder and the 2nd will follow.", "llm": "This is your first reminder and the second will follow."}
+{"id": "en_ordinal_3", "lang": "en", "category": "ordinal", "text": "Happy 21st birthday!", "llm": "Happy twenty-first birthday!"}
+{"id": "en_ordinal_4", "lang": "en", "category": "ordinal", "text": "Take the 12th exit on the 4th roundabout.", "llm": "Take the twelfth exit on the fourth roundabout."}
+{"id": "en_range_1", "lang": "en", "category": "range", "text": "We are open 9am-5pm from Monday to Friday.", "llm": "We are open nine a m to five p m from Monday to Friday."}
+{"id": "en_range_2", "lang": "en", "category": "range", "text": "Delivery takes 3-5 working days.", "llm": "Delivery takes three to five working days."}
+{"id": "en_range_3", "lang": "en", "category": "range", "text": "Expect a wait of 10 to 15 minutes.", "llm": "Expect a wait of ten to fifteen minutes."}
+{"id": "en_unit_1", "lang": "en", "category": "unit", "text": "The bag weighs 5kg and the box is 30 cm wide.", "llm": "The bag weighs five kilograms and the box is thirty centimeters wide."}
+{"id": "en_unit_2", "lang": "en", "category": "unit", "text": "The store is 2.5 km away.", "llm": "The store is two point five kilometers away."}
+{"id": "en_unit_3", "lang": "en", "category": "unit", "text": "It is 32°C outside today.", "llm": "It is thirty-two degrees Celsius outside today."}
+{"id": "en_unit_4", "lang": "en", "category": "unit", "text": "Take 500 ml of water with 2 tablets.", "llm": "Take five hundred milliliters of water with two tablets."}
+{"id": "en_unit_5", "lang": "en", "category": "unit", "text": "The plan includes 50GB of data.", "llm": "The plan includes fifty gigabytes of data."}
+{"id": "en_email_1", "lang": "en", "category": "email", "text": "Email me at husein@site.com for details.", "llm": "Email me at husein at site dot com for details."}
+{"id": "en_email_2", "lang": "en", "category": "email", "text": "Send the form to support.team@scicom.com.my today.", "llm": "Send the form to support dot team at scicom dot com dot my today."}
+{"id": "en_url_1", "lang": "en", "category": "url", "text": "Visit www.scicom.com.my to learn more.", "llm": "Visit w w w dot scicom dot com dot m y to learn more."}
+{"id": "en_url_2", "lang": "en", "category": "url", "text": "Go to https://example.com/help for the guide.", "llm": "Go to h t t p s colon slash slash example dot com slash help for the guide."}
+{"id": "en_id_1", "lang": "en", "category": "id", "text": "Your report id is X-12340567.", "llm": "Your report id is X one two three four zero five six seven."}
+{"id": "en_id_2", "lang": "en", "category": "id", "text": "Order #4471 has been shipped.", "llm": "Order number four four seven one has been shipped."}
+{"id": "en_id_3", "lang": "en", "category": "id", "text": "The reference is ABC1234 and the PIN is 0457.", "llm": "The reference is A B C one two three four and the PIN is zero four five seven."}
+{"id": "en_id_4", "lang": "en", "category": "id", "text": "Flight MH370 was rescheduled, and your seat is 24A.", "llm": "Flight MH three seven zero was rescheduled, and your seat is twenty-four A."}
+{"id": "en_id_5", "lang": "en", "category": "id", "text": "The tracking number is 1Z999AA10123456784.", "llm": "The tracking number is one Z nine nine nine A A one zero one two three four five six seven eight four."}
+{"id": "en_year_1", "lang": "en", "category": "year", "text": "The company was founded in 1998 and expanded in 2024.", "llm": "The company was founded in nineteen ninety-eight and expanded in twenty twenty-four."}
+{"id": "en_year_2", "lang": "en", "category": "year", "text": "The policy changed in 2005.", "llm": "The policy changed in two thousand and five."}
+{"id": "en_year_3", "lang": "en", "category": "year", "text": "By 2030 we expect to double.", "llm": "By twenty thirty we expect to double."}
+{"id": "en_abbr_1", "lang": "en", "category": "abbr", "text": "Dr. Lim will call you back.", "llm": "Doctor Lim will call you back."}
+{"id": "en_abbr_2", "lang": "en", "category": "abbr", "text": "Mr. Tan and Mrs. Lee are waiting at the lobby.", "llm": "Mr. Tan and Mrs. Lee are waiting at the lobby."}
+{"id": "en_abbr_3", "lang": "en", "category": "abbr", "text": "Scicom Sdn Bhd is located on Jln Ampang.", "llm": "Scicom Sdn Bhd is located on Jln Ampang."}
+{"id": "en_abbr_4", "lang": "en", "category": "abbr", "text": "Bring your documents, e.g. the invoice, etc.", "llm": "Bring your documents, e.g. the invoice, etc."}
+{"id": "en_abbr_5", "lang": "en", "category": "abbr", "text": "Prof. Ahmad vs. the committee, approx. 20 people.", "llm": "Professor Ahmad versus the committee, approximately twenty people."}
+{"id": "en_acro_1", "lang": "en", "category": "acro", "text": "Please enter the OTP sent by SMS.", "llm": "Please enter the OTP sent by SMS."}
+{"id": "en_acro_2", "lang": "en", "category": "acro", "text": "Bring your IC to the TNB counter in KL.", "llm": "Bring your IC to the TNB counter in KL."}
+{"id": "en_acro_3", "lang": "en", "category": "acro", "text": "The API returned an HTTP 404 error.", "llm": "The A P I returned an H T T P four zero four error."}
+{"id": "en_acro_4", "lang": "en", "category": "acro", "text": "NASA and the UN issued a joint statement.", "llm": "NASA and the UN issued a joint statement."}
+{"id": "en_plain_1", "lang": "en", "category": "plain", "text": "Hello there, how can I help you today?", "llm": "Hello there, how can I help you today?"}
+{"id": "en_plain_2", "lang": "en", "category": "plain", "text": "Thank you for your patience, we will get back to you shortly.", "llm": "Thank you for your patience, we will get back to you shortly."}
+{"id": "en_plain_3", "lang": "en", "category": "plain", "text": "Don't worry, we'll sort it out.", "llm": "Don't worry, we'll sort it out."}
+{"id": "en_plain_4", "lang": "en", "category": "plain", "text": "She said “thank you” and left quietly.", "llm": "She said “thank you” and left quietly."}
+{"id": "en_plain_5", "lang": "en", "category": "plain", "text": "Meet me at half past three in the afternoon.", "llm": "Meet me at half past three in the afternoon."}
+{"id": "en_mixed_1", "lang": "en", "category": "mixed", "text": "Your total is RM1,250.50 and the meeting is at 3pm on 12/9/2026.", "llm": "Your total is one thousand two hundred fifty ringgit fifty sen and the meeting is at three p m on the twelfth of September twenty twenty-six."}
+{"id": "en_mixed_2", "lang": "en", "category": "mixed", "text": "Dr. Lim from Scicom Sdn Bhd will call you re: invoice no. 4471.", "llm": "Doctor Lim from Scicom Sdn Bhd will call you re: invoice no. four four seven one."}
+{"id": "en_mixed_3", "lang": "en", "category": "mixed", "text": "Pay RM89.90 by 5/6/2025, or 10% late fee applies after 5pm.", "llm": "Pay eighty-nine ringgit ninety sen by the fifth of June twenty twenty-five, or ten percent late fee applies after five p m."}
+{"id": "en_mixed_4", "lang": "en", "category": "mixed", "text": "Order 2 units at RM199 each, delivered in 3-5 days to No. 12, Jalan Tun Razak.", "llm": "Order two units at one hundred ninety-nine ringgit each, delivered in three to five days to Number twelve, Jalan Tun Razak."}
+{"id": "ms_int_1", "lang": "ms", "category": "int", "text": "Kami ada 3 pilihan untuk anda hari ini.", "llm": "Kami ada tiga pilihan untuk anda hari ini."}
+{"id": "ms_int_2", "lang": "ms", "category": "int", "text": "Dewan ini boleh memuatkan 250 orang.", "llm": "Dewan ini boleh memuatkan dua ratus lima puluh orang."}
+{"id": "ms_int_3", "lang": "ms", "category": "int", "text": "Lebih 1,500 pelanggan mendaftar bulan lepas.", "llm": "Lebih seribu lima ratus pelanggan mendaftar bulan lepas."}
+{"id": "ms_int_4", "lang": "ms", "category": "int", "text": "Penduduk Malaysia kira-kira 33,000,000 orang.", "llm": "Penduduk Malaysia kira-kira tiga puluh tiga juta orang."}
+{"id": "ms_int_5", "lang": "ms", "category": "int", "text": "Tiada tiket tertunggak, jumlahnya 0.", "llm": "Tiada tiket tertunggak, jumlahnya sifar."}
+{"id": "ms_int_6", "lang": "ms", "category": "int", "text": "Bilik 305 di tingkat 3, sebelah bilik 310.", "llm": "Bilik tiga kosong lima di tingkat tiga, sebelah bilik tiga satu kosong."}
+{"id": "ms_money_1", "lang": "ms", "category": "money", "text": "Baki anda RM1,250.50 setakat hari ini.", "llm": "Baki anda seribu dua ratus lima puluh ringgit lima puluh sen setakat hari ini."}
+{"id": "ms_money_2", "lang": "ms", "category": "money", "text": "Yurannya RM50 sebulan.", "llm": "Yurannya lima puluh ringgit sebulan."}
+{"id": "ms_money_3", "lang": "ms", "category": "money", "text": "Harganya RM12.05 termasuk cukai.", "llm": "Harganya dua belas ringgit lima sen termasuk cukai."}
+{"id": "ms_money_4", "lang": "ms", "category": "money", "text": "Jumlah keseluruhan ialah RM 3,400.", "llm": "Jumlah keseluruhan ialah tiga ribu empat ratus ringgit."}
+{"id": "ms_money_5", "lang": "ms", "category": "money", "text": "Anda jimat RM0.50 untuk pesanan ini.", "llm": "Anda jimat lima puluh sen untuk pesanan ini."}
+{"id": "ms_money_6", "lang": "ms", "category": "money", "text": "Rumah itu berharga RM1.2 juta.", "llm": "Rumah itu berharga satu perpuluhan dua juta ringgit."}
+{"id": "ms_money_7", "lang": "ms", "category": "money", "text": "Deposit 500 ringgit dan sewa RM1800 sebulan.", "llm": "Deposit lima ratus ringgit dan sewa seribu lapan ratus ringgit sebulan."}
+{"id": "ms_decimal_1", "lang": "ms", "category": "decimal", "text": "Suhu badan anda 37.5 darjah.", "llm": "Suhu badan anda tiga puluh tujuh perpuluhan lima darjah."}
+{"id": "ms_decimal_2", "lang": "ms", "category": "decimal", "text": "Penilaian purata ialah 4.8 daripada 5.", "llm": "Penilaian purata ialah empat perpuluhan lapan daripada lima."}
+{"id": "ms_decimal_3", "lang": "ms", "category": "decimal", "text": "Kadar faedah 3.25 setahun.", "llm": "Kadar faedah tiga perpuluhan dua lima setahun."}
+{"id": "ms_percent_1", "lang": "ms", "category": "percent", "text": "Jualan naik 25%.", "llm": "Jualan naik dua puluh lima peratus."}
+{"id": "ms_percent_2", "lang": "ms", "category": "percent", "text": "Bateri pada 100% dan diskaun 12.5%.", "llm": "Bateri pada seratus peratus dan diskaun dua belas perpuluhan lima peratus."}
+{"id": "ms_phone_1", "lang": "ms", "category": "phone", "text": "Sila hubungi 03-12345678 untuk bantuan.", "llm": "Sila hubungi kosong tiga satu dua tiga empat lima enam tujuh lapan untuk bantuan."}
+{"id": "ms_phone_2", "lang": "ms", "category": "phone", "text": "Nombor saya 012-345 6789.", "llm": "Nombor saya kosong satu dua tiga empat lima enam tujuh lapan sembilan."}
+{"id": "ms_phone_3", "lang": "ms", "category": "phone", "text": "Talian kami +60 3-1234 5678 atau 1-300-88-1234.", "llm": "Talian kami tambah enam kosong tiga satu dua tiga empat lima enam tujuh lapan atau satu tiga kosong kosong lapan lapan satu dua tiga empat"}
+{"id": "ms_ic_1", "lang": "ms", "category": "ic", "text": "Nombor IC saya 960314875079.", "llm": "Nombor IC saya sembilan enam kosong tiga satu empat lapan tujuh lima kosong tujuh sembilan."}
+{"id": "ms_ic_2", "lang": "ms", "category": "ic", "text": "Sila sahkan nombor kad pengenalan 960314-08-5079.", "llm": "Sila sahkan nombor kad pengenalan sembilan enam kosong tiga satu empat kosong lapan kosong lima kosong tujuh sembilan."}
+{"id": "ms_date_1", "lang": "ms", "category": "date", "text": "Mesyuarat pada 15/3/2024 di pejabat utama.", "llm": "Mesyuarat pada lima belas Mac dua ribu dua puluh empat di pejabat utama."}
+{"id": "ms_date_2", "lang": "ms", "category": "date", "text": "Penghantaran dijadualkan pada 2024-03-15.", "llm": "Penghantaran dijadualkan pada dua ribu dua puluh empat Mac lima belas."}
+{"id": "ms_date_3", "lang": "ms", "category": "date", "text": "Program berlangsung dari 1 Mac hingga 15 Mac 2024.", "llm": "Program berlangsung dari satu Mac hingga lima belas Mac dua ribu dua puluh empat."}
+{"id": "ms_date_4", "lang": "ms", "category": "date", "text": "Sila bayar sebelum 30-06-2025.", "llm": "Sila bayar sebelum tiga puluh Jun dua ribu dua puluh lima."}
+{"id": "ms_date_5", "lang": "ms", "category": "date", "text": "Dia dilahirkan pada 15 Mac 1998.", "llm": "Dia dilahirkan pada lima belas Mac seribu sembilan ratus sembilan puluh lapan."}
+{"id": "ms_date_6", "lang": "ms", "category": "date", "text": "Tarikh akhir ialah 5 Jan 2026.", "llm": "Tarikh akhir ialah lima Januari dua ribu dua puluh enam."}
+{"id": "ms_time_1", "lang": "ms", "category": "time", "text": "Mesyuarat bermula pukul 10:45 pagi.", "llm": "Mesyuarat bermula pukul sepuluh empat puluh lima pagi."}
+{"id": "ms_time_2", "lang": "ms", "category": "time", "text": "Kami tutup pukul 5 petang pada hari bekerja.", "llm": "Kami tutup pukul lima petang pada hari bekerja."}
+{"id": "ms_time_3", "lang": "ms", "category": "time", "text": "Temu janji anda pada 3:30 petang esok.", "llm": "Temu janji anda pada tiga tiga puluh petang esok."}
+{"id": "ms_time_4", "lang": "ms", "category": "time", "text": "Kereta api bertolak pada 14:05.", "llm": "Kereta api bertolak pada pukul empat belas kosong lima."}
+{"id": "ms_time_5", "lang": "ms", "category": "time", "text": "Sila tiba sebelum 9.30am.", "llm": "Sila tiba sebelum sembilan tiga puluh pagi."}
+{"id": "ms_time_6", "lang": "ms", "category": "time", "text": "Pejabat dibuka jam 8:00 dan ditutup jam 17:00.", "llm": "Pejabat dibuka jam lapan dan ditutup jam tujuh belas."}
+{"id": "ms_ordinal_1", "lang": "ms", "category": "ordinal", "text": "Anda yang ke-3 dalam barisan.", "llm": "Anda yang ketiga dalam barisan."}
+{"id": "ms_ordinal_2", "lang": "ms", "category": "ordinal", "text": "Ini peringatan ke-1 dan yang ke-2 akan menyusul.", "llm": "Ini peringatan pertama dan yang kedua akan menyusul."}
+{"id": "ms_ordinal_3", "lang": "ms", "category": "ordinal", "text": "Selamat hari jadi yang ke-21!", "llm": "Selamat hari jadi yang kedua puluh satu!"}
+{"id": "ms_ordinal_4", "lang": "ms", "category": "ordinal", "text": "Ambil simpang ke-12 di bulatan ke-4.", "llm": "Ambil simpang ke dua belas di bulatan ke empat."}
+{"id": "ms_range_1", "lang": "ms", "category": "range", "text": "Kami dibuka 9am-5pm dari Isnin hingga Jumaat.", "llm": "Kami dibuka sembilan pagi hingga lima petang dari Isnin hingga Jumaat."}
+{"id": "ms_range_2", "lang": "ms", "category": "range", "text": "Penghantaran mengambil masa 3-5 hari bekerja.", "llm": "Penghantaran mengambil masa tiga hingga lima hari bekerja."}
+{"id": "ms_range_3", "lang": "ms", "category": "range", "text": "Tunggu antara 10 hingga 15 minit.", "llm": "Tunggu antara sepuluh hingga lima belas minit."}
+{"id": "ms_unit_1", "lang": "ms", "category": "unit", "text": "Beg itu seberat 5kg dan kotaknya 30 cm lebar.", "llm": "Beg itu seberat lima kilogram dan kotaknya tiga puluh sentimeter lebar."}
+{"id": "ms_unit_2", "lang": "ms", "category": "unit", "text": "Kedai itu 2.5 km dari sini.", "llm": "Kedai itu dua perpuluhan lima kilometer dari sini."}
+{"id": "ms_unit_3", "lang": "ms", "category": "unit", "text": "Suhu di luar 32°C hari ini.", "llm": "Suhu di luar tiga puluh dua darjah Celsius hari ini."}
+{"id": "ms_unit_4", "lang": "ms", "category": "unit", "text": "Ambil 500 ml air bersama 2 biji pil.", "llm": "Ambil lima ratus mililiter air bersama dua biji pil."}
+{"id": "ms_unit_5", "lang": "ms", "category": "unit", "text": "Pelan ini termasuk 50GB data.", "llm": "Pelan ini termasuk lima puluh gigabait data."}
+{"id": "ms_email_1", "lang": "ms", "category": "email", "text": "Emel saya di husein@site.com untuk maklumat lanjut.", "llm": "Emel saya di husein at site dot com untuk maklumat lanjut."}
+{"id": "ms_email_2", "lang": "ms", "category": "email", "text": "Hantar borang ke support.team@scicom.com.my hari ini.", "llm": "Hantar borang ke support dot team at scicom dot com dot my hari ini."}
+{"id": "ms_url_1", "lang": "ms", "category": "url", "text": "Layari www.scicom.com.my untuk maklumat lanjut.", "llm": "Layari double u double u double u dot scicom dot com dot my untuk maklumat lanjut."}
+{"id": "ms_url_2", "lang": "ms", "category": "url", "text": "Pergi ke https://example.com/bantuan untuk panduan.", "llm": "Pergi ke h t t p s colon slash slash example dot com slash bantuan untuk panduan."}
+{"id": "ms_id_1", "lang": "ms", "category": "id", "text": "ID laporan anda ialah X-12340567.", "llm": "ID laporan anda ialah X satu dua tiga empat kosong lima enam tujuh."}
+{"id": "ms_id_2", "lang": "ms", "category": "id", "text": "Pesanan #4471 telah dihantar.", "llm": "Pesanan nombor empat empat tujuh satu telah dihantar."}
+{"id": "ms_id_3", "lang": "ms", "category": "id", "text": "Rujukan ialah ABC1234 dan PIN anda 0457.", "llm": "Rujukan ialah ABC satu dua tiga empat dan PIN anda kosong empat lima tujuh."}
+{"id": "ms_id_4", "lang": "ms", "category": "id", "text": "Penerbangan MH370 dijadualkan semula, tempat duduk anda 24A.", "llm": "Penerbangan MH tiga tujuh kosong dijadualkan semula, tempat duduk anda dua puluh empat A."}
+{"id": "ms_year_1", "lang": "ms", "category": "year", "text": "Syarikat ditubuhkan pada 1998 dan berkembang pada 2024.", "llm": "Syarikat ditubuhkan pada seribu sembilan ratus sembilan puluh lapan dan berkembang pada dua ribu dua puluh empat."}
+{"id": "ms_year_2", "lang": "ms", "category": "year", "text": "Polisi itu berubah pada tahun 2005.", "llm": "Polisi itu berubah pada tahun dua ribu lima."}
+{"id": "ms_year_3", "lang": "ms", "category": "year", "text": "Menjelang 2030 kami jangka berganda.", "llm": "Menjelang dua ribu tiga puluh kami jangka berganda."}
+{"id": "ms_abbr_1", "lang": "ms", "category": "abbr", "text": "Dr. Lim akan menghubungi anda semula.", "llm": "Doktor Lim akan menghubungi anda semula."}
+{"id": "ms_abbr_2", "lang": "ms", "category": "abbr", "text": "En. Ahmad dan Pn. Siti sedang menunggu di lobi.", "llm": "En. Ahmad dan Pn. Siti sedang menunggu di lobi."}
+{"id": "ms_abbr_3", "lang": "ms", "category": "abbr", "text": "Scicom Sdn Bhd terletak di Jln Ampang, KL.", "llm": "Scicom Sdn Bhd terletak di Jalan Ampang, Kuala Lumpur."}
+{"id": "ms_abbr_4", "lang": "ms", "category": "abbr", "text": "Bawa dokumen anda, cth. invois, dsb.", "llm": "Bawa dokumen anda, contohnya invois, dan sebagainya."}
+{"id": "ms_abbr_5", "lang": "ms", "category": "abbr", "text": "Prof. Ahmad dan Dato' Seri Azman hadir bersama Tan Sri Lim.", "llm": "Prof. Ahmad dan Dato' Seri Azman hadir bersama Tan Sri Lim."}
+{"id": "ms_acro_1", "lang": "ms", "category": "acro", "text": "Sila masukkan OTP yang dihantar melalui SMS.", "llm": "Sila masukkan OTP yang dihantar melalui SMS."}
+{"id": "ms_acro_2", "lang": "ms", "category": "acro", "text": "Bawa IC anda ke kaunter TNB di KL.", "llm": "Bawa IC anda ke kaunter TNB di KL."}
+{"id": "ms_acro_3", "lang": "ms", "category": "acro", "text": "Semak akaun KWSP dan LHDN anda.", "llm": "Semak akaun KWSP dan LHDN anda."}
+{"id": "ms_plain_1", "lang": "ms", "category": "plain", "text": "Selamat pagi, apa yang boleh saya bantu encik hari ini?", "llm": "Selamat pagi, apa yang boleh saya bantu encik hari ini?"}
+{"id": "ms_plain_2", "lang": "ms", "category": "plain", "text": "Terima kasih kerana menghubungi kami, sila tunggu sebentar.", "llm": "Terima kasih kerana menghubungi kami, sila tunggu sebentar."}
+{"id": "ms_plain_3", "lang": "ms", "category": "plain", "text": "Sekiranya anda mempunyai sebarang pertanyaan lanjut, jangan teragak-agak untuk menghubungi kami.", "llm": "Sekiranya anda mempunyai sebarang pertanyaan lanjut, jangan teragak-agak untuk menghubungi kami."}
+{"id": "ms_plain_4", "lang": "ms", "category": "plain", "text": "Baiklah, saya sudah kemaskini maklumat anda di dalam sistem.", "llm": "Baiklah, saya sudah kemaskini maklumat anda di dalam sistem."}
+{"id": "ms_mixed_1", "lang": "ms", "category": "mixed", "text": "Jumlah anda RM1,250.50 dan mesyuarat pada pukul 3 petang, 12/9/2026.", "llm": "Jumlah anda seribu dua ratus lima puluh ringgit lima puluh sen dan mesyuarat pada pukul tiga petang, dua belas September dua ribu dua puluh enam."}
+{"id": "ms_mixed_2", "lang": "ms", "category": "mixed", "text": "Dr. Lim dari Scicom Sdn Bhd akan menghubungi anda berkenaan invois no. 4471.", "llm": "Dr. Lim dari Scicom Sdn Bhd akan menghubungi anda berkenaan invois nombor empat empat tujuh satu."}
+{"id": "ms_mixed_3", "lang": "ms", "category": "mixed", "text": "Bayar RM89.90 sebelum 5/6/2025, jika tidak denda 10% dikenakan selepas 5 petang.", "llm": "Bayar lapan puluh sembilan ringgit sembilan puluh sen sebelum lima Jun dua ribu dua puluh lima, jika tidak denda sepuluh peratus dikenakan selepas lima petang."}
+{"id": "ms_mixed_4", "lang": "ms", "category": "mixed", "text": "Pesan 2 unit pada RM199 setiap satu, dihantar dalam 3-5 hari ke No. 12, Jalan Tun Razak.", "llm": "Pesan dua unit pada seratus sembilan puluh sembilan ringgit setiap satu, dihantar dalam tiga hingga lima hari ke Nombor dua belas, Jalan Tun Razak."}
+{"id": "cs_1", "lang": "cs", "category": "mixed", "text": "Okay encik, your booking is confirmed, total RM120 for 2 nights.", "llm": "Okay encik, your booking is confirmed, total one hundred twenty ringgit for two nights."}
+{"id": "cs_2", "lang": "cs", "category": "mixed", "text": "Sorry to keep you waiting, sekejap ya, saya check order 4471 dalam system.", "llm": "Sorry to keep you waiting, sekejap ya, saya check order empat empat tujuh satu dalam system."}
+{"id": "cs_3", "lang": "cs", "category": "mixed", "text": "Nanti saya call balik at 3pm ya, nombor encik 012-3456789 kan?", "llm": "Nanti saya call balik at tiga p m ya, nombor encik kosong satu dua tiga empat lima enam tujuh lapan sembilan kan?"}
+{"id": "cs_4", "lang": "cs", "category": "mixed", "text": "Your bill RM85.50 dah overdue since 15/3/2024, boleh settle hari ini?", "llm": "Your bill lapan puluh lima ringgit lima puluh sen dah overdue since lima belas Mac dua ribu dua puluh empat, boleh settle hari ini?"}
+{"id": "cs_5", "lang": "cs", "category": "mixed", "text": "Encik boleh dapat 25% discount kalau bayar before 30 June.", "llm": "Encik boleh dapat dua puluh lima peratus discount kalau bayar before tiga puluh June."}
+{"id": "cs_6", "lang": "cs", "category": "plain", "text": "Okay lah, nanti saya check dan inform you balik ya.", "llm": "Okay lah, nanti saya check dan inform you balik ya."}
+{"id": "zh_int_1", "lang": "zh", "category": "int", "text": "我们今天有3个选择给您。", "llm": "我们今天有三个选择给您。"}
+{"id": "zh_int_2", "lang": "zh", "category": "int", "text": "这个礼堂可以容纳250人。", "llm": "这个礼堂可以容纳二百五十人。"}
+{"id": "zh_int_3", "lang": "zh", "category": "int", "text": "上个月有超过1,500名客户加入。", "llm": "上个月有超过一千五百名客户加入。"}
+{"id": "zh_int_4", "lang": "zh", "category": "int", "text": "马来西亚人口大约33,000,000人。", "llm": "马来西亚人口大约三千三百万人。"}
+{"id": "zh_int_5", "lang": "zh", "category": "int", "text": "您的房间是305号，在3楼。", "llm": "您的房间是三百零五号，在三楼。"}
+{"id": "zh_int_6", "lang": "zh", "category": "int", "text": "库存还有0件。", "llm": "库存还有零件。"}
+{"id": "zh_int_7", "lang": "zh", "category": "int", "text": "这批货有2箱，每箱200个。", "llm": "这批货有两箱，每箱二百个。"}
+{"id": "zh_money_1", "lang": "zh", "category": "money", "text": "您的余额是RM1,250.50。", "llm": "您的余额是一千二百五十令吉五十仙。"}
+{"id": "zh_money_2", "lang": "zh", "category": "money", "text": "每月费用是RM50。", "llm": "每月费用是五十令吉。"}
+{"id": "zh_money_3", "lang": "zh", "category": "money", "text": "价格是RM12.05，包括税。", "llm": "价格是十二令吉五仙，包括税。"}
+{"id": "zh_money_4", "lang": "zh", "category": "money", "text": "总共是RM 3,400。", "llm": "总共是三千四百令吉。"}
+{"id": "zh_money_5", "lang": "zh", "category": "money", "text": "这间房子售价RM1.2百万。", "llm": "这间房子售价一百二十万令吉。"}
+{"id": "zh_money_6", "lang": "zh", "category": "money", "text": "押金500令吉，租金每月RM1800。", "llm": "押金五百令吉，租金每月一千八百令吉。"}
+{"id": "zh_money_7", "lang": "zh", "category": "money", "text": "这个套餐是$25，大约RM110。", "llm": "这个套餐是二十五美元，大约一百一十令吉。"}
+{"id": "zh_decimal_1", "lang": "zh", "category": "decimal", "text": "您的体温是37.5度。", "llm": "您的体温是三十七点五度。"}
+{"id": "zh_decimal_2", "lang": "zh", "category": "decimal", "text": "平均评分是4.8分，满分5分。", "llm": "平均评分是四点八分，满分五分。"}
+{"id": "zh_percent_1", "lang": "zh", "category": "percent", "text": "销售额上升了25%。", "llm": "销售额上升了百分之二十五。"}
+{"id": "zh_percent_2", "lang": "zh", "category": "percent", "text": "电池是100%，折扣是12.5%。", "llm": "电池是百分之一百，折扣是百分之十二点五。"}
+{"id": "zh_phone_1", "lang": "zh", "category": "phone", "text": "请拨打03-12345678。", "llm": "请拨打零三一二三四五六七八。"}
+{"id": "zh_phone_2", "lang": "zh", "category": "phone", "text": "我的电话是012-345 6789。", "llm": "我的电话是零一二三四五六七八九。"}
+{"id": "zh_phone_3", "lang": "zh", "category": "phone", "text": "热线是+60 3-1234 5678或1-300-88-1234。", "llm": "热线是加六零 零三一二三四 五六七八或一三零零八八一二三四。"}
+{"id": "zh_ic_1", "lang": "zh", "category": "ic", "text": "我的身份证号是960314875079。", "llm": "我的身份证号是九六零三一四八七五零七九。"}
+{"id": "zh_ic_2", "lang": "zh", "category": "ic", "text": "请确认您的身份证号码960314-08-5079。", "llm": "请确认您的身份证号码九六零三一四零八五零七九。"}
+{"id": "zh_date_1", "lang": "zh", "category": "date", "text": "会议在2024年3月15日举行。", "llm": "会议在二零二四年三月十五日举行。"}
+{"id": "zh_date_2", "lang": "zh", "category": "date", "text": "送货日期是15/3/2024。", "llm": "送货日期是二零二四年三月十五日。"}
+{"id": "zh_date_3", "lang": "zh", "category": "date", "text": "请在2025-06-30之前付款。", "llm": "请在二零二五年六月三十日之前付款。"}
+{"id": "zh_date_4", "lang": "zh", "category": "date", "text": "活动从3月1日到3月15日。", "llm": "活动从三月一日到三月十五日。"}
+{"id": "zh_date_5", "lang": "zh", "category": "date", "text": "她出生于1998年3月15号。", "llm": "她出生于一九九八年三月十五号。"}
+{"id": "zh_time_1", "lang": "zh", "category": "time", "text": "会议在上午10:45开始。", "llm": "会议在上午十点四十五分开始。"}
+{"id": "zh_time_2", "lang": "zh", "category": "time", "text": "我们下午5点关门，星期六下午1点。", "llm": "我们下午五点关门，星期六下午一点。"}
+{"id": "zh_time_3", "lang": "zh", "category": "time", "text": "您的预约在明天下午2点30分。", "llm": "您的预约在明天下午两点三十分。"}
+{"id": "zh_time_4", "lang": "zh", "category": "time", "text": "火车在14:05出发。", "llm": "火车在十四点零五分出发。"}
+{"id": "zh_time_5", "lang": "zh", "category": "time", "text": "请在9.30am之前到达。", "llm": "请在九点三十分am之前到达。"}
+{"id": "zh_time_6", "lang": "zh", "category": "time", "text": "办公室8:00开门，17:00关门。", "llm": "办公室八点开门，十七点关门。"}
+{"id": "zh_ordinal_1", "lang": "zh", "category": "ordinal", "text": "您是排队的第3位。", "llm": "您是排队的第三位。"}
+{"id": "zh_ordinal_2", "lang": "zh", "category": "ordinal", "text": "这是第1次提醒，第2次将会跟进。", "llm": "这是第一次提醒，第二次将会跟进。"}
+{"id": "zh_ordinal_3", "lang": "zh", "category": "ordinal", "text": "祝您21岁生日快乐！", "llm": "祝您二十一岁生日快乐！"}
+{"id": "zh_range_1", "lang": "zh", "category": "range", "text": "我们的营业时间是9am-5pm，星期一到星期五。", "llm": "我们的营业时间是九点到五点，星期一到星期五。"}
+{"id": "zh_range_2", "lang": "zh", "category": "range", "text": "送货需要3-5个工作日。", "llm": "送货需要三到五个工作日。"}
+{"id": "zh_range_3", "lang": "zh", "category": "range", "text": "请等待10到15分钟。", "llm": "请等待十到十五分钟。"}
+{"id": "zh_unit_1", "lang": "zh", "category": "unit", "text": "这个包5kg重，箱子30 cm宽。", "llm": "这个包五公斤重，箱子三十厘米宽。"}
+{"id": "zh_unit_2", "lang": "zh", "category": "unit", "text": "商店离这里2.5 km。", "llm": "商店离这里二点五公里。"}
+{"id": "zh_unit_3", "lang": "zh", "category": "unit", "text": "今天外面32°C。", "llm": "今天外面三十二度C。"}
+{"id": "zh_unit_4", "lang": "zh", "category": "unit", "text": "这个配套包括50GB数据。", "llm": "这个配套包括五十GB数据。"}
+{"id": "zh_email_1", "lang": "zh", "category": "email", "text": "请发邮件到husein@site.com。", "llm": "请发邮件到 husein at site dot com。"}
+{"id": "zh_url_1", "lang": "zh", "category": "url", "text": "请浏览www.scicom.com.my了解更多。", "llm": "请浏览 w w w dot scicom dot com dot m y 了解更多。"}
+{"id": "zh_id_1", "lang": "zh", "category": "id", "text": "您的报告编号是X-12340567。", "llm": "您的报告编号是X一二三四零五六七。"}
+{"id": "zh_id_2", "lang": "zh", "category": "id", "text": "订单#4471已经发出。", "llm": "订单号四四七一已经发出。"}
+{"id": "zh_id_3", "lang": "zh", "category": "id", "text": "参考号是ABC1234，密码是0457。", "llm": "参考号是ABC一二三四，密码是零四五七。"}
+{"id": "zh_year_1", "lang": "zh", "category": "year", "text": "公司成立于1998年，并在2024年扩展。", "llm": "公司成立于一九九八年，并在二零二四年扩展。"}
+{"id": "zh_year_2", "lang": "zh", "category": "year", "text": "到2030年我们预计翻倍。", "llm": "到二零三零年我们预计翻倍。"}
+{"id": "zh_abbr_1", "lang": "zh", "category": "abbr", "text": "Dr. Lim会给您回电。", "llm": "Dr. Lim会给您回电。"}
+{"id": "zh_abbr_2", "lang": "zh", "category": "abbr", "text": "Scicom Sdn Bhd位于Jln Ampang。", "llm": "Scicom Sdn Bhd位于Jln Ampang。"}
+{"id": "zh_acro_1", "lang": "zh", "category": "acro", "text": "请输入通过SMS发送的OTP。", "llm": "请输入通过 S M S 发送的 O T P。"}
+{"id": "zh_acro_2", "lang": "zh", "category": "acro", "text": "请带您的IC到TNB柜台。", "llm": "请带您的IC到TNB柜台。"}
+{"id": "zh_plain_1", "lang": "zh", "category": "plain", "text": "你好，请问有什么可以帮您？", "llm": "你好，请问有什么可以帮您？"}
+{"id": "zh_plain_2", "lang": "zh", "category": "plain", "text": "总共是一千二百五十令吉，谢谢。", "llm": "总共是一千二百五十令吉，谢谢。"}
+{"id": "zh_plain_3", "lang": "zh", "category": "plain", "text": "我们会在两个工作日内回复您。", "llm": "我们会在两个工作日内回复您。"}
+{"id": "zh_plain_4", "lang": "zh", "category": "plain", "text": "感谢您的耐心等待，我们会尽快处理。", "llm": "感谢您的耐心等待，我们会尽快处理。"}
+{"id": "zh_mixed_1", "lang": "zh", "category": "mixed", "text": "您的总额是RM1,250.50，会议在12/9/2026下午3点。", "llm": "您的总额是一千二百五十令吉五十仙，会议在二零二六年九月十二日下午三点。"}
+{"id": "zh_mixed_2", "lang": "zh", "category": "mixed", "text": "请在5/6/2025之前支付RM89.90，否则下午5点后收取10%的滞纳金。", "llm": "请在二零二五年六月五日之前支付八十九令吉九十仙，否则下午五点后收取百分之十的滞纳金。"}
+{"id": "zh_mixed_3", "lang": "zh", "category": "mixed", "text": "订购2件，每件RM199，3-5天内送到Jalan Tun Razak 12号。", "llm": "订购两件，每件一百九十九令吉，三到五天内送到Jalan Tun Razak 十二号。"}
+{"id": "ta_int_1", "lang": "ta", "category": "int", "text": "இன்று உங்களுக்கு 3 தேர்வுகள் உள்ளன.", "llm": "இன்று உங்களுக்கு மூன்று தேர்வுகள் உள்ளன."}
+{"id": "ta_int_2", "lang": "ta", "category": "int", "text": "இந்த மண்டபத்தில் 250 பேர் அமரலாம்.", "llm": "இந்த மண்டபத்தில் இருநூற்று ஐம்பது பேர் அமரலாம்."}
+{"id": "ta_int_3", "lang": "ta", "category": "int", "text": "கடந்த மாதம் 1,500 வாடிக்கையாளர்கள் இணைந்தனர்.", "llm": "கடந்த மாதம் ஆயிரத்து ஐந்நூறு வாடிக்கையாளர்கள் இணைந்தனர்."}
+{"id": "ta_int_4", "lang": "ta", "category": "int", "text": "மலேசியாவின் மக்கள் தொகை சுமார் 33,000,000.", "llm": "மலேசியாவின் மக்கள் தொகை சுமார் முப்பத்து மூன்று மில்லியன்."}
+{"id": "ta_int_5", "lang": "ta", "category": "int", "text": "உங்கள் அறை 305, 3ஆம் மாடியில் உள்ளது.", "llm": "உங்கள் அறை மூன்று பூஜ்ஜியம் ஐந்து, மூன்றாம் மாடியில் உள்ளது."}
+{"id": "ta_int_6", "lang": "ta", "category": "int", "text": "நிலுவையில் உள்ள டிக்கெட்டுகள் 0.", "llm": "நிலுவையில் உள்ள டிக்கெட்டுகள் பூஜ்ஜியம்."}
+{"id": "ta_int_7", "lang": "ta", "category": "int", "text": "எங்களிடம் 12 கிளைகள் மற்றும் 40 ஊழியர்கள் உள்ளனர்.", "llm": "எங்களிடம் பன்னிரண்டு கிளைகள் மற்றும் நாற்பது ஊழியர்கள் உள்ளனர்."}
+{"id": "ta_money_1", "lang": "ta", "category": "money", "text": "உங்கள் இருப்பு RM1,250.50.", "llm": "உங்கள் இருப்பு ஒரு ஆயிரம் இருநூற்று ஐம்பது ரிங்கிட் ஐம்பது சென்."}
+{"id": "ta_money_2", "lang": "ta", "category": "money", "text": "மாதக் கட்டணம் RM50.", "llm": "மாதக் கட்டணம் ஐம்பது ரிங்கிட்."}
+{"id": "ta_money_3", "lang": "ta", "category": "money", "text": "விலை RM12.05, வரி உட்பட.", "llm": "விலை பன்னிரண்டு ரிங்கிட் ஐந்து சென், வரி உட்பட."}
+{"id": "ta_money_4", "lang": "ta", "category": "money", "text": "மொத்தம் RM 3,400.", "llm": "மொத்தம் மூன்று ஆயிரம் நானூறு ரிங்கிட்"}
+{"id": "ta_money_5", "lang": "ta", "category": "money", "text": "இந்த வீட்டின் விலை RM1.2 மில்லியன்.", "llm": "இந்த வீட்டின் விலை ஒரு புள்ளி இரண்டு மில்லியன் ரிங்கிட்."}
+{"id": "ta_money_6", "lang": "ta", "category": "money", "text": "வைப்புத்தொகை 500 ரிங்கிட், வாடகை மாதம் RM1800.", "llm": "வைப்புத்தொகை ஐந்நூறு ரிங்கிட், வாடகை மாதம் ஆயிரத்து எண்ணூறு ரிங்கிட்."}
+{"id": "ta_decimal_1", "lang": "ta", "category": "decimal", "text": "உங்கள் உடல் வெப்பநிலை 37.5 டிகிரி.", "llm": "உங்கள் உடல் வெப்பநிலை முப்பத்து ஏழு புள்ளி ஐந்து டிகிரி."}
+{"id": "ta_decimal_2", "lang": "ta", "category": "decimal", "text": "சராசரி மதிப்பீடு 5க்கு 4.8.", "llm": "சராசரி மதிப்பீடு ஐந்துக்கு நான்கு புள்ளி எட்டு."}
+{"id": "ta_percent_1", "lang": "ta", "category": "percent", "text": "விற்பனை 25% உயர்ந்தது.", "llm": "விற்பனை இருபத்தைந்து சதவீதம் உயர்ந்தது."}
+{"id": "ta_percent_2", "lang": "ta", "category": "percent", "text": "பேட்டரி 100%, தள்ளுபடி 12.5%.", "llm": "பேட்டரி நூறு சதவீதம், தள்ளுபடி பன்னிரண்டு புள்ளி ஐந்து சதவீதம்."}
+{"id": "ta_phone_1", "lang": "ta", "category": "phone", "text": "தயவுசெய்து 03-12345678 ஐ அழைக்கவும்.", "llm": "தயவுசெய்து பூஜ்ஜியம் மூன்று ஒன்று இரண்டு மூன்று நான்கு ஐந்து ஆறு ஏழு எட்டு ஐ அழைக்கவும்."}
+{"id": "ta_phone_2", "lang": "ta", "category": "phone", "text": "என் தொலைபேசி எண் 012-345 6789.", "llm": "என் தொலைபேசி எண் பூஜ்ஜியம் ஒன்று இரண்டு மூன்று நான்கு ஐந்து ஆறு ஏழு எட்டு ஒன்பது."}
+{"id": "ta_phone_3", "lang": "ta", "category": "phone", "text": "எங்கள் ஹாட்லைன் +60 3-1234 5678 அல்லது 1-300-88-1234.", "llm": "எங்கள் ஹாட்லைன் பிளஸ் ஆறு பூஜ்ஜியம் மூன்று ஒன்று இரண்டு மூன்று நான்கு ஐந்து ஆறு ஏழு எட்டு அல்லது ஒன்று மூன்று பூஜ்ஜியம் பூஜ்ஜியம் எட்டு எட்டு ஒன்று இரண்டு மூன்று நான்கு."}
+{"id": "ta_ic_1", "lang": "ta", "category": "ic", "text": "என் அடையாள அட்டை எண் 960314875079.", "llm": "என் அடையாள அட்டை எண் ஒன்பது ஆறு பூஜ்ஜியம் மூன்று ஒன்று நான்கு எட்டு ஏழு ஐந்து பூஜ்ஜியம் ஏழு ஒன்பது."}
+{"id": "ta_ic_2", "lang": "ta", "category": "ic", "text": "உங்கள் அடையாள அட்டை எண் 960314-08-5079 ஐ உறுதிப்படுத்துங்கள்.", "llm": "உங்கள் அடையாள அட்டை எண் ஒன்பது ஆறு பூஜ்ஜியம் மூன்று ஒன்று நான்கு பூஜ்ஜியம் எட்டு பூஜ்ஜியம் ஐந்து பூஜ்ஜியம் ஏழு ஒன்பது ஐ உறுதிப்படுத்துங்கள்."}
+{"id": "ta_date_1", "lang": "ta", "category": "date", "text": "கூட்டம் 15/3/2024 அன்று நடைபெறும்.", "llm": "கூட்டம் பதினைந்து மார்ச் இரண்டாயிரத்து இருபத்தி நான்கு அன்று நடைபெறும்."}
+{"id": "ta_date_2", "lang": "ta", "category": "date", "text": "டெலிவரி 2024-03-15 அன்று திட்டமிடப்பட்டுள்ளது.", "llm": "டெலிவரி இரண்டாயிரத்து இருபத்தி நான்கு மார்ச் பதினைந்து அன்று திட்டமிடப்பட்டுள்ளது."}
+{"id": "ta_date_3", "lang": "ta", "category": "date", "text": "நிகழ்ச்சி மார்ச் 1 முதல் மார்ச் 15, 2024 வரை.", "llm": "நிகழ்ச்சி மார்ச் ஒன்று முதல் மார்ச் பதினைந்து, இரண்டாயிரத்து இருபத்தி நான்கு வரை."}
+{"id": "ta_date_4", "lang": "ta", "category": "date", "text": "30-06-2025 க்கு முன் பணம் செலுத்துங்கள்.", "llm": "முப்பத்து நாள் ஜூன் இரண்டாயிரத்து இருபத்தைந்து க்கு முன் பணம் செலுத்துங்கள்."}
+{"id": "ta_date_5", "lang": "ta", "category": "date", "text": "அவர் 15 மார்ச் 1998 இல் பிறந்தார்.", "llm": "அவர் பதினைந்து மார்ச் ஆயிரத்து தொள்ளாயிரத்து தொண்ணூற்று எட்டு இல் பிறந்தார்."}
+{"id": "ta_time_1", "lang": "ta", "category": "time", "text": "கூட்டம் காலை 10:45 மணிக்கு தொடங்கும்.", "llm": "கூட்டம் காலை பத்து நாற்பத்தைந்து மணிக்கு தொடங்கும்."}
+{"id": "ta_time_2", "lang": "ta", "category": "time", "text": "நாங்கள் மாலை 5pm மணிக்கு மூடுகிறோம்.", "llm": "நாங்கள் மாலை ஐந்து பி எம் மணிக்கு மூடுகிறோம்."}
+{"id": "ta_time_3", "lang": "ta", "category": "time", "text": "உங்கள் சந்திப்பு நாளை 3:30 p.m. மணிக்கு.", "llm": "உங்கள் சந்திப்பு நாளை மூன்று முப்பது p.m. மணிக்கு."}
+{"id": "ta_time_4", "lang": "ta", "category": "time", "text": "ரயில் 14:05 மணிக்கு புறப்படும்.", "llm": "ரயில் பதினான்கு மணி ஐந்து நிமிடத்திற்கு புறப்படும்."}
+{"id": "ta_time_5", "lang": "ta", "category": "time", "text": "அலுவலகம் 8:00 மணிக்கு திறந்து 17:00 மணிக்கு மூடும்.", "llm": "அலுவலகம் எட்டு மணிக்கு திறந்து பதினேழு மணிக்கு மூடும்."}
+{"id": "ta_ordinal_1", "lang": "ta", "category": "ordinal", "text": "நீங்கள் வரிசையில் 3வது.", "llm": "நீங்கள் வரிசையில் மூன்றாவது."}
+{"id": "ta_ordinal_2", "lang": "ta", "category": "ordinal", "text": "இது 1ஆவது நினைவூட்டல், 2ஆவது பின்தொடரும்.", "llm": "இது ஒன்றாவது நினைவூட்டல், இரண்டாவது பின்தொடரும்."}
+{"id": "ta_ordinal_3", "lang": "ta", "category": "ordinal", "text": "21ஆம் பிறந்தநாள் வாழ்த்துக்கள்!", "llm": "இருபத்தொன்றாம் பிறந்தநாள் வாழ்த்துக்கள்!"}
+{"id": "ta_range_1", "lang": "ta", "category": "range", "text": "நாங்கள் திங்கள் முதல் வெள்ளி வரை 9am-5pm திறந்திருக்கிறோம்.", "llm": "நாங்கள் திங்கள் முதல் வெள்ளி வரை ஒன்பது ஏ எம் முதல் ஐந்து பி எம் வரை திறந்திருக்கிறோம்."}
+{"id": "ta_range_2", "lang": "ta", "category": "range", "text": "டெலிவரிக்கு 3-5 வேலை நாட்கள் ஆகும்.", "llm": "டெலிவரிக்கு மூன்று முதல் ஐந்து வேலை நாட்கள் ஆகும்."}
+{"id": "ta_range_3", "lang": "ta", "category": "range", "text": "10 முதல் 15 நிமிடங்கள் காத்திருக்கவும்.", "llm": "10 முதல் 15 நிமிடங்கள் காத்திருக்கவும்."}
+{"id": "ta_unit_1", "lang": "ta", "category": "unit", "text": "பை 5kg எடை, பெட்டி 30 cm அகலம்.", "llm": "பை ஐந்து கிலோகிராம் எடை, பெட்டி முப்பது சென்டிமீட்டர் அகலம்."}
+{"id": "ta_unit_2", "lang": "ta", "category": "unit", "text": "கடை இங்கிருந்து 2.5 km தொலைவில் உள்ளது.", "llm": "கடை இங்கிருந்து இரண்டு புள்ளி ஐந்து கிலோமீட்டர் தொலைவில் உள்ளது."}
+{"id": "ta_unit_3", "lang": "ta", "category": "unit", "text": "இன்று வெளியே 32°C.", "llm": "இன்று வெளியே முப்பத்திரண்டு டிகிரி செல்சியஸ்."}
+{"id": "ta_unit_4", "lang": "ta", "category": "unit", "text": "இந்த திட்டத்தில் 50GB டேட்டா அடங்கும்.", "llm": "இந்த திட்டத்தில் ஐம்பது ஜிபி டேட்டா அடங்கும்."}
+{"id": "ta_email_1", "lang": "ta", "category": "email", "text": "விவரங்களுக்கு husein@site.com க்கு மின்னஞ்சல் அனுப்புங்கள்.", "llm": "விவரங்களுக்கு husein at site dot com க்கு மின்னஞ்சல் அனுப்புங்கள்."}
+{"id": "ta_url_1", "lang": "ta", "category": "url", "text": "மேலும் அறிய www.scicom.com.my ஐ பார்வையிடுங்கள்.", "llm": "மேலும் அறிய www dot scicom dot com dot my ஐ பார்வையிடுங்கள்."}
+{"id": "ta_id_1", "lang": "ta", "category": "id", "text": "உங்கள் அறிக்கை எண் X-12340567.", "llm": "உங்கள் அறிக்கை எண் X ஒன்று இரண்டு மூன்று நான்கு பூஜ்ஜியம் ஐந்து ஆறு ஏழு."}
+{"id": "ta_id_2", "lang": "ta", "category": "id", "text": "ஆர்டர் #4471 அனுப்பப்பட்டது.", "llm": "ஆர்டர் #நான்கு நான்கு ஏழு ஒன்று அனுப்பப்பட்டது."}
+{"id": "ta_id_3", "lang": "ta", "category": "id", "text": "குறிப்பு ABC1234, PIN 0457.", "llm": "குறிப்பு ABC ஒன்று இரண்டு மூன்று நான்கு, PIN பூஜ்ஜியம் நான்கு ஐந்து ஏழு."}
+{"id": "ta_year_1", "lang": "ta", "category": "year", "text": "நிறுவனம் 1998 இல் நிறுவப்பட்டு 2024 இல் விரிவடைந்தது.", "llm": "நிறுவனம் ஆயிரத்து தொள்ளாயிரத்து தொண்ணூற்று எட்டு இல் நிறுவப்பட்டு இரண்டாயிரத்து இருபத்து நான்கு இல் விரிவடைந்தது."}
+{"id": "ta_year_2", "lang": "ta", "category": "year", "text": "2030 க்குள் இரட்டிப்பாகும் என எதிர்பார்க்கிறோம்.", "llm": "இரண்டாயிரத்து முப்பது க்குள் இரட்டிப்பாகும் என எதிர்பார்க்கிறோம்."}
+{"id": "ta_abbr_1", "lang": "ta", "category": "abbr", "text": "Dr. Lim உங்களை மீண்டும் அழைப்பார்.", "llm": "Dr. Lim உங்களை மீண்டும் அழைப்பார்."}
+{"id": "ta_abbr_2", "lang": "ta", "category": "abbr", "text": "Scicom Sdn Bhd Jln Ampang இல் அமைந்துள்ளது.", "llm": "Scicom Sdn Bhd Jln Ampang இல் அமைந்துள்ளது."}
+{"id": "ta_acro_1", "lang": "ta", "category": "acro", "text": "SMS மூலம் அனுப்பப்பட்ட OTP ஐ உள்ளிடுங்கள்.", "llm": "SMS மூலம் அனுப்பப்பட்ட OTP ஐ உள்ளிடுங்கள்."}
+{"id": "ta_acro_2", "lang": "ta", "category": "acro", "text": "உங்கள் IC ஐ TNB கவுண்டருக்கு கொண்டு வாருங்கள்.", "llm": "உங்கள் IC ஐ TNB கவுண்டருக்கு கொண்டு வாருங்கள்."}
+{"id": "ta_plain_1", "lang": "ta", "category": "plain", "text": "வணக்கம், நான் உங்களுக்கு எப்படி உதவ முடியும்?", "llm": "வணக்கம், நான் உங்களுக்கு எப்படி உதவ முடியும்?"}
+{"id": "ta_plain_2", "lang": "ta", "category": "plain", "text": "உங்கள் பொறுமைக்கு நன்றி, விரைவில் பதிலளிக்கிறோம்.", "llm": "உங்கள் பொறுமைக்கு நன்றி, விரைவில் பதிலளிக்கிறோம்."}
+{"id": "ta_plain_3", "lang": "ta", "category": "plain", "text": "மொத்தம் ஆயிரத்து இருநூற்று ஐம்பது ரிங்கிட், நன்றி.", "llm": "மொத்தம் ஆயிரத்து இருநூற்று ஐம்பது ரிங்கிட், நன்றி."}
+{"id": "ta_plain_4", "lang": "ta", "category": "plain", "text": "நாங்கள் இரண்டு வேலை நாட்களுக்குள் பதிலளிப்போம்.", "llm": "நாங்கள் இரண்டு வேலை நாட்களுக்குள் பதிலளிப்போம்."}
+{"id": "ta_mixed_1", "lang": "ta", "category": "mixed", "text": "உங்கள் மொத்தம் RM1,250.50, கூட்டம் 12/9/2026 அன்று 3pm மணிக்கு.", "llm": "உங்கள் மொத்தம் ஒரு ஆயிரம் இருநூற்று ஐம்பது ரிங்கிட் ஐம்பது சென், கூட்டம் பன்னிரண்டு செப்டம்பர் இரண்டாயிரத்து இருபத்தாறு அன்று மூன்று பி எம் மணிக்கு."}
+{"id": "ta_mixed_2", "lang": "ta", "category": "mixed", "text": "5/6/2025 க்கு முன் RM89.90 செலுத்துங்கள், இல்லையெனில் 10% தாமதக் கட்டணம்.", "llm": "five June twenty twenty-five க்கு முன் eighty-nine ringgit ninety sen செலுத்துங்கள், இல்லையெனில் ten percent தாமதக் கட்டணம்."}
+{"id": "ta_mixed_3", "lang": "ta", "category": "mixed", "text": "2 யூனிட்கள், ஒவ்வொன்றும் RM199, 3-5 நாட்களில் Jalan Tun Razak, No. 12 க்கு.", "llm": "2 யூனிட்கள், ஒவ்வொன்றும் நூற்றொன்பதுபத்தொன்பது ரிங்கிட், 3-5 நாட்களில் Jalan Tun Razak, No. 12 க்கு."}

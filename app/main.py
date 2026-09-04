@@ -23,7 +23,8 @@ from pydantic import BaseModel, Field, AliasChoices
 from huggingface_hub import hf_hub_download
 from app.normalizer import load as load_normalizer, to_cardinal
 from app.normalizer.chinese import normalize_chinese, is_chinese_dominant, CJK_RE, KANA_RE
-from app.llm_normalizer import llm_normalize, LLMNormalizerError, NormalizerMode
+from app.llm_normalizer import llm_normalize, needs_normalization, has_unspoken, LLMNormalizerError, NormalizerMode
+from app.spoken_normalizer import normalize as spoken_normalize
 from app import tracing
 import torch.cuda as cuda
 import uuid
@@ -1297,6 +1298,13 @@ async def normalize_request_text(data, fallback_to_rule=False):
         'normalizer.malaysian': data.normalize_malaysian,
         'normalizer.chars_in': len(data.input),
     }) as sp:
+        if data.mode == NormalizerMode.spoken:
+            # rule-based replica of the LLM normalizer (app/spoken_normalizer): same pre/post
+            # cleanup as the llm path, no network, microseconds.
+            with tracing.span('normalize.spoken'):
+                s = _post_normalize(spoken_normalize(_pre_normalize(data.input)))
+            tracing.set_attributes(sp, {'normalizer.chars_out': len(s)})
+            return s
         if data.mode == NormalizerMode.llm:
             if not (OPENAI_BASE_URL and OPENAI_MODEL_NAME):
                 if not fallback_to_rule:
@@ -1304,10 +1312,33 @@ async def normalize_request_text(data, fallback_to_rule=False):
                         status_code=400,
                         detail='mode="llm" requires OPENAI_BASE_URL and OPENAI_MODEL_NAME to be configured',
                     )
-                logging.warning('llm normalizer not configured, falling back to rule-based')
+                # the fallback is the spoken normalizer, not the legacy rule pipeline: it is the
+                # closer stand-in for what the LLM would have said (bench/normalizer_agreement.py)
+                logging.warning('llm normalizer not configured, falling back to the spoken normalizer')
                 tracing.set_attributes(sp, {'normalizer.fallback': 'unconfigured'})
+                s = _post_normalize(spoken_normalize(_pre_normalize(data.input)))
+                tracing.set_attributes(sp, {'normalizer.chars_out': len(s)})
+                return s
             else:
                 s = _pre_normalize(data.input)
+                if LLM_NORMALIZER_SKIP_PLAIN and not needs_normalization(s):
+                    # Plain words only: the LLM would hand this back unchanged, so give
+                    # the caller what that reply would have become and save the ~0.55 s
+                    # round trip -- which sat entirely in front of the first audio byte.
+                    logging.info('llm normalizer skipped: nothing to normalize')
+                    s = _post_normalize(s)
+                    tracing.set_attributes(sp, {'normalizer.llm_skipped': True,
+                                                'normalizer.chars_out': len(s)})
+                    return s
+                if LLM_NORMALIZER_RULE_FIRST:
+                    r = spoken_normalize(s)
+                    if not has_unspoken(r):
+                        # the rules read every number/symbol; nothing is left for the LLM
+                        logging.info('llm normalizer skipped: spoken rules covered the text')
+                        s = _post_normalize(r)
+                        tracing.set_attributes(sp, {'normalizer.llm_skipped': 'rule_first',
+                                                    'normalizer.chars_out': len(s)})
+                        return s
                 try:
                     # its own span: an unreachable/slow LLM endpoint is a common cause of
                     # a TTS request that looks stalled before a single token is generated.
@@ -1324,8 +1355,11 @@ async def normalize_request_text(data, fallback_to_rule=False):
                 except LLMNormalizerError as e:
                     if not fallback_to_rule:
                         raise HTTPException(status_code=502, detail=f'llm normalizer failed: {e}')
-                    logging.warning(f'llm normalizer failed, falling back to rule-based: {e}')
+                    logging.warning(f'llm normalizer failed, falling back to the spoken normalizer: {e}')
                     tracing.set_attributes(sp, {'normalizer.fallback': 'error'})
+                    s = _post_normalize(spoken_normalize(s))
+                    tracing.set_attributes(sp, {'normalizer.chars_out': len(s)})
+                    return s
         with tracing.span('normalize.rule'):
             s = normalize_malaysian_text(data.input, normalize_malaysian=data.normalize_malaysian)
         tracing.set_attributes(sp, {'normalizer.chars_out': len(s)})

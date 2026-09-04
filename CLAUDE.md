@@ -47,6 +47,24 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   Request-field defaults are env-driven: `DEFAULT_NORMALIZER_MODE` (`rule`|`llm`) and
   `DEFAULT_NORMALIZE_MALAYSIAN` (bool) set what requests get when they omit `mode` /
   `normalize_malaysian`.
+  **TTFB shortcut (`LLM_NORMALIZER_SKIP_PLAIN`, default on):** the LLM round trip is ~0.55 s and
+  sits entirely before the first audio byte, yet on plain conversational text the model returns
+  its input unchanged. `needs_normalization()` in `llm_normalizer.py` skips the call when the
+  pre-normalized text has no digit, symbol, ALL-CAPS/dotted token or known abbreviation; the
+  output is identical (51/51 sentences vs the live LLM, `bench/normalizer_gate_eval.py` — rerun
+  it after touching the gate or the prompt). Conservative: anything doubtful still goes to the LLM.
+- `app/spoken_normalizer/` — **rule-based replica of the LLM normalizer** (`mode: "spoken"`), pure Python,
+  importable anywhere: `numbers.py` (cardinals/ordinals/years/digits for en, ms, zh, ta — Tamil with sandhi),
+  `lang.py` (script → zh/ta; Malay-vs-English by marker words, sentence-level), `core.py` (ordered regex
+  handlers: email, url, IC, numeric dates, month-name dates, phone, time ranges, times, money, percent,
+  units, ordinals, ranges, `#N`, alphanumeric ids, years, plain numbers, abbreviations). Built against the
+  LLM's own outputs (`bench/normalizer_corpus.py` → `bench/normalizer_truth.py` →
+  `bench/results/normalizer_truth.jsonl`) and scored by `bench/normalizer_agreement.py`: 86% verbatim
+  agreement (en 91 / ms 91 / zh 90 / ta 72; the Tamil residue is mostly LLM errors), every digit read,
+  ~25 µs. Also the fallback for `mode=llm`, and with `LLM_NORMALIZER_RULE_FIRST=true` the LLM is only
+  called for what the rules leave unspeakable. Regex gotcha that cost a whole language: Python's `\w`/`\b`
+  treat CJK and Tamil letters as word characters, so digit boundaries must be ASCII classes
+  (`(?<![A-Za-z0-9_])`), and trailing lookaheads must allow a sentence-final `.`.
 - `app/tracing.py` — OpenTelemetry spans on the hot path (`ENABLE_TRACING_SPANS`, **default on**,
   but gated on an exporter actually being configured; off, no exporter, or no opentelemetry ⇒
   every helper is a shared `nullcontext()` / a `None`-returning no-op, so the GIL-bound decode
@@ -56,6 +74,14 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   Span tree and the reasoning behind it: module docstring + README "Tracing (Loki + Tempo)".
 - `vllm.yaml` / `docker-compose.yaml` — the two services, sharing external docker network `tts-network`.
 - `bench/` — benchmark + Whisper-CER harness, RunPod deploy scripts, and recorded results (see `bench/OPTIMIZATION.md`).
+- `bench/widecodec_ab/` — codec A/B harness: decodes ONE LM token stream through two decoders, so the
+  codec is isolated from temp-0.6 sampling noise. Verdict (`bench/WIDECODEC_AB.md`): **keep NeuCodec**.
+  `Scicom-intl/WideCodec` (44.1 kHz decoder-only finetune, shared frozen FSQ codebook) scores −0.212
+  UTMOSv2 on our TTS tokens yet **ties** NeuCodec on real-audio resynthesis (+0.011) — an LM/decoder
+  pairing effect, not codec quality, since the LM was trained against NeuCodec's decoder. Its pitch
+  track is intrinsically jumpier in both conditions (warble clips 3.5% → 10.0%), though sustained
+  seams don't differ. UTMOSv2 scoring is stochastic — **use `reps=16`** (`reps=1` spreads ±0.17 MOS on
+  a bit-identical file, larger than the effect).
 - `bench/livekit/` — LiveKit agent stress rig (no-STT/no-LLM agent + load client): measures TTFB and
   per-utterance loudness through a real agent + WebRTC path. See its README for setup and results.
 
@@ -108,13 +134,43 @@ for ~4.6 s of audio (RTF ≈0.15).
 | `DYNAMIC_BATCHING` (default `true`) | Batch concurrent decode calls. Essential for concurrency, free at concurrency 1. |
 | `CUDA_GRAPH_BATCH=[0.5,1.0,1.5,2.0,3.0,4.0]` | Token-length buckets (×50). **Enabling this is the single biggest codec win (~1.7×).** Empty = eager. With growing windows + past context, decode shapes reach `STREAM_MAX_CHUNK_S + STREAM_PAST_CONTEXT_S` (~13s ⇒ 650 tokens) — include big buckets (e.g. `...,6.0,10.0,13.5]`) or oversize windows silently fall back to eager decode. |
 | `MAX_BATCH_SIZE` | Max requests/decode-batch and largest CUDA-graph batch dim. Bigger = more graph memory (~0.06 GB/graph; graphs = `MAX_BATCH_SIZE × len(CUDA_GRAPH_BATCH)`). |
-| `DEFAULT_PLAYBACK_SPEED` (default `2.0`) | Size of the **first** decode window only (×50 tokens ⇒ 2 s); later windows grow via `STREAM_CHUNK_GROWTH`/`STREAM_MAX_CHUNK_S`, with `STREAM_PAST_CONTEXT_S` of past tokens primed into every window. Larger first window ⇒ higher first-chunk latency, better first-window decode. |
+| `DEFAULT_PLAYBACK_SPEED` (default `2.0`) | Size of the **first** decode window only (×50 tokens ⇒ 2 s); later windows grow via `STREAM_CHUNK_GROWTH`/`STREAM_MAX_CHUNK_S`, with `STREAM_PAST_CONTEXT_S` of past tokens primed into every window. Larger first window ⇒ higher first-chunk latency, better first-window decode. **This gate is the TTFB** (the LM does ~530 tok/s single-stream): 2.0 ⇒ ~220 ms, 1.5 ⇒ ~170 ms, **0.75 ⇒ ~100 ms** (deploy example), 0.5 ⇒ ~80 ms but skews the loudness normalizer +1 dB. See *Time to first byte* below. |
 | `TORCH_COMPILE=true` | Use `torch.compile` instead of CUDA graphs (alternative codepath). |
+| `LLM_NORMALIZER_SKIP_PLAIN` (default `true`) | Skip the `mode=llm` normalizer call when the text has nothing to normalize (see `app/llm_normalizer.py` above). Saves ~0.55 s of TTFB on plain text; output identical. |
+| `LLM_NORMALIZER_RULE_FIRST` (default `false`) | `mode=llm`: run `app/spoken_normalizer` first, call the LLM only if a digit/symbol/dotted token survives. Removes the LLM round trip from practically every request; changes output on the ~14% of sentences where rules and LLM differ. `DEFAULT_NORMALIZER_MODE=spoken` skips the LLM outright. |
 | `DEFAULT_SPEAKING_RATE` (default `1.0`) | Default for the `speaking_rate` request field: WSOLA time stretch of the output audio (1.3 = 30% faster, pitch unchanged). Not a decode knob — the token count and every decode are the same; only the emitted PCM is shorter/longer. ~1–2 ms CPU per 2 s chunk on the event loop when ≠ 1.0. |
 | `STREAM_NORMALIZE` (default `true`) | Per-utterance loudness normalization in the crossfade stitcher (running active-RMS → gain toward `TARGET_RMS_DB`, slew `GAIN_SLEW_DB`/chunk, clamp `MAX_GAIN_DB`); per-request override via `stream_normalize` on `/v1/audio/speech`. The LM's sampled tokens carry loudness — same text at temp 0.6–0.7 spreads 3–10 dB active-RMS (and different voices sit ~5 dB apart in natural level), and ~half of hot utterances clip at full scale; this collapses the spread to <2 dB (verified through a LiveKit agent at concurrency 8, see `bench/livekit/`). Boosts are capped by running-peak headroom and peaks are rounded by a tanh soft-knee limiter (knee 0.85, drive 1.4) — RMS-boosting a peaky voice (crest ~19 dB) through the old hard clip crackled audibly. The gain locks after the first ~1s of voiced audio (one static trim per utterance): a continuously-adapting causal AGC drifted ±0.75 dB mid-utterance, audible as "damping". Residual streaming loudness ripple (~0.7–1.5 dB envelope tilt vs a single big decode window) is the non-causal decoder's window effect — shrink it with larger `playback_speed`/`playback_overlap_speed` (e.g. `playback_speed=10` for non-realtime requests). |
 | uvicorn `--workers N` (deploy) | Run N app processes to beat the GIL ceiling. **Requires NVIDIA MPS** to share the GPU without context-thrash collapse at high concurrency. |
 | `TRACE_ASGI_MESSAGE_SPANS` (default `false`) / `DISCONNECT_POLL_S` (`0.25`) | Suppress OTel's per-ASGI-message `http receive`/`http send` spans, and throttle the disconnect poll that generates them. See the gotcha below — without these one streaming request emits ~500 empty spans. |
 | `ENABLE_TRACING_SPANS` (default `true`, **and** needs an exporter: `OTLP_ENDPOINT`/`OTEL_EXPORTER_OTLP_*`/`JAEGER_HOST`/`ENABLE_CONSOLE_SPAN_EXPORTER`, else spans are not built — waive with `TRACING_SPANS_REQUIRE_EXPORTER=false`) | Hot-path spans (`app/tracing.py`): `codec.batch_wait`/`batch_prep`/`compute_wait` (dynamic batching), `lm.connect`/`lm.first_token` + `tts.lm_wait_s` (waiting on vLLM), `codec.gpu_decode` + `tts.decode_wait_s` (decoding speech tokens), per emitted chunk. ~5 extra spans **per decode**, so pair with `TRACING_SAMPLE<1` under load; An SDK with no span processor still *builds* every span before dropping it (~292 us/request measured), which is why no exporter ⇒ no spans. `false` = `nullcontext`, no timing taken at all (2.6 us). |
+
+### Time to first byte (TTFB)
+
+Measured 2026-09-04 on tm-h20 (8× H20-3e; prod vLLM, TP=2) with `bench/ttfb_probe.py`, which times the
+first **audio** byte on a `pcm` stream (WAV emits its header before any decode, so `bench.py`'s wav TTFB
+is meaningless). Staging's ~1 s decomposed as:
+
+| Stage | On the box | Notes |
+|---|---|---|
+| LLM normalizer (`mode=llm`, gemma-4-31b via serverless proxy) | **~560 ms** | headers only after it returns; 19/21 sentences came back unchanged |
+| LM: first `playback_speed*50 + overlap*50` tokens | 173 ms @1.5 s window | prefill 11 ms, then ~530 tok/s; 85 tokens ⇒ 166 ms |
+| First codec decode + emit | ~7 ms (CUDA graph) / ~17 ms (eager) | not a TTFB factor on H20 |
+| Serverless proxy hop (from a laptop) | +125 ms | and it paces the stream: 3/9 runs would have stalled a client (`min_lead_s<0`) |
+
+What moved it (both output-preserving, so the CER guardrail cannot regress): `LLM_NORMALIZER_SKIP_PLAIN`
+(above) and `DEFAULT_PLAYBACK_SPEED=0.75`. Result, on-box `mode=llm` plain text: **754 ms → 103 ms**; text
+with digits/abbreviations keeps the LLM call (~660 ms). The window change was checked at temperature 0
+(identical tokens) against a one-shot `playback_speed=50` decode with `bench/window_ab.py`: envelope
+median |Δ| 0.11 dB (1.5 s: 0.16), no seam clicks (2nd-difference ratio ≤1.7), loudness-normalizer offset
+−0.22 dB (1.5 s: −0.50), and Whisper transcripts identical 7/7 (`bench/cer_wavs.py`). 0.5 s is too small:
++1.0 dB normalizer bias. The LM at 10× realtime keeps ≥0.5 s of client buffer even at 0.75 s
+(`min_lead_s`), so no underrun risk from the smaller first window. Not fixable here: the LLM's own
+~0.55 s when text *does* need normalizing, and the proxy's +125 ms / buffering.
+
+Reproducing on a shared slurm GPU box: `bench/deploy/test_instance.sbatch` runs one app process from
+an rsynced checkout + an env file next to whatever is already on the node (own port/GPU, `OVERRIDES=`
+for per-instance knobs); `bench/lm_probe.py` times the LM alone, `bench/normalizer_probe.py` the
+normalizer alone.
 
 ### Accuracy guardrail (Whisper-large-v3 CER, 16 sentences, temp 0.6)
 
@@ -163,6 +219,15 @@ python -m pytest tests/test_sanitize_markdown.py -v   # no GPU deps
 python -m pytest tests/test_timestretch.py -v         # no GPU deps (speaking_rate WSOLA)
 uv run --with pytest --with opentelemetry-sdk -- pytest tests/test_tracing.py -v  # no GPU deps
 uv run --with aiohttp --with pytest -- pytest tests/test_llm_normalizer.py -v  # no GPU deps; `set -a; source .env; set +a` first to include the live LLM tests
+
+# TTFB / first-window tooling (talks to a running app; see "Time to first byte")
+python bench/ttfb_probe.py --url http://127.0.0.1:9091 --playback 1.5,0.75 --overlap 0.2 --reps 3   # first-audio-byte latency + client stall margin
+python bench/lm_probe.py --gates 35,60,85,110          # vLLM alone: prefill, tok/s, arrival of the N-th token (source .env first)
+python bench/window_ab.py --url ... --configs 1.5:0.2,0.75:0.2   # temp-0 streamed vs one-shot decode: envelope, clicks (+ --save-dir, then bench/cer_wavs.py)
+PYTHONPATH=. python bench/normalizer_gate_eval.py --old-url ... --new-url ...   # LLM-skip gate: outputs must be identical
+uv run --with pytest pytest tests/test_spoken_normalizer.py -q   # rule normalizer (994 tests, no deps)
+PYTHONPATH=. python bench/normalizer_agreement.py               # rule vs LLM ground truth, per language/category
+set -a; source .env; set +a; uv run --with aiohttp python bench/normalizer_truth.py   # extend the ground truth (new corpus ids only)
 
 # local docker stack
 docker network create tts-network
