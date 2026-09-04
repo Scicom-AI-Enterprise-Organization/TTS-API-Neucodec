@@ -252,10 +252,11 @@ pure Python, ~25 µs): numbers, money (RM/sen, dollars), IC and phone numbers di
 dates, times, percentages, decimals, ordinals, units, emails, URLs, ids and the abbreviations
 the LLM expands, verbalized in the sentence's language, Malay/English by marker words, Mandarin
 and Tamil by script. It was built against the LLM's own outputs on `bench/normalizer_corpus.py`
-(`bench/results/normalizer_truth.jsonl`) and agrees with them verbatim on 86% of sentences
-(English 91%, Malay 91%, Mandarin 90%, Tamil 72%, where most of the rest are LLM slips such as
-answering a Tamil sentence in English), never leaves a digit unread, and is what `mode: "llm"`
-falls back to. `bench/normalizer_agreement.py` re-scores it; `bench/normalizer_truth.py` extends
+(`bench/results/normalizer_truth.jsonl`, 300 sentences) and agrees with them verbatim on 85% of
+sentences (English 91%, Malay 91%, Mandarin 90%, Tamil 72%, Malay/English code-switch 67%; most of
+the rest are LLM slips such as answering a Tamil sentence in English), never leaves a digit unread,
+and is what `mode: "llm"` falls back to. In code-switched sentences each number is read in the
+language of its neighbouring words. Coverage matrix and methodology: [bench/NORMALIZER.md](bench/NORMALIZER.md). `bench/normalizer_agreement.py` re-scores it; `bench/normalizer_truth.py` extends
 the ground truth.
 
 ```bash

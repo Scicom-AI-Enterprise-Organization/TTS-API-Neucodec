@@ -197,6 +197,51 @@ def test_matches_llm(text, expected):
     assert canon(normalize(text)) == canon(expected)
 
 
+class TestCodeSwitching:
+    """Malay/English mixed sentences: each number picks its language from its neighbours,
+    with the sentence language as prior (lang.local_lang). Expected strings are the LLM's."""
+
+    @pytest.mark.parametrize('text,expected', [
+        ('Nombor akaun anda ialah 1234, and your balance is RM50 today.',
+         'Nombor akaun anda ialah satu dua tiga empat, and your balance is fifty ringgit today.'),
+        ('Please pay RM120 before 5pm, kalau tidak akaun anda akan digantung selama 3 hari.',
+         'Please pay one hundred twenty ringgit before five p m, kalau tidak akaun anda akan digantung selama tiga hari.'),
+        ('Total 3 items, harga RM45.90 semuanya, delivered in 2 days.',
+         'Total three items, harga empat puluh lima ringgit sembilan puluh sen semuanya, delivered in two days.'),
+        ('Meeting pukul 10 pagi esok at level 12, jangan lupa bring 2 copies.',
+         'Meeting pukul sepuluh pagi esok at level dua belas, jangan lupa bring dua copies.'),
+        ('Your appointment on 5 Jun 2025 at 2.30pm, sila datang 15 minit awal.',
+         'Your appointment on the fifth of June twenty twenty-five at two thirty p m, sila datang lima belas minit awal.'),
+        ('Sila tunggu, I will transfer you to extension 305 in 2 minutes.',
+         'Sila tunggu, I will transfer you to extension three zero five in two minutes.'),
+        ('Okay encik, your booking is confirmed, total RM120 for 2 nights.',
+         'Okay encik, your booking is confirmed, total one hundred twenty ringgit for two nights.'),
+        ('Encik boleh dapat 25% discount kalau bayar before 30 June.',
+         'Encik boleh dapat dua puluh lima peratus discount kalau bayar before tiga puluh June.'),
+    ])
+    def test_matches_llm(self, text, expected):
+        assert canon(normalize(text)) == canon(expected)
+
+    def test_local_vote(self):
+        from app.spoken_normalizer.lang import local_lang, is_code_switched
+        t = 'Nombor akaun anda ialah 1234, and your balance is RM50 today.'
+        assert is_code_switched(t)
+        i = t.index('1234')
+        assert local_lang(t, i, i + 4, 'en') == 'ms'          # neighbours beat the sentence prior
+        j = t.index('50')
+        assert local_lang(t, j, j + 2, 'ms') == 'en'
+
+    def test_monolingual_sentences_are_not_split(self):
+        from app.spoken_normalizer.lang import is_code_switched
+        assert not is_code_switched('Your balance is RM1,250.50 as of today.')
+        assert not is_code_switched('Baki anda RM1,250.50 setakat hari ini.')
+
+    def test_generated_words_do_not_vote(self):
+        # "one hundred twenty ringgit" from the first number must not pull the second one
+        out = normalize('Bayar RM120 sekarang, then 3 more instalments follow.')
+        assert out.endswith('then three more instalments follow.')
+
+
 class TestDeliberateDifferences:
     """Where the rules and the LLM part ways on purpose."""
 

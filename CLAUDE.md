@@ -55,12 +55,13 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   it after touching the gate or the prompt). Conservative: anything doubtful still goes to the LLM.
 - `app/spoken_normalizer/` — **rule-based replica of the LLM normalizer** (`mode: "spoken"`), pure Python,
   importable anywhere: `numbers.py` (cardinals/ordinals/years/digits for en, ms, zh, ta — Tamil with sandhi),
-  `lang.py` (script → zh/ta; Malay-vs-English by marker words, sentence-level), `core.py` (ordered regex
+  `lang.py` (script → zh/ta; Malay-vs-English by marker words per sentence, and per number in code-switched sentences: distance-weighted neighbour vote + sentence prior), `core.py` (ordered regex
   handlers: email, url, IC, numeric dates, month-name dates, phone, time ranges, times, money, percent,
   units, ordinals, ranges, `#N`, alphanumeric ids, years, plain numbers, abbreviations). Built against the
   LLM's own outputs (`bench/normalizer_corpus.py` → `bench/normalizer_truth.py` →
-  `bench/results/normalizer_truth.jsonl`) and scored by `bench/normalizer_agreement.py`: 86% verbatim
-  agreement (en 91 / ms 91 / zh 90 / ta 72; the Tamil residue is mostly LLM errors), every digit read,
+  `bench/results/normalizer_truth.jsonl`, 300 sentences) and scored by `bench/normalizer_agreement.py`: 85% verbatim
+  agreement (en 91 / ms 91 / zh 90 / ta 72 / code-switch 67; the residue is mostly LLM errors or the LLM
+  contradicting itself), every digit read, full write-up in `bench/NORMALIZER.md`,
   ~25 µs. Also the fallback for `mode=llm`, and with `LLM_NORMALIZER_RULE_FIRST=true` the LLM is only
   called for what the rules leave unspeakable. Regex gotcha that cost a whole language: Python's `\w`/`\b`
   treat CJK and Tamil letters as word characters, so digit boundaries must be ASCII classes
