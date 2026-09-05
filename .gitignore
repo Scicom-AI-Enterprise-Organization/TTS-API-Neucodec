@@ -9,3 +9,11 @@ audio/*.wav
 audio/*.pcm
 audio
 *.sbatch
+# fastText language-id model downloaded by bench/langid_compare.py
+bench/results/lid.176.ftz
+
+# multilingual normalizer dataset: regenerable in seconds/minutes from the cached LLM files (kept)
+bench/results/multilingual_normalizer/template_pairs.jsonl
+bench/results/multilingual_normalizer/train*.jsonl
+bench/results/multilingual_normalizer/val*.jsonl
+bench/results/multilingual_normalizer/test*.jsonl

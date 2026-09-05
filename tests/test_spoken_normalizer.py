@@ -259,8 +259,29 @@ class TestDeliberateDifferences:
         assert normalize('Penghantaran dijadualkan pada 2024-03-15.') == 'Penghantaran dijadualkan pada lima belas Mac dua ribu dua puluh empat.'
 
     def test_celsius_in_mandarin(self):
-        # the LLM produced 三十二度C
-        assert normalize('今天外面32°C。') == '今天外面摄氏三十二度。'
+        # the LLM produced 三十二度C (and 一百八十度, and 负五摄氏度 -- the one form it got right)
+        assert normalize('今天外面32°C。') == '今天外面三十二摄氏度。'
+        assert normalize('昨晚气温降到-5°C。') == '昨晚气温降到负五摄氏度。'
+
+    def test_computed_thousands(self):
+        # the LLM computed RM12.5k in English but not in Malay; 'twelve point five thousand' is not said
+        assert normalize('The fine is RM12.5k.') == 'The fine is twelve thousand five hundred ringgit.'
+        assert normalize('Denda RM12.5k sahaja.') == 'Denda dua belas ribu lima ratus ringgit sahaja.'
+
+    def test_tamil_per_unit_takes_the_dative(self):
+        # the LLM said 'ஐந்து ரிங்கிட் ஒரு கிலோகிராம்' (no case); 'ஒரு மணி நேரத்திற்கு' elsewhere
+        assert normalize('அரிசி RM5/kg.') == 'அரிசி ஐந்து ரிங்கிட் ஒரு கிலோகிராமுக்கு.'
+
+    def test_hyphenated_digit_groups_are_digits_everywhere(self):
+        # en/ms/zh LLM: digits; the Tamil LLM read 12-3-5 as cardinals
+        assert normalize('யூனிட் எண் 12-3-5.') == 'யூனிட் எண் ஒன்று இரண்டு மூன்று ஐந்து.'
+
+    def test_llm_left_tamil_digits(self):
+        # sentences the LLM returned unchanged (digits and all); the rules read them
+        assert normalize('1/2 கப் சர்க்கரை மற்றும் 3/4 கப் மாவு சேர்க்கவும்.') == 'அரை கப் சர்க்கரை மற்றும் முக்கால் கப் மாவு சேர்க்கவும்.'
+        assert normalize('5ஐ 3ஆல் பெருக்கினால் 15ஆகும்.') == 'ஐந்தை மூன்றால் பெருக்கினால் பதினைந்தாகும்.'
+        assert normalize('1ஆம் நாள் முதல் 15ஆம் நாள் வரை.') == 'முதலாம் நாள் முதல் பதினைந்தாம் நாள் வரை.'
+        assert normalize('100க்கு 95 மதிப்பெண் பெற்றேன்.') == 'நூறுக்கு தொண்ணூற்று ஐந்து மதிப்பெண் பெற்றேன்.'
 
     def test_ic_digits_are_exact(self):
         # the LLM inserted an extra zero here
@@ -268,10 +289,191 @@ class TestDeliberateDifferences:
             'Please confirm your IC number nine six zero three one four zero eight five zero seven nine.'
 
 
+# --------------------------------------------------------------------------- harder cases (2026-09-04 corpus extension)
+HARD_LLM_AGREED = [
+    # hyphenated compounds, fractions, versions, decades, negatives, per-units
+    ('You get a 30-day money-back guarantee and 24-hour support.',
+     'You get a thirty-day money-back guarantee and twenty-four-hour support.'),
+    ('It is a 3-in-1 printer, buy 2-for-1 this week.', 'It is a three-in-one printer, buy two-for-one this week.'),
+    ('Add 1/2 cup of sugar and 3/4 cup of flour.', 'Add one half cup of sugar and three quarters cup of flour.'),
+    ('Our hotline runs 24/7 for your convenience.', 'Our hotline runs twenty-four seven for your convenience.'),
+    ('The odds are 50/50 at this point.', 'The odds are fifty fifty at this point.'),
+    ('I scored 95/100 on the test.', 'I scored ninety-five out of one hundred on the test.'),
+    ('You must pay 1/3 of the total, which is RM400.', 'You must pay one third of the total, which is four hundred ringgit.'),
+    ('Unit 3A-12-3, Block B, Jalan 3/14, Petaling Jaya.', 'Unit three A twelve three, Block B, Jalan three slash fourteen, Petaling Jaya.'),
+    ('Please update to version 2.0 or iOS 17.4.1 before Friday.',
+     'Please update to version two point zero or iOS seventeen point four point one before Friday.'),
+    ('We are on Python 3.12.4 and Node 20.', 'We are on Python three point one two point four and Node twenty.'),
+    ('Music from the 1980s and the 90s is on channel 5.', 'Music from the nineteen eighties and the nineties is on channel five.'),
+    ('Born in the early 2000s, she grew up in the 2010s.', 'Born in the early two thousands, she grew up in the twenty tens.'),
+    ('The temperature dropped to -5°C last night.', 'The temperature dropped to minus five degrees Celsius last night.'),
+    ('Your account is at -RM250 after the charge.', 'Your account is at minus two hundred fifty ringgit after the charge.'),
+    ('The stock fell -3.5% in a day.', 'The stock fell minus three point five percent in a day.'),
+    ('The car does 0-100 km/h in 4.5 seconds.', 'The car does zero to one hundred kilometers per hour in four point five seconds.'),
+    ('Rice costs RM5/kg and the fee is RM50/month.', 'Rice costs five ringgit per kilogram and the fee is fifty ringgit per month.'),
+    ('Take 2 tablets every 6 hrs for 5 days, max 8 tablets/day.',
+     'Take two tablets every six hours for five days, max eight tablets per day.'),
+    ('The plan is RM38/mth for 12 months.', 'The plan is thirty-eight ringgit per month for twelve months.'),
+    # k, big round numbers, dial, times, x
+    ('Over 10k users and 100k downloads so far.', 'Over ten thousand users and one hundred thousand downloads so far.'),
+    ('The population was 1000000 in 1990.', 'The population was one million in nineteen ninety.'),
+    ('Dial 100 for customer service or 999 for emergencies.', 'Dial one zero zero for customer service or nine nine nine for emergencies.'),
+    ('It is 3.5x faster and 2x cheaper.', 'It is three point five times faster and two times cheaper.'),
+    ('The Boeing 737 landed at KLIA2 at gate A12.', 'The Boeing seven three seven landed at KLIA two at gate A twelve.'),
+    ('COVID-19 cases rose in Q3 2025.', 'COVID nineteen cases rose in Q three twenty twenty-five.'),
+    # ranges with a shared suffix / prefix, scores
+    ('Only 10-15% of applicants are accepted.', 'Only ten to fifteen percent of applicants are accepted.'),
+    ('Prices range from RM50-RM100 per person.', 'Prices range from fifty ringgit to one hundred ringgit per person.'),
+    ('Ages 18-25 pay RM10, ages 26-60 pay RM20.', 'Ages eighteen to twenty-five pay ten ringgit, ages twenty-six to sixty pay twenty ringgit.'),
+    ('The event runs 15-16 March.', 'The event runs fifteen to sixteen March.'),
+    ('The score was 3-1 at half time and 3-2 at full time.', 'The score was three one at half time and three two at full time.'),
+    # digit contexts
+    ('Your postcode is 50450 and the unit number is 12-3-5.',
+     'Your postcode is five zero four five zero and the unit number is one two three five.'),
+    ('Your verification code is 482913, valid for 10 minutes.',
+     'Your verification code is four eight two nine one three, valid for ten minutes.'),
+    ('The code is 4829.', 'The code is four eight two nine.'),
+    ('The code is 1000 and the backup is 2000.', 'The code is one thousand and the backup is two thousand.'),
+    ('Your order 123456 will arrive in 2 days.', 'Your order one two three four five six will arrive in two days.'),
+    # dates and times
+    ('Your appointment is on Sept. 4, 2026 at 12:00 noon.', 'Your appointment is on September fourth, twenty twenty-six at twelve noon.'),
+    ('The deadline is 31/12 this year, and the review is on 1/1.',
+     'The deadline is the thirty-first of December this year, and the review is on the first of January.'),
+    ('We are open 9 to 5, Mon-Fri, and until 12.30pm on Saturdays.',
+     'We are open nine to five, Monday to Friday, and until twelve thirty p m on Saturdays.'),
+    ('My flight is at 0730 hours and lands at 1900 hrs.', 'My flight is at zero seven thirty hours and lands at nineteen hundred hours.'),
+    ('Check-in is from 2.30 to 4.30pm.', 'Check-in is from two thirty to four thirty p m.'),
+    ('It closes at 12am and reopens at 12pm.', 'It closes at twelve a m and reopens at twelve p m.'),
+    ('The unit is 1,200 sq ft with a 500W heater and a 12V battery.',
+     'The unit is one thousand two hundred square feet with a five hundred watts heater and a twelve volts battery.'),
+    # Malay
+    ('Mesyuarat bermula pukul 3.30 petang dan tamat jam 5.15 petang.',
+     'Mesyuarat bermula pukul tiga tiga puluh petang dan tamat jam lima lima belas petang.'),
+    ('Kami dibuka 9 pagi - 5 petang setiap hari.', 'Kami dibuka sembilan pagi hingga lima petang setiap hari.'),
+    ('Penerbangan AK6120 berlepas pukul 0730 dan tiba 0915.',
+     'Penerbangan AK enam satu dua kosong berlepas pukul kosong tujuh tiga puluh dan tiba kosong sembilan satu lima.'),
+    ('Diskaun 10-15% untuk pelajar.', 'Diskaun sepuluh hingga lima belas peratus untuk pelajar.'),
+    ('Harga bermula dari RM50-RM100 seorang.', 'Harga bermula dari lima puluh ringgit hingga seratus ringgit seorang.'),
+    ('Harga beras RM5/kg dan yuran RM50/bulan.', 'Harga beras lima ringgit per kilogram dan yuran lima puluh ringgit per bulan.'),
+    ('Suhu turun ke -5°C malam tadi.', 'Suhu turun ke negatif lima darjah Celsius malam tadi.'),
+    ('Kod pengesahan anda ialah 482913.', 'Kod pengesahan anda ialah empat lapan dua sembilan satu tiga.'),
+    ('Poskod anda 50450 dan nombor unit 12-3-5.', 'Poskod anda lima kosong empat lima kosong dan nombor unit satu dua tiga lima.'),
+    ('Sila hubungi 03-1234 5678 sambungan 123.',
+     'Sila hubungi kosong tiga satu dua tiga empat lima enam tujuh lapan sambungan satu dua tiga.'),
+    ('Talian kami beroperasi 24/7.', 'Talian kami beroperasi dua puluh empat jam tujuh hari seminggu.'),
+    ('Campurkan 1/2 cawan gula dan 3/4 cawan tepung.', 'Campurkan satu per dua cawan gula dan tiga per empat cawan tepung.'),
+    ('Anda perlu bayar 1/3 daripada jumlah, iaitu RM400.', 'Anda perlu bayar satu pertiga daripada jumlah, iaitu empat ratus ringgit.'),
+    ('Skor akhir 3-1 kepada Malaysia.', 'Skor akhir tiga satu kepada Malaysia.'),
+    ('Lebih 10k pengguna dan 100k muat turun setakat ini.', 'Lebih sepuluh ribu pengguna dan seratus ribu muat turun setakat ini.'),
+    ('Tekan 1 untuk Bahasa Melayu, 2 untuk Bahasa Inggeris, atau 0 untuk operator.',
+     'Tekan satu untuk Bahasa Melayu, dua untuk Bahasa Inggeris, atau kosong untuk operator.'),
+    ('Penduduk seramai 1000000 orang pada tahun 1990.',
+     'Penduduk seramai satu juta orang pada tahun seribu sembilan ratus sembilan puluh.'),
+    ('Muzik dari tahun 1980-an dan 90-an di saluran 5.',
+     'Muzik dari tahun seribu sembilan ratus lapan puluh-an dan sembilan puluh-an di saluran lima.'),
+    ('Tarikh akhir 31/12 tahun ini, dan semakan pada 1/1.', 'Tarikh akhir tiga puluh satu Disember tahun ini, dan semakan pada satu Januari.'),
+    ('Ini kali ke 3 saya menghubungi anda.', 'Ini kali ketiga saya menghubungi anda.'),
+    ('Bab 3, muka surat 45, perenggan 2.', 'Bab tiga, muka surat empat puluh lima, perenggan dua.'),
+    # Mandarin
+    ('请添加1/2杯糖和3/4杯面粉。', '请添加二分之一杯糖和四分之三杯面粉。'),
+    ('我们的热线24/7为您服务。', '我们的热线二十四小时七天为您服务。'),
+    ('请在星期五前更新到2.0版本或iOS 17.4.1。', '请在星期五前更新到二点零版本或iOS 十七点四点一。'),
+    ('昨晚气温降到-5°C。', '昨晚气温降到负五摄氏度。'),
+    ('股价下跌了-3.5%。', '股价下跌了负百分之三点五。'),
+    ('折扣是10-15%。', '折扣是百分之十到百分之十五。'),
+    ('价格从RM50-RM100不等。', '价格从五十令吉到一百令吉不等。'),
+    ('需要1-2天，最多3-5个工作日。', '需要一到两天，最多三到五个工作日。'),
+    ('米价RM5/kg，费用RM50/月。', '米价五令吉每公斤，费用五十令吉每月。'),
+    ('限速110 km/h。', '限速一百一十公里每小时。'),
+    ('目前有超过10k用户和100k下载。', '目前有超过一万用户和十万下载。'),
+    ('1990年人口是1000000。', '一九九零年人口是一百万。'),
+    ('比分是3-1。', '比分是三比一。'),
+    ('您的验证码是482913，10分钟内有效。', '您的验证码是四八二九一三，十分钟内有效。'),
+    ('邮编是50450，单位号是12-3-5。', '邮编是五零四五零，单位号是一二三五。'),
+    ('航班在0730起飞，1900降落。', '航班在零七三零起飞，一九零零降落。'),
+    ('烤箱设置180°C烤25-30分钟。', '烤箱设置一百八十摄氏度烤二十五到三十分钟。'),
+    ('我有2个哥哥和3个姐姐，一共5个人。', '我有两个哥哥和三个姐姐，一共五个人。'),
+    ('增长了3倍，达到1.5万。', '增长了三倍，达到一点五万。'),
+    # Tamil
+    ('கூட்டம் மாலை 3.30 மணிக்கு தொடங்கி 5.15 மணிக்கு முடியும்.',
+     'கூட்டம் மாலை மூன்று முப்பது மணிக்கு தொடங்கி ஐந்து பதினைந்து மணிக்கு முடியும்.'),
+    ('பேருந்து 7 மணிக்கு புறப்பட்டு 9:15க்கு வந்து 5 மணிக்கு திரும்பும்.',
+     'பேருந்து ஏழு மணிக்கு புறப்பட்டு ஒன்பது பதினைந்துக்கு வந்து ஐந்து மணிக்கு திரும்பும்.'),
+    ('நேற்று இரவு வெப்பநிலை -5°C ஆக குறைந்தது.', 'நேற்று இரவு வெப்பநிலை மைனஸ் ஐந்து டிகிரி செல்சியஸ் ஆக குறைந்தது.'),
+    ('தள்ளுபடி 10-15%.', 'தள்ளுபடி பத்து முதல் பதினைந்து சதவீதம்.'),
+    ('விலை RM50-RM100 வரை.', 'விலை ஐம்பது ரிங்கிட் முதல் நூறு ரிங்கிட் வரை.'),
+    ('உங்கள் சரிபார்ப்பு குறியீடு 482913, 10 நிமிடங்களுக்கு செல்லுபடியாகும்.',
+     'உங்கள் சரிபார்ப்பு குறியீடு நான்கு எட்டு இரண்டு ஒன்பது ஒன்று மூன்று, பத்து நிமிடங்களுக்கு செல்லுபடியாகும்.'),
+    ('பதிப்பு 2.0 அல்லது iOS 17.4.1 க்கு புதுப்பிக்கவும்.',
+     'பதிப்பு இரண்டு புள்ளி பூஜ்ஜியம் அல்லது iOS பதினேழு புள்ளி நான்கு புள்ளி ஒன்று க்கு புதுப்பிக்கவும்.'),
+    ('இறுதி ஸ்கோர் 3-1.', 'இறுதி ஸ்கோர் மூன்று ஒன்று.'),
+    ('2024ல் நிறுவனம் 3 கிளைகளை திறந்தது.', 'இரண்டாயிரத்து இருபத்து நான்கில் நிறுவனம் மூன்று கிளைகளை திறந்தது.'),
+    ('2030க்குள் 50% வளர்ச்சி எதிர்பார்க்கப்படுகிறது.', 'இரண்டாயிரத்து முப்பதுக்குள் ஐம்பது சதவீதம் வளர்ச்சி எதிர்பார்க்கப்படுகிறது.'),
+    ('1990ல் மக்கள் தொகை 1000000.', 'ஆயிரத்து தொள்ளாயிரத்து தொண்ணூறில் மக்கள் தொகை பத்து லட்சம்.'),
+    ('சுமார் 2.5 மில்லியன் மக்கள், அல்லது 12ல் 1 பேர், பாதிக்கப்பட்டுள்ளனர்.',
+     'சுமார் இரண்டு புள்ளி ஐந்து மில்லியன் மக்கள், அல்லது பன்னிரண்டில் ஒருவர், பாதிக்கப்பட்டுள்ளனர்.'),
+    ('எண் 12ஆல் வகுக்கவும், பின் 3ஆல் பெருக்கவும்.', 'எண் பன்னிரண்டால் வகுக்கவும், பின் மூன்றால் பெருக்கவும்.'),
+    ('கடந்த ஆண்டு 100,000 பேர் பங்கேற்றனர்.', 'கடந்த ஆண்டு ஒரு லட்சம் பேர் பங்கேற்றனர்.'),
+    ('1.5 மணி நேரம் மற்றும் 1/2 மணி நேர இடைவேளை.', 'ஒன்றரை மணி நேரம் மற்றும் அரை மணி நேர இடைவேளை.'),
+    ('வாடிக்கையாளர் சேவைக்கு 100 அல்லது அவசரத்திற்கு 999 ஐ அழைக்கவும்.',
+     'வாடிக்கையாளர் சேவைக்கு நூறு அல்லது அவசரத்திற்கு ஒன்பது ஒன்பது ஒன்பது ஐ அழைக்கவும்.'),
+    # code-switch: a Malay time cue keeps the time Malay, an English unit keeps "per month" English
+    ('Meeting pukul 2.30 petang at level 12, bring the Q3 2025 report.',
+     'Meeting pukul dua tiga puluh petang at level twelve, bring the Q three twenty twenty-five report.'),
+    ('Kalau bayar before 31/12, dapat 10-15% discount.', 'Kalau bayar before tiga puluh satu Disember, dapat sepuluh hingga lima belas peratus discount.'),
+]
+
+
+@pytest.mark.parametrize('text,expected', HARD_LLM_AGREED, ids=[t[0][:40] for t in HARD_LLM_AGREED])
+def test_matches_llm_on_harder_cases(text, expected):
+    assert canon(normalize(text)) == canon(expected)
+
+
+class TestTamilSuffixSandhi:
+    def test_attach(self):
+        assert N.ta_attach('நான்கு', 'ல்') == 'நான்கில்'
+        assert N.ta_attach('பன்னிரண்டு', 'ஆல்') == 'பன்னிரண்டால்'
+        assert N.ta_attach('ஆயிரம் ரிங்கிட்', 'ஐ') == 'ஆயிரம் ரிங்கிட்டை'
+        assert N.ta_attach('ஆயிரம்', 'க்கு') == 'ஆயிரத்துக்கு'
+        assert N.ta_attach('ஆயிரம்', 'ஆக') == 'ஆயிரமாக'
+        assert N.ta_attach('நூறு', 'இல்') == 'நூற்றில்'
+        assert N.ta_attach('மணி', 'க்கு') == 'மணிக்கு'
+
+    def test_spaced_suffix_is_left_alone(self):
+        assert normalize('2030 க்குள் இரட்டிப்பாகும்.') == 'இரண்டாயிரத்து முப்பது க்குள் இரட்டிப்பாகும்.'
+
+    def test_lakhs(self):
+        assert N.ta_cardinal(100000) == 'ஒரு லட்சம்'
+        assert N.ta_cardinal(250000) == 'இரண்டு லட்சத்து ஐம்பதாயிரம்'
+        assert N.ta_cardinal(33000000) == 'முப்பத்து மூன்று மில்லியன்'
+
+
 class TestEdges:
     def test_sentence_final_period_does_not_break_a_match(self):
         assert normalize('The total comes to RM 3,400.') == 'The total comes to three thousand four hundred ringgit.'
         assert normalize('Please pay before 30-06-2025.') == 'Please pay before the thirtieth of June twenty twenty-five.'
+        assert normalize('Delivery takes 3-5.') == 'Delivery takes three to five.'
+        assert normalize('Your balance is RM50 as of 15 October.') == 'Your balance is fifty ringgit as of the fifteenth of October.'
+        assert normalize('Bayar sebelum 15 Mac.') == 'Bayar sebelum lima belas Mac.'
+
+    def test_rupees_and_pesos(self):
+        assert normalize('விலை Rs. 1,250.50, வரி உட்பட.') == 'விலை ஆயிரத்து இருநூற்று ஐம்பது ரூபாய் ஐம்பது சதம், வரி உட்பட.'
+        assert normalize('The fee is Rs. 250 and the OTP is 4829.') == 'The fee is two hundred fifty rupees and the OTP is four eight two nine.'
+        assert normalize('The fare is ₱1,250.50.') == 'The fare is one thousand two hundred fifty pesos fifty centavos.'
+        assert normalize('Please arrive by 9.30am.') == 'Please arrive by nine thirty a m.'
+
+    def test_dotted_time_needs_a_cue(self):
+        assert normalize('Interest is charged at 3.25 per annum.') == 'Interest is charged at three point two five per annum.'
+        assert normalize('Lot 1.15 is on the left.') == 'Lot one point one five is on the left.'
+        assert normalize('See you at 6.30 then.') == 'See you at six thirty then.'
+
+    def test_negative_needs_a_glued_sign(self):
+        assert normalize('Open 9 - 5 daily.') == 'Open nine to five daily.'
+        assert normalize('Kami dibuka 9 pagi - 5 petang.') == 'Kami dibuka sembilan pagi hingga lima petang.'
+
+    def test_upper_case_k_and_x_are_not_multipliers(self):
+        assert normalize('A 4K TV.') == 'A four K TV.'
+        assert normalize('Size 2X please.') == 'Size two X please.'
 
     def test_trailing_comma_is_not_part_of_the_number(self):
         assert normalize('உங்கள் அறை 305, 3ஆம் மாடியில் உள்ளது.') == 'உங்கள் அறை மூன்று பூஜ்ஜியம் ஐந்து, மூன்றாம் மாடியில் உள்ளது.'

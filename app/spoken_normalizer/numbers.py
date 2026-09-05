@@ -244,7 +244,10 @@ def _ta_thousands(q, followed):
     if q < 10:
         word = _TA_THOUSANDS[q]
         return word[:-2] + 'த்து' if followed else word   # …ம் -> …த்து
-    return _ta_below_1000(q) + (' ஆயிரத்து' if followed else ' ஆயிரம்')
+    word = _ta_below_1000(q)
+    if word.endswith('ு'):                           # ஐம்பது + ஆயிரம் -> ஐம்பதாயிரம், as the LLM fuses it
+        return word[:-1] + ('ாயிரத்து' if followed else 'ாயிரம்')
+    return word + (' ஆயிரத்து' if followed else ' ஆயிரம்')
 
 
 def ta_cardinal(n):
@@ -256,6 +259,12 @@ def ta_cardinal(n):
     if n < 1000:
         return _ta_below_1000(n)
     parts = []
+    if 10 ** 5 <= n < 10 ** 7:
+        # Indian grouping below a crore, as the LLM says it: ஒரு லட்சம், பத்து லட்சம் (but
+        # முப்பத்து மூன்று மில்லியன் for 33,000,000 -- it switches systems at 10^7)
+        lakhs, n = divmod(n, 10 ** 5)
+        head = 'ஒரு' if lakhs == 1 else _ta_below_100(lakhs)
+        parts.append(head + (' லட்சத்து' if n else ' லட்சம்'))
     for value, name in ((10 ** 9, 'பில்லியன்'), (10 ** 6, 'மில்லியன்')):
         if n >= value:
             parts.append(_ta_below_1000(n // value) + ' ' + name)
@@ -283,6 +292,69 @@ def ta_ordinal(n, suffix='ஆவது'):
 
 def ta_digits(s):
     return ' '.join(_TA_UNITS[int(c)] for c in s if c.isdigit())
+
+
+_TA_SIGNS = set('ாிீுூெேைொோௌ')
+_TA_CONS_SUFFIX_MA_STEM = ('ஆக', 'ாக', 'ஆகும்', 'ாகும்', 'உம்', 'ும்')
+
+
+def _ta_stem(word, suffix):
+    """The word ready to take a vowel-initial suffix (consonant with inherent -a at the end),
+    or None when we do not know how this word inflects."""
+    if word.endswith('நூறு'):                    # நூறு -> நூற்ற- (நூற்றில், நூற்றுக்கு)
+        return word[:-1] + '்ற'
+    if word.endswith('ு'):                       # ஐந்து -> ஐந்த- (ஐந்தில், ஐந்தை, ஐந்தால்)
+        return word[:-1]
+    if word.endswith('ம்'):                      # ஆயிரம் -> ஆயிரத்த- (ஆயிரத்தில்) / ஆயிரம- (ஆயிரமாக)
+        return word[:-1] if suffix in _TA_CONS_SUFFIX_MA_STEM else word[:-2] + 'த்த'
+    if word.endswith('ட்'):                      # ரிங்கிட் -> ரிங்கிட்ட- (ரிங்கிட்டை, ரிங்கிட்டுக்கு)
+        return word + 'ட'
+    if word.endswith('ன்') and len(word) <= 4:   # சென் -> சென்ன-
+        return word + 'ன'
+    if word.endswith('்'):                       # மில்லியன் -> மில்லியன-, டாலர் -> டாலர-
+        return word[:-1]
+    if word[-1] in _TA_SIGNS or word[-1] in _TA_VOWEL_SIGN:   # மணி -> மணிய- (மணியில்)
+        return word + 'ய'
+    return None
+
+
+def ta_attach(word, suffix):
+    """Glue a case suffix written directly after a digit onto its number word with sandhi:
+    2024ல் -> இரண்டாயிரத்து இருபத்து நான்கில், 12ஆல் -> பன்னிரண்டால், RM1,000ஐ -> ஆயிரம் ரிங்கிட்டை,
+    15ஆகும் -> பதினைந்தாகும், 2030க்குள் -> இரண்டாயிரத்து முப்பதுக்குள். Unknown shapes are
+    returned glued as written."""
+    if not word or not suffix:
+        return word + suffix
+    head, _, last = word.rpartition(' ')
+    if suffix in ('ல்', 'லிருந்து'):             # bare ல் after a digit is இல்
+        suffix = 'இ' + suffix
+    if suffix[0] in _TA_VOWEL_SIGN:              # independent vowel -> sign
+        sign, rest = _TA_VOWEL_SIGN[suffix[0]], suffix[1:]
+    elif suffix[0] in _TA_SIGNS:                 # already a sign (ால், ை, ும்)
+        sign, rest = suffix[0], suffix[1:]
+    else:                                        # consonant-initial: க்கு, வது
+        sign, rest = None, suffix
+    stem = _ta_stem(last, suffix)
+    if stem is None:
+        return word + suffix
+    if sign is None:
+        if last[-1] in _TA_SIGNS or last[-1] in _TA_VOWEL_SIGN:
+            joined = last + rest                 # மணி + க்கு -> மணிக்கு
+        else:
+            joined = stem + 'ு' + rest           # ஐந்து + க்கு -> ஐந்துக்கு, ஆயிரம் + க்கு -> ஆயிரத்துக்கு
+    else:
+        joined = stem + sign + rest              # ஐந்து + இல் -> ஐந்தில், ஆயிரம் + ஐ -> ஆயிரத்தை
+    return (head + ' ' if head else '') + joined
+
+
+def ta_half(n):
+    """n.5 before மணி: 1.5 -> ஒன்றரை, 2.5 -> இரண்டரை, 0.5 -> அரை."""
+    n = int(n)
+    if n == 0:
+        return 'அரை'
+    word = ta_cardinal(n)
+    stem = _ta_stem(word, 'ரை')
+    return (stem if stem and word.endswith('ு') else word) + 'ரை'
 
 
 # --------------------------------------------------------------------------- dispatch

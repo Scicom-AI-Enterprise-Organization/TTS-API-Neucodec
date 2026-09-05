@@ -3,7 +3,7 @@
 `app/spoken_normalizer/` — `mode: "spoken"` on `/v1/audio/normalize` and TTS requests. Rewrites
 everything that is not speakable as written into words, in the language of the surrounding text,
 for **English, Malay, Mandarin and Tamil**, exactly as the LLM normalizer (`app/prompt.py`) is asked
-to. Pure Python, no model, no network, **~25 µs** per sentence (1.2 ms through the API, against
+to. Pure Python, no model, no network, **~45 µs** per sentence (1.2 ms through the API, against
 **491 ms** for the LLM call, measured on tm-h20 on 2026-09-04).
 
 ## Why
@@ -19,9 +19,13 @@ repeatable, and the LLM stays available where rules are not enough.
 The LLM's own behaviour is the specification, so it was captured first and the rules were written
 to reproduce it:
 
-1. `bench/normalizer_corpus.py` — 300 inputs: 86 English, 74 Malay, 62 Mandarin, 60 Tamil, 18
+1. `bench/normalizer_corpus.py` — 497 inputs: 152 English, 114 Malay, 107 Mandarin, 102 Tamil, 22
    Malay/English code-switch; every category the prompt names plus abbreviations, acronyms,
-   ids, years and plain sentences that must come back untouched.
+   ids, years and plain sentences that must come back untouched. The first 300 are the everyday
+   call-centre shapes; the 197 added on 2026-09-04 are the *harder cases* below (hyphenated
+   compounds, fractions and slashes, versions, decades, negatives, per-units, ranges with a shared
+   suffix, scores, verification codes and postcodes, dotted and military times, Tamil case
+   suffixes glued to digits).
 2. `bench/normalizer_truth.py` — runs them through the live LLM (temperature 0) and stores the
    pairs in `bench/results/normalizer_truth.jsonl`. Incremental: only new ids are queried.
 3. `bench/normalizer_agreement.py` — scores `normalize()` against those pairs: two outputs
@@ -30,7 +34,7 @@ to reproduce it:
    CER against the LLM text, per language and per category, and prints every disagreement.
 4. `bench/normalizer_api_agreement.py --url` — the same comparison through a running app, so
    the pre/post cleanup (markdown, replace mappings, trailing period) is included.
-5. `tests/test_spoken_normalizer.py` — 1,029 tests: number words in all four languages, one
+5. `tests/test_spoken_normalizer.py` — 1,726 tests: number words in all four languages, one
    LLM-agreed example per category and language, the deliberate differences, and three
    corpus-wide properties: **no digit survives in any output**, plain text is byte-identical,
    and the output is a fixed point (`normalize(normalize(x)) == normalize(x)`).
@@ -40,22 +44,27 @@ or change rules until `normalizer_agreement.py` is happy.
 
 ## Agreement with the LLM
 
-| Language | Offline (`normalizer_agreement.py`) | Through the API (instance C, box 1024) |
-|---|---|---|
-| English (86) | 90.7% | 90.7% |
-| Malay (74) | 90.5% | 89.2% |
-| Mandarin (62) | 90.3% | 90.3% |
-| Tamil (60) | 71.7% | 73.3% |
-| Malay/English code-switch (18) | 66.7% | 61.1% |
-| **All (300)** | **85.3%** | **85.0%** |
+| Language | All 497 (offline) | Original 300 | 197 harder cases | Through the API, original 300 (instance C, box 1024) |
+|---|---|---|---|---|
+| English | 88.8% (135/152) | 90.7% | 86.4% (57/66) | 90.7% |
+| Malay | 86.8% (99/114) | 90.5% | 80.0% (32/40) | 89.2% |
+| Mandarin | 87.9% (94/107) | 90.3% | 84.4% (38/45) | 90.3% |
+| Tamil | 66.7% (68/102) | 71.7% | 59.5% (25/42) | 73.3% |
+| Malay/English code-switch | 59.1% (13/22) | 66.7% | 25.0% (1/4) | 61.1% |
+| **All** | **82.3% (409/497)** | **85.3%** | **77.7% (153/197)** | **85.0%** |
 
-Mean CER of the rule output against the LLM output is 0.025 overall: even the disagreements are
-usually one word.
+Mean CER of the rule output against the LLM output is 0.033 overall: even the disagreements are
+usually one word. The 88 remaining disagreements split into **28 outright LLM errors** (it returned
+8 Tamil sentences with the digits still in them, misread 10.45 as முப்பத்தைந்து, wrote "three point
+thirty", "dua pukul petang", "satu ratus", 九十五分之一百, and left "2 hours 30 minutes" as digits),
+**50 cases of the LLM contradicting its own style elsewhere in the corpus** (spelled acronyms,
+"and" in hundreds, 两百 vs 二百, computing RM12.5k in English but not in Malay, colloquial Tamil
+numerals) and **10 code-switch hybrids** ("tiga tiga puluh p m"). No disagreement leaves a digit unread.
 
-By category (offline): email 100%, percent 100%, plain 100%, year 100%, int 96%, unit 94%, abbr 93%,
-phone 92%, decimal 91%, money 90%, ordinal 86%, range 83%, time 83%, acro 82%, id 80%, date 74%,
-mixed 68%, ic 67%, url 33%. The low ones are explained below; none is a case where a number is left
-unread.
+By category (offline): decade, email, neg, percent, plain, score, year 100%; abbr 93%, int 92%,
+phone 92%, decimal 91%, money 89%, unit 87%, hyphen 86%, ordinal 83%, range 82%, acro 82%, version 80%,
+time 79%, code 78%, id 78%, date 76%, frac 67%, ic 67%, mixed 63%, per 62%, suffix 56%, url 33%. The low
+ones are explained below.
 
 ## Coverage matrix
 
@@ -181,6 +190,45 @@ number rule to misread:
 - *Order 2 units at RM199 each, delivered in 3-5 days to No. 12, Jalan Tun Razak.* → Order two units at one hundred ninety-nine ringgit each, delivered in three to five days to Number twelve, Jalan Tun Razak.
 - *您的总额是RM1,250.50，会议在12/9/2026下午3点。* → 您的总额是一千二百五十令吉五十仙，会议在二零二六年九月十二日下午三点。
 
+## Harder cases (2026-09-04 extension)
+
+Shapes the first corpus did not contain, each broken on the old rules (the probe read "30-day" as
+"three zero day", "1/2" as "one/two", "17.4.1" left a digit, "pukul 3.30 petang" became "tiga
+perpuluhan tiga kosong petang", "2024ல்" became "நான்குல்"). Ground truth was generated first, then the
+rules were written to it; where the four languages' LLM outputs disagree the note says which was kept.
+
+| Shape | English | Malay | Mandarin | Tamil |
+|---|---|---|---|---|
+| hyphenated compound `30-day`, `3-in-1` | thirty-day, three-in-one | tiga puluh hari (written spaced) | 三十天 | முப்பது நாள் |
+| fraction `1/2`, `3/4`, `1/3`, `95/100` | one half, three quarters, one third, ninety-five out of one hundred | satu per dua, tiga per empat, satu pertiga | 二分之一, 四分之三, 一百分之九十五 | அரை, முக்கால், மூன்றில் ஒன்று, நூற்றில் தொண்ணூற்று ஐந்து |
+| `24/7`, `50/50` | twenty-four seven, fifty fifty | dua puluh empat jam tujuh hari seminggu | 二十四小时七天 | இருபத்து நான்கு மணி நேரம் ஏழு நாட்கள் |
+| slash in an address `Jalan 3/14` | Jalan three slash fourteen | Jalan tiga per empat belas | Jalan 三斜杠十四 (LLM said "slash") | ஸ்லாஷ் |
+| day/month without a year `31/12`, `1/1` | the thirty-first of December, the first of January | tiga puluh satu Disember | 十二月三十一日 | முப்பத்தொன்று டிசம்பர் |
+| version `17.4.1`, `3.12.4` | seventeen point four point one, three point one two point four | tujuh belas perpuluhan empat perpuluhan satu | 十七点四点一 | பதினேழு புள்ளி நான்கு புள்ளி ஒன்று |
+| decade `1980s`, `90s`, `1980-an` | nineteen eighties, nineties, two thousands, twenty tens | seribu sembilan ratus lapan puluh-an | 九十年代 (already a particle) | — |
+| negative `-5°C`, `-RM250`, `-3.5%` | minus five degrees Celsius | negatif lima darjah Celsius | 负五摄氏度, 负百分之三点五 | மைனஸ் ஐந்து டிகிரி செல்சியஸ் |
+| per-unit `RM5/kg`, `110 km/h`, `8 tablets/day`, `RM38/mth` | five ringgit per kilogram, kilometers per hour, tablets per day, per month | lima ringgit per kilogram, kilometer per jam, per bulan (LLM also said "sebulan") | 五令吉每公斤, 公里每小时 | ஐந்து ரிங்கிட் ஒரு கிலோகிராமுக்கு (LLM: ஒரு கிலோகிராம், no dative) |
+| range with a shared suffix/prefix `10-15%`, `RM50-RM100`, `0-100 km/h` | ten to fifteen percent, fifty ringgit to one hundred ringgit, zero to one hundred kilometers per hour | sepuluh hingga lima belas peratus | 百分之十到百分之十五 (repeated, as the LLM), 五十令吉到一百令吉, 一到两天 | பத்து முதல் பதினைந்து சதவீதம் |
+| score `3-1` after score/skor/比分/ஸ்கோர்/won/beat | three one | tiga satu | 三比一 | மூன்று ஒன்று |
+| `10k`, `100k`, `1.5k` (lower-case k) | ten thousand, one hundred thousand, one thousand five hundred | sepuluh ribu | 一万, 十万 | பத்தாயிரம், ஒரு லட்சம் |
+| `2x`, `3.5x` (lower-case x) | two times, three point five times | dua kali | 两倍 | இரண்டு மடங்கு |
+| `1000000` (no commas) | one million (was a "phone number") | satu juta | 一百万 | பத்து லட்சம் |
+| codes: verification code, postcode, serial, plate, `unit 12-3-5`, `Dial 100 / 999` | four eight two nine, five zero four five zero, one two three five, one zero zero / nine nine nine; "the code is 1000" stays one thousand | Kod pengesahan … empat lapan dua …, Poskod lima kosong …, Tekan … atau kosong | 验证码四八二九一三, 邮编五零四五零 | குறியீடு நான்கு எட்டு …; 12-3-5 as digits (LLM: cardinals) |
+| ids `COVID-19`, `Boeing 737`, `gate A12`, `3A-12-3`, `XR-2000` | COVID nineteen, Boeing seven three seven, A twelve, three A twelve three, XR two thousand | same | COVID十九, 三A一二三 | same as English |
+| dotted time with a cue `pukul 3.30 petang`, `at 6.30`, `5.15 மணிக்கு` (no cue ⇒ decimal: "3.25 per annum") | six thirty | tiga tiga puluh petang, dua petang (2.00) | — (Mandarin writes 点) | ஐந்து பதினைந்து |
+| Malay period range `9 pagi - 5 petang` | — | sembilan pagi hingga lima petang | — | — |
+| military time `0730 hours`, `pukul 0730`, `1900 hrs` | zero seven thirty hours, nineteen hundred hours | kosong tujuh tiga puluh | 零七三零 | பூஜ்ஜியம் ஏழு முப்பது |
+| `3 to 4pm`, `2.30 to 4.30pm`, `12:00 noon`, `Mon-Fri` | three to four p m (period not copied to the first time), two thirty to four thirty p m, twelve noon, Monday to Friday | — | — | — |
+| units `6 hrs`, `10 min`, `45 sec`, `500W`, `12V`, `1,200 sq ft` | six hours, ten minutes, forty-five seconds, five hundred watts, twelve volts, square feet | jam, minit, saat, watt, volt, kaki persegi | 小时, 分钟, 秒, 瓦, 伏, 平方英尺 | மணி நேரம், நிமிடம், வினாடி, வாட், வோல்ட், சதுர அடி |
+| Malay `kali ke 3` | — | kali ketiga | — | — |
+| Tamil suffix glued to a digit `2024ல்`, `12ஆல்`, `RM1,000ஐ`, `15ஆகும்`, `2030க்குள்` | — | — | — | இரண்டாயிரத்து இருபத்து நான்கில், பன்னிரண்டால், ஆயிரம் ரிங்கிட்டை, பதினைந்தாகும், முப்பதுக்குள் |
+| Tamil `1.5 மணி`, `1/2 மணி`, `1 பேர்`, `100,000` | — | — | — | ஒன்றரை மணி, அரை மணி, ஒருவர், ஒரு லட்சம் (lakhs below 10⁷, மில்லியன் above, as the LLM) |
+
+Tamil suffixes work through a marker: a handler whose match is followed directly by a Tamil letter
+appends a private-use character, and a final pass joins the number word and the suffix with sandhi
+(`numbers.ta_attach`: ு-final words take the vowel sign, ம்-final words take த்த-, ட் doubles, நூறு →
+நூற்ற-). A suffix written with a space (`2030 க்குள்`) is left alone, as before.
+
 ## Code-switching (Malay/English)
 
 Tamil and Mandarin decide themselves by script (the whole sentence, so "Jalan Tun Razak 12号" is
@@ -203,6 +251,48 @@ contradicting itself: it read "Discount 20%" in English but "The delivery fee is
 both with an English head word, and produced hybrids like "tiga p m" and "enam pm". There is no
 rule that reproduces that, and these sentences have no single right answer.
 
+## Language detection: marker words vs fastText vs the LLM
+
+`bench/langid_compare.py` scores four detectors on the 497 corpus sentences plus 40 extra
+code-switched sentences written with a designed majority language (20 Malay-majority with English
+insertions, 20 the reverse; the LLM agreed with the designed label on all 40). Truth for the 22
+corpus code-switched rows is the LLM's own majority call. Measured 2026-09-05:
+
+| Set | marker words (`lang.py`) | fastText lid.176.ftz (1 MB) | Mesolitica bahasa/english fastText (331 MB) | LLM (gemma-4-31b, one round trip) |
+|---|---|---|---|---|
+| English (152) | 100% | 99% | 95% | 100% |
+| Malay (114) | 100% | 89% | 89% | 99% |
+| Mandarin (107) | 100% | 85% | 0% (no class) | 100% |
+| Tamil (102) | 100% | 100% | 0% (no class) | 100% |
+| Code-switch, corpus 22, LLM majority | 64% | 68% | 73% | 100% (by definition) |
+| Code-switch, 40 designed majority | 100% | 90% | 100% | 100% |
+| Latency per sentence | 2 µs | 7 µs | 12 µs | ~500 ms |
+
+Reading it honestly:
+
+- The marker-word 100% on the monolingual rows is **inflated**: the word lists were extended
+  while building this corpus. The 40 designed code-switched rows were written afterwards and are
+  the fairer number.
+- **lid.176** fails exactly where we need it: short Malay sentences that are mostly numbers go to
+  English, Italian, Spanish or Uzbek at confidence 0.1–0.5 ("Jualan naik 25%", "Sila tiba sebelum
+  9.30am", "Had laju 110 km/j"), and 16 of 107 Mandarin sentences with Latin ids or units inside
+  are labelled Japanese. Tamil is perfect (script). It is fine as a low-confidence-gated prior on
+  long prose, useless on the numeric fragments the normalizer sees.
+- **Mesolitica's model** has no Mandarin or Tamil class, and its "other" class swallows
+  number-heavy text at confidence 1.0 ("Nombor IC saya 960314875079", "Pesanan #4471 telah
+  dihantar", "Yurannya RM50 sebulan"). Trained on prose, wrong tool for this input.
+- The **LLM** is the only detector that is right everywhere, at the cost of the ~0.5 s round trip
+  the rule normalizer exists to remove. Its majority call on Manglish leans Malay whenever Malay
+  function words are present ("Saya dah email invoice no. 4471 to you, please check by 15/3/2024"
+  → malay), which is where the markers' tie-to-English policy loses its 8 corpus rows; 4 of those
+  8 are exact ties.
+- For the normalizer the sentence majority is only the prior: in a code-switched sentence each
+  number is decided by the words next to it (`local_lang`), which no sentence-level model can do.
+
+Conclusion: keep the script check + marker vote; a `language` field on the request (the upstream
+agent knows the conversation language) is the robust fix; use the LLM offline to label real
+traffic for a fitted detector, not at request time.
+
 ## Where the LLM contradicts itself, and what the rules do
 
 | Topic | LLM | Rules |
@@ -217,6 +307,16 @@ rule that reproduces that, and these sentences have no single right answer.
 | ISO dates in Malay | written order "dua ribu dua puluh empat Mac lima belas" | day first "lima belas Mac dua ribu dua puluh empat" |
 | RM0.50 | "zero ringgit fifty sen" (en), "lima puluh sen" (ms) | "fifty sen" |
 | Sentence-final "5 Jan 2026" | "fifth of January" (no "the") | "the fifth of January" |
+| RM12.5k / RM1.5k | "twelve thousand five hundred ringgit" (en) but "dua belas perpuluhan lima ribu ringgit" (ms) and "one point five thousand ringgit" | computed: "twelve thousand five hundred", "one thousand five hundred" |
+| "/bulan" | "per bulan" and "sebulan" | "per bulan" |
+| 200 before a measure word | 二百 (每箱200个) and 两百 (200多页) | 二百 |
+| 9:15 in Mandarin | 九点十五 and 九点十五分 | 九点十五分 |
+| Acronyms | K L I A, W X Y, X R, A P I spelled; OTP, SMS, IC, TNB not | never spelled |
+| Tamil "12-3-5" | "பன்னிரண்டு மூன்று ஐந்து" (cardinals) while en/ms/zh got digits | digits everywhere |
+| Tamil "RM5/kg" | "ஐந்து ரிங்கிட் ஒரு கிலோகிராம்" (no case) but "ஒரு மணி நேரத்திற்கு" for km/h | dative on the unit: ஒரு கிலோகிராமுக்கு |
+| Tamil "1900 hrs" | digit by digit, but "0730" as பூஜ்ஜியம் ஏழு முப்பது | hour + minutes: பத்தொன்பது பூஜ்ஜியம் பூஜ்ஜியம் |
+| Tamil 24 | இருபத்து நான்கு and colloquial இருபத்தி நான்கு | இருபத்து நான்கு |
+| Malay 2.0 | "dua perpuluhan sifar" here, kosong for other decimal zeros | kosong |
 
 ## Where the LLM was wrong, and the rules are right
 
@@ -224,19 +324,43 @@ rule that reproduces that, and these sentences have no single right answer.
 - A Tamil sentence answered in English: *5/6/2025 க்கு முன் RM89.90 …* → "five June twenty twenty-five … eighty-nine ringgit ninety sen"; rules: ஐந்து ஜூன் இரண்டாயிரத்து இருபத்தைந்து … எண்பத்தொன்பது ரிங்கிட் தொண்ணூறு சென்.
 - A Tamil price mangled into "நூற்றொன்பதுபத்தொன்பது" (RM199); rules: நூற்று தொண்ணூற்று ஒன்பது ரிங்கிட்.
 - An IC digit invented: 960314-08-5079 → "… zero eight **zero** five zero seven nine" (13 digits); rules read the 12 that are there.
-- 32°C → "三十二度C"; rules: 摄氏三十二度.
+- 32°C → "三十二度C" (and 180°C → 一百八十度); rules: 三十二摄氏度, the form the LLM itself used for 负五摄氏度.
 - "9.30am" in Mandarin → "九点三十分am"; rules: 上午九点三十分.
 - "30-06-2025" in Tamil → "முப்பத்து நாள் ஜூன் …"; rules: முப்பது ஜூன் இரண்டாயிரத்து இருபத்தைந்து.
+- Eight of the 42 harder Tamil sentences came back **unchanged, digits included** (`30 நாள் … 24 மணி`,
+  `1/2 கப் … 3/4 கப்`, `100க்கு 95`, `2010 முதல் 2020 வரை … 2.3%`, `1ஆம் நாள் முதல் 15ஆம் நாள்`,
+  `5ஐ 3ஆல் பெருக்கினால் 15ஆகும்`, `5 தவணைகளில் 3வது 15ஆம் தேதி`); one more was answered in English
+  (`RM1,000ஐ` → "one thousand ringgit ஐ"). The rules read all of them.
+- "10.45 மணிக்கு" → "பத்து முப்பத்தைந்து" (35 for 45); "2024ஆம்" → "இருபத்தி நான்குஆம்" (no sandhi);
+  "50450" → "ஐம்பதாயிரத்து நானூற்று ஐபது" (typo, and a postcode read as a quantity).
+- "2 hrs 30 mins" → "2 hours 30 minutes" (digits left); "not 3.30" → "three point thirty".
+- "buka semula 2.00 petang" → "dua pukul petang"; "110 km/j" and "180°C" → "satu ratus …" (seratus).
+- "95/100分" → "九十五分之一百分" (numerator and denominator swapped); "2块钱 … 2元" left unchanged;
+  "9am-5pm" → "九点到五点" (periods dropped).
 
 These account for most of the Tamil gap: on Tamil the rules are the more reliable of the two.
 
 ## Known limits
 
 - Malay/English detection is by marker words. A sentence made only of words in neither list
-  defaults to English. Pass `lang=` to force a language.
-- Which bare numbers are read digit by digit (rooms, PINs, order and invoice numbers, extensions)
-  versus as a quantity is decided by nearby context words (`_DIGIT_CONTEXT`), by a leading zero,
-  or by length (≥7 digits, or ≥4 after a context word). New kinds of identifiers may need a word
+  defaults to English. Pass `lang=` to force a language. Letters glued to a digit ("3A") do not vote.
+- `a/b` is a fraction when a < b, a date when it could be one and a ≥ b (31/12, 1/1) or a date
+  cue precedes it (on 5/6), "a b" otherwise (50/50); after Jalan/Lot/Blok/Unit it is said with
+  "slash" / "per". `24/7` is special-cased per language.
+- A dotted time (`3.30`) is only a time next to a cue (at/by/from/until/pukul/jam, or
+  pagi/petang/malam/மணி after it) and never before per/percent/units; `3.25 per annum` stays a
+  decimal. A negative sign must be glued to the number (`-5°C`); `9 - 5` is a range.
+- `k` and `x` multipliers are lower-case only: `10k` is ten thousand but `4K` is "four K"; `2x` is
+  two times but `2X` is a size.
+- "/unit" after a quantity is limited to the units in `_PER_UNITS` (kg g km m l h day week month
+  year min s unit person piece pax sqft and their Malay/Chinese/Tamil names).
+- Tamil case suffixes handled: இல்/ல், ஆல், ஐ, உம், ஆக, ஆகும், க்கு, க்கும், க்குள், க்கான,
+  இலிருந்து, உடன், ஓடு, ஆய், ஆவது/வது. Anything else is left glued as written.
+- Which bare numbers are read digit by digit (rooms, PINs, order and invoice numbers, extensions,
+  verification codes, postcodes, serials, plates, Boeing models, emergency numbers in a sentence
+  about dialling) versus as a quantity is decided by nearby context words (`_DIGIT_CONTEXT`), by a
+  leading zero, or by length (≥7 digits unless it is a round number, or ≥4 after a context word
+  unless it is a round thousand: "the code is 1000"). New kinds of identifiers may need a word
   added there.
 - Acronyms are never spelled out; "OTP" stays "OTP". The LLM spelled "A P I" and "H T T P" but not
   "OTP", "SMS", "IC" — inconsistent, so the rules keep them and let the TTS LM read them.

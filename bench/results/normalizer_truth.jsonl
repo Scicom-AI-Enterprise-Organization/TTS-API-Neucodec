@@ -298,3 +298,200 @@
 {"id": "ta_mixed_1", "lang": "ta", "category": "mixed", "text": "உங்கள் மொத்தம் RM1,250.50, கூட்டம் 12/9/2026 அன்று 3pm மணிக்கு.", "llm": "உங்கள் மொத்தம் ஒரு ஆயிரம் இருநூற்று ஐம்பது ரிங்கிட் ஐம்பது சென், கூட்டம் பன்னிரண்டு செப்டம்பர் இரண்டாயிரத்து இருபத்தாறு அன்று மூன்று பி எம் மணிக்கு."}
 {"id": "ta_mixed_2", "lang": "ta", "category": "mixed", "text": "5/6/2025 க்கு முன் RM89.90 செலுத்துங்கள், இல்லையெனில் 10% தாமதக் கட்டணம்.", "llm": "five June twenty twenty-five க்கு முன் eighty-nine ringgit ninety sen செலுத்துங்கள், இல்லையெனில் ten percent தாமதக் கட்டணம்."}
 {"id": "ta_mixed_3", "lang": "ta", "category": "mixed", "text": "2 யூனிட்கள், ஒவ்வொன்றும் RM199, 3-5 நாட்களில் Jalan Tun Razak, No. 12 க்கு.", "llm": "2 யூனிட்கள், ஒவ்வொன்றும் நூற்றொன்பதுபத்தொன்பது ரிங்கிட், 3-5 நாட்களில் Jalan Tun Razak, No. 12 க்கு."}
+{"id": "en_hyphen_1", "lang": "en", "category": "hyphen", "text": "You get a 30-day money-back guarantee and 24-hour support.", "llm": "You get a thirty-day money-back guarantee and twenty-four-hour support."}
+{"id": "en_hyphen_2", "lang": "en", "category": "hyphen", "text": "This is a 5-star hotel with a 2-year warranty on 3-bedroom units.", "llm": "This is a five-star hotel with a two-year warranty on three-bedroom units."}
+{"id": "en_hyphen_3", "lang": "en", "category": "hyphen", "text": "It is a 3-in-1 printer, buy 2-for-1 this week.", "llm": "It is a three-in-one printer, buy two-for-one this week."}
+{"id": "en_hyphen_4", "lang": "en", "category": "hyphen", "text": "A 10-minute walk, then a 45-minute drive.", "llm": "A ten-minute walk, then a forty-five-minute drive."}
+{"id": "en_frac_1", "lang": "en", "category": "frac", "text": "Add 1/2 cup of sugar and 3/4 cup of flour.", "llm": "Add one half cup of sugar and three quarters cup of flour."}
+{"id": "en_frac_2", "lang": "en", "category": "frac", "text": "Our hotline runs 24/7 for your convenience.", "llm": "Our hotline runs twenty-four seven for your convenience."}
+{"id": "en_frac_3", "lang": "en", "category": "frac", "text": "The odds are 50/50 at this point.", "llm": "The odds are fifty fifty at this point."}
+{"id": "en_frac_4", "lang": "en", "category": "frac", "text": "I scored 95/100 on the test.", "llm": "I scored ninety-five out of one hundred on the test."}
+{"id": "en_frac_5", "lang": "en", "category": "frac", "text": "You must pay 1/3 of the total, which is RM400.", "llm": "You must pay one third of the total, which is four hundred ringgit."}
+{"id": "en_frac_6", "lang": "en", "category": "frac", "text": "Unit 3A-12-3, Block B, Jalan 3/14, Petaling Jaya.", "llm": "Unit three A twelve three, Block B, Jalan three slash fourteen, Petaling Jaya."}
+{"id": "en_version_1", "lang": "en", "category": "version", "text": "Please update to version 2.0 or iOS 17.4.1 before Friday.", "llm": "Please update to version two point zero or iOS seventeen point four point one before Friday."}
+{"id": "en_version_2", "lang": "en", "category": "version", "text": "We are on Python 3.12.4 and Node 20.", "llm": "We are on Python three point one two point four and Node twenty."}
+{"id": "en_decade_1", "lang": "en", "category": "decade", "text": "Music from the 1980s and the 90s is on channel 5.", "llm": "Music from the nineteen eighties and the nineties is on channel five."}
+{"id": "en_decade_2", "lang": "en", "category": "decade", "text": "Born in the early 2000s, she grew up in the 2010s.", "llm": "Born in the early two thousands, she grew up in the twenty tens."}
+{"id": "en_neg_1", "lang": "en", "category": "neg", "text": "The temperature dropped to -5°C last night.", "llm": "The temperature dropped to minus five degrees Celsius last night."}
+{"id": "en_neg_2", "lang": "en", "category": "neg", "text": "Your account is at -RM250 after the charge.", "llm": "Your account is at minus two hundred fifty ringgit after the charge."}
+{"id": "en_neg_3", "lang": "en", "category": "neg", "text": "The stock fell -3.5% in a day.", "llm": "The stock fell minus three point five percent in a day."}
+{"id": "en_per_1", "lang": "en", "category": "per", "text": "The car does 0-100 km/h in 4.5 seconds.", "llm": "The car does zero to one hundred kilometers per hour in four point five seconds."}
+{"id": "en_per_2", "lang": "en", "category": "per", "text": "The speed limit is 110 km/h on the highway.", "llm": "The speed limit is one hundred and ten kilometers per hour on the highway."}
+{"id": "en_per_3", "lang": "en", "category": "per", "text": "Rice costs RM5/kg and the fee is RM50/month.", "llm": "Rice costs five ringgit per kilogram and the fee is fifty ringgit per month."}
+{"id": "en_per_4", "lang": "en", "category": "per", "text": "Take 2 tablets every 6 hrs for 5 days, max 8 tablets/day.", "llm": "Take two tablets every six hours for five days, max eight tablets per day."}
+{"id": "en_per_5", "lang": "en", "category": "per", "text": "The plan is RM38/mth for 12 months.", "llm": "The plan is thirty-eight ringgit per month for twelve months."}
+{"id": "en_per_6", "lang": "en", "category": "per", "text": "Speeds up to 100 Mbps and 10 GB/month.", "llm": "Speeds up to one hundred Mega bits per second and ten Giga bytes per month."}
+{"id": "en_int_9", "lang": "en", "category": "int", "text": "Over 10k users and 100k downloads so far.", "llm": "Over ten thousand users and one hundred thousand downloads so far."}
+{"id": "en_int_10", "lang": "en", "category": "int", "text": "The population was 1000000 in 1990.", "llm": "The population was one million in nineteen ninety."}
+{"id": "en_int_11", "lang": "en", "category": "int", "text": "Dial 100 for customer service or 999 for emergencies.", "llm": "Dial one zero zero for customer service or nine nine nine for emergencies."}
+{"id": "en_int_12", "lang": "en", "category": "int", "text": "Press 1 for English, 2 for Malay, or 0 for the operator.", "llm": "Press one for English, two for Malay, or zero for the operator."}
+{"id": "en_int_13", "lang": "en", "category": "int", "text": "Chapter 3, page 45, paragraph 2.", "llm": "Chapter three, page forty-five, paragraph two."}
+{"id": "en_int_14", "lang": "en", "category": "int", "text": "Turn to page 1,203 of volume 3.", "llm": "Turn to page one thousand two hundred three of volume three."}
+{"id": "en_int_15", "lang": "en", "category": "int", "text": "1 in 5 Malaysians own a car; that is 20% of the population.", "llm": "one in five Malaysians own a car; that is twenty percent of the population."}
+{"id": "en_int_16", "lang": "en", "category": "int", "text": "The Boeing 737 landed at KLIA2 at gate A12.", "llm": "The Boeing seven three seven landed at K L I A two at gate A twelve."}
+{"id": "en_int_17", "lang": "en", "category": "int", "text": "It is 3.5x faster and 2x cheaper.", "llm": "It is three point five times faster and two times cheaper."}
+{"id": "en_unit_6", "lang": "en", "category": "unit", "text": "The file is 2.5GB and the upload speed is 10 Mbps.", "llm": "The file is two point five gigabytes and the upload speed is ten megabits per second."}
+{"id": "en_unit_7", "lang": "en", "category": "unit", "text": "The show lasts 2 hrs 30 mins.", "llm": "The show lasts 2 hours 30 minutes."}
+{"id": "en_unit_8", "lang": "en", "category": "unit", "text": "Wait 10 min, then 45 sec more.", "llm": "Wait ten minutes, then forty-five seconds more."}
+{"id": "en_unit_9", "lang": "en", "category": "unit", "text": "Height 1.75 m, weight 70.5 kg, BMI 23.0.", "llm": "Height one point seven five meters, weight seventy point five kilograms, BMI twenty-three point zero."}
+{"id": "en_unit_10", "lang": "en", "category": "unit", "text": "Set the oven to 180°C for 25-30 minutes.", "llm": "Set the oven to one hundred eighty degrees Celsius for twenty-five to thirty minutes."}
+{"id": "en_unit_11", "lang": "en", "category": "unit", "text": "The unit is 1,200 sq ft with a 500W heater and a 12V battery.", "llm": "The unit is one thousand two hundred square feet with a five hundred Watts heater and a twelve Volts battery."}
+{"id": "en_range_4", "lang": "en", "category": "range", "text": "Only 10-15% of applicants are accepted.", "llm": "Only ten to fifteen percent of applicants are accepted."}
+{"id": "en_range_5", "lang": "en", "category": "range", "text": "Prices range from RM50-RM100 per person.", "llm": "Prices range from fifty ringgit to one hundred ringgit per person."}
+{"id": "en_range_6", "lang": "en", "category": "range", "text": "The budget is RM1.5k to RM2k.", "llm": "The budget is one point five thousand ringgit to two thousand ringgit."}
+{"id": "en_range_7", "lang": "en", "category": "range", "text": "Ages 18-25 pay RM10, ages 26-60 pay RM20.", "llm": "Ages eighteen to twenty-five pay ten ringgit, ages twenty-six to sixty pay twenty ringgit."}
+{"id": "en_range_8", "lang": "en", "category": "range", "text": "The event runs 15-16 March.", "llm": "The event runs fifteen to sixteen March."}
+{"id": "en_score_1", "lang": "en", "category": "score", "text": "The score was 3-1 at half time and 3-2 at full time.", "llm": "The score was three one at half time and three two at full time."}
+{"id": "en_code_1", "lang": "en", "category": "code", "text": "Your postcode is 50450 and the unit number is 12-3-5.", "llm": "Your postcode is five zero four five zero and the unit number is one two three five."}
+{"id": "en_code_2", "lang": "en", "category": "code", "text": "Your verification code is 482913, valid for 10 minutes.", "llm": "Your verification code is four eight two nine one three, valid for ten minutes."}
+{"id": "en_code_3", "lang": "en", "category": "code", "text": "The code is 4829.", "llm": "The code is four eight two nine."}
+{"id": "en_code_4", "lang": "en", "category": "code", "text": "Model number XR-2000 with serial 00123.", "llm": "Model number X R two thousand with serial zero zero one two three"}
+{"id": "en_code_5", "lang": "en", "category": "code", "text": "Your order 123456 will arrive in 2 days.", "llm": "Your order one two three four five six will arrive in two days."}
+{"id": "en_code_6", "lang": "en", "category": "code", "text": "Your car plate WXY 1234 is registered.", "llm": "Your car plate W X Y one two three four is registered."}
+{"id": "en_id_6", "lang": "en", "category": "id", "text": "COVID-19 cases rose in Q3 2025.", "llm": "COVID nineteen cases rose in Q three twenty twenty-five."}
+{"id": "en_id_7", "lang": "en", "category": "id", "text": "We are on the 12th floor of Menara 2, Lot 1.15.", "llm": "We are on the twelfth floor of Menara two, Lot one point one five."}
+{"id": "en_date_8", "lang": "en", "category": "date", "text": "Your appointment is on Sept. 4, 2026 at 12:00 noon.", "llm": "Your appointment is on September fourth, twenty twenty-six at twelve noon."}
+{"id": "en_date_9", "lang": "en", "category": "date", "text": "The deadline is 31/12 this year, and the review is on 1/1.", "llm": "The deadline is the thirty-first of December this year, and the review is on the first of January."}
+{"id": "en_date_10", "lang": "en", "category": "date", "text": "It happened in 1900 and again in 2000.", "llm": "It happened in nineteen hundred and again in two thousand."}
+{"id": "en_date_11", "lang": "en", "category": "date", "text": "Between 2010 and 2020 the population grew 2.3%.", "llm": "Between two thousand and ten and two thousand and twenty the population grew two point three percent."}
+{"id": "en_time_7", "lang": "en", "category": "time", "text": "We are open 9 to 5, Mon-Fri, and until 12.30pm on Saturdays.", "llm": "We are open nine to five, Monday to Friday, and until twelve thirty p m on Saturdays."}
+{"id": "en_time_8", "lang": "en", "category": "time", "text": "The meeting is at 3 to 4pm, not 3.30.", "llm": "The meeting is at three to four p m, not three point thirty."}
+{"id": "en_time_9", "lang": "en", "category": "time", "text": "My flight is at 0730 hours and lands at 1900 hrs.", "llm": "My flight is at zero seven thirty hours and lands at nineteen hundred hours."}
+{"id": "en_time_10", "lang": "en", "category": "time", "text": "The bus leaves at 7, arrives at 9:15, and returns at 5.", "llm": "The bus leaves at seven, arrives at nine fifteen, and returns at five."}
+{"id": "en_time_11", "lang": "en", "category": "time", "text": "Check-in is from 2.30 to 4.30pm.", "llm": "Check-in is from two thirty to four thirty p m."}
+{"id": "en_time_12", "lang": "en", "category": "time", "text": "It closes at 12am and reopens at 12pm.", "llm": "It closes at twelve a m and reopens at twelve p m."}
+{"id": "en_ordinal_5", "lang": "en", "category": "ordinal", "text": "The 3rd of 5 payments is due on the 15th.", "llm": "The third of five payments is due on the fifteenth."}
+{"id": "en_money_10", "lang": "en", "category": "money", "text": "GST is 6% and SST is 8%, so the total is RM106.", "llm": "GST is six percent and SST is eight percent, so the total is one hundred six ringgit."}
+{"id": "en_money_11", "lang": "en", "category": "money", "text": "Approximately 2.5 million people, or 1 in 12, are affected.", "llm": "Approximately two point five million people, or one in twelve, are affected."}
+{"id": "en_money_12", "lang": "en", "category": "money", "text": "The fine is RM12.5k or RM3.5 billion in total.", "llm": "The fine is twelve thousand five hundred ringgit or three point five billion ringgit in total."}
+{"id": "ms_time_7", "lang": "ms", "category": "time", "text": "Mesyuarat bermula pukul 3.30 petang dan tamat jam 5.15 petang.", "llm": "Mesyuarat bermula pukul tiga tiga puluh petang dan tamat jam lima lima belas petang."}
+{"id": "ms_time_8", "lang": "ms", "category": "time", "text": "Sila datang pukul 10.45 pagi esok.", "llm": "Sila datang pukul sepuluh empat puluh lima pagi esok."}
+{"id": "ms_time_9", "lang": "ms", "category": "time", "text": "Kami dibuka 9 pagi - 5 petang setiap hari.", "llm": "Kami dibuka sembilan pagi hingga lima petang setiap hari."}
+{"id": "ms_time_10", "lang": "ms", "category": "time", "text": "Penerbangan AK6120 berlepas pukul 0730 dan tiba 0915.", "llm": "Penerbangan AK enam satu dua kosong berlepas pukul kosong tujuh tiga puluh dan tiba kosong sembilan satu lima."}
+{"id": "ms_time_11", "lang": "ms", "category": "time", "text": "Kedai tutup pukul 12 tengah hari dan buka semula 2.00 petang.", "llm": "Kedai tutup pukul dua belas tengah hari dan buka semula dua pukul petang."}
+{"id": "ms_range_4", "lang": "ms", "category": "range", "text": "Kadar faedah 3.5% setahun untuk tempoh 5-7 tahun.", "llm": "Kadar faedah tiga perpuluhan lima peratus setahun untuk tempoh lima hingga tujuh tahun."}
+{"id": "ms_range_5", "lang": "ms", "category": "range", "text": "Diskaun 10-15% untuk pelajar.", "llm": "Diskaun sepuluh hingga lima belas peratus untuk pelajar."}
+{"id": "ms_range_6", "lang": "ms", "category": "range", "text": "Harga bermula dari RM50-RM100 seorang.", "llm": "Harga bermula dari lima puluh ringgit hingga seratus ringgit seorang."}
+{"id": "ms_per_1", "lang": "ms", "category": "per", "text": "Harga beras RM5/kg dan yuran RM50/bulan.", "llm": "Harga beras lima ringgit per kilogram dan yuran lima puluh ringgit per bulan."}
+{"id": "ms_per_2", "lang": "ms", "category": "per", "text": "Had laju 110 km/j di lebuh raya.", "llm": "Had laju satu ratus sepuluh kilometer per jam di lebuh raya."}
+{"id": "ms_per_3", "lang": "ms", "category": "per", "text": "Pelan RM38/bulan untuk 12 bulan.", "llm": "Pelan tiga puluh lapan ringgit sebulan untuk dua belas bulan."}
+{"id": "ms_neg_1", "lang": "ms", "category": "neg", "text": "Suhu turun ke -5°C malam tadi.", "llm": "Suhu turun ke negatif lima darjah Celsius malam tadi."}
+{"id": "ms_code_1", "lang": "ms", "category": "code", "text": "Kod pengesahan anda ialah 482913.", "llm": "Kod pengesahan anda ialah empat lapan dua sembilan satu tiga."}
+{"id": "ms_code_2", "lang": "ms", "category": "code", "text": "Poskod anda 50450 dan nombor unit 12-3-5.", "llm": "Poskod anda lima kosong empat lima kosong dan nombor unit satu dua tiga lima."}
+{"id": "ms_code_3", "lang": "ms", "category": "code", "text": "Pesanan 123456 akan tiba dalam 2 hari.", "llm": "Pesanan satu dua tiga empat lima enam akan tiba dalam dua hari."}
+{"id": "ms_code_4", "lang": "ms", "category": "code", "text": "Sila hubungi 03-1234 5678 sambungan 123.", "llm": "Sila hubungi kosong tiga satu dua tiga empat lima enam tujuh lapan sambungan satu dua tiga."}
+{"id": "ms_code_5", "lang": "ms", "category": "code", "text": "Nombor plat kereta anda WXY 1234 telah didaftarkan.", "llm": "Nombor plat kereta anda W X Y satu dua tiga empat telah didaftarkan."}
+{"id": "ms_version_1", "lang": "ms", "category": "version", "text": "Kemas kini ke versi 2.0 atau iOS 17.4.1 sebelum Jumaat.", "llm": "Kemas kini ke versi dua perpuluhan sifar atau iOS tujuh belas perpuluhan empat perpuluhan satu sebelum Jumaat."}
+{"id": "ms_hyphen_1", "lang": "ms", "category": "hyphen", "text": "Jaminan 30 hari dan sokongan 24 jam, 7 hari seminggu.", "llm": "Jaminan tiga puluh hari dan sokongan dua puluh empat jam, tujuh hari seminggu."}
+{"id": "ms_frac_1", "lang": "ms", "category": "frac", "text": "Talian kami beroperasi 24/7.", "llm": "Talian kami beroperasi dua puluh empat jam tujuh hari seminggu."}
+{"id": "ms_frac_2", "lang": "ms", "category": "frac", "text": "Campurkan 1/2 cawan gula dan 3/4 cawan tepung.", "llm": "Campurkan satu per dua cawan gula dan tiga per empat cawan tepung."}
+{"id": "ms_frac_3", "lang": "ms", "category": "frac", "text": "Anda perlu bayar 1/3 daripada jumlah, iaitu RM400.", "llm": "Anda perlu bayar satu pertiga daripada jumlah, iaitu empat ratus ringgit."}
+{"id": "ms_frac_4", "lang": "ms", "category": "frac", "text": "Bayaran ansuran 1/12 setiap bulan.", "llm": "Bayaran ansuran satu per dua belas setiap bulan."}
+{"id": "ms_frac_5", "lang": "ms", "category": "frac", "text": "Unit 3A-12-3, Blok B, Jalan 3/14, Petaling Jaya.", "llm": "Unit three A twelve three, Blok B, Jalan tiga per empat belas, Petaling Jaya."}
+{"id": "ms_score_1", "lang": "ms", "category": "score", "text": "Skor akhir 3-1 kepada Malaysia.", "llm": "Skor akhir tiga satu kepada Malaysia."}
+{"id": "ms_int_7", "lang": "ms", "category": "int", "text": "Lebih 10k pengguna dan 100k muat turun setakat ini.", "llm": "Lebih sepuluh ribu pengguna dan seratus ribu muat turun setakat ini."}
+{"id": "ms_int_8", "lang": "ms", "category": "int", "text": "Bab 3, muka surat 45, perenggan 2.", "llm": "Bab tiga, muka surat empat puluh lima, perenggan dua."}
+{"id": "ms_int_9", "lang": "ms", "category": "int", "text": "Tekan 1 untuk Bahasa Melayu, 2 untuk Bahasa Inggeris, atau 0 untuk operator.", "llm": "Tekan satu untuk Bahasa Melayu, dua untuk Bahasa Inggeris, atau kosong untuk operator."}
+{"id": "ms_int_10", "lang": "ms", "category": "int", "text": "Penduduk seramai 1000000 orang pada tahun 1990.", "llm": "Penduduk seramai satu juta orang pada tahun seribu sembilan ratus sembilan puluh."}
+{"id": "ms_int_11", "lang": "ms", "category": "int", "text": "Kira-kira 2.5 juta orang, atau 1 daripada 12, terjejas.", "llm": "Kira-kira dua perpuluhan lima juta orang, atau satu daripada dua belas, terjejas."}
+{"id": "ms_unit_6", "lang": "ms", "category": "unit", "text": "Ketinggian 1.75 m, berat 70.5 kg.", "llm": "Ketinggian satu perpuluhan tujuh lima meter, berat tujuh puluh perpuluhan lima kilogram."}
+{"id": "ms_unit_7", "lang": "ms", "category": "unit", "text": "Panaskan ketuhar pada 180°C selama 25-30 minit.", "llm": "Panaskan ketuhar pada satu ratus lapan puluh darjah Celsius selama dua puluh lima hingga tiga puluh minit."}
+{"id": "ms_unit_8", "lang": "ms", "category": "unit", "text": "Rumah ini 1,200 kaki persegi dengan bateri 12V.", "llm": "Rumah ini seribu dua ratus kaki persegi dengan bateri dua belas volt."}
+{"id": "ms_decade_1", "lang": "ms", "category": "decade", "text": "Muzik dari tahun 1980-an dan 90-an di saluran 5.", "llm": "Muzik dari tahun seribu sembilan ratus lapan puluh-an dan sembilan puluh-an di saluran lima."}
+{"id": "ms_date_7", "lang": "ms", "category": "date", "text": "Tarikh akhir 31/12 tahun ini, dan semakan pada 1/1.", "llm": "Tarikh akhir tiga puluh satu Disember tahun ini, dan semakan pada satu Januari."}
+{"id": "ms_date_8", "lang": "ms", "category": "date", "text": "Program berlangsung 15-16 Mac.", "llm": "Program berlangsung lima belas hingga enam belas Mac."}
+{"id": "ms_money_8", "lang": "ms", "category": "money", "text": "Cukai SST 8% menjadikan jumlahnya RM108.", "llm": "Cukai SST lapan peratus menjadikan jumlahnya seratus lapan ringgit."}
+{"id": "ms_money_9", "lang": "ms", "category": "money", "text": "Denda RM12.5k atau RM3.5 bilion kesemuanya.", "llm": "Denda dua belas perpuluhan lima ribu ringgit atau tiga perpuluhan lima bilion ringgit kesemuanya."}
+{"id": "ms_ordinal_5", "lang": "ms", "category": "ordinal", "text": "Ini kali ke 3 saya menghubungi anda.", "llm": "Ini kali ketiga saya menghubungi anda."}
+{"id": "ms_ordinal_6", "lang": "ms", "category": "ordinal", "text": "Abad ke-21 bermula pada tahun 2001.", "llm": "Abad kedua puluh satu bermula pada tahun dua ribu satu."}
+{"id": "zh_hyphen_1", "lang": "zh", "category": "hyphen", "text": "我们提供30天退款保证和24小时支持。", "llm": "我们提供三十天退款保证和二十四小时支持。"}
+{"id": "zh_frac_1", "lang": "zh", "category": "frac", "text": "请添加1/2杯糖和3/4杯面粉。", "llm": "请添加二分之一杯糖和四分之三杯面粉。"}
+{"id": "zh_frac_2", "lang": "zh", "category": "frac", "text": "我们的热线24/7为您服务。", "llm": "我们的热线二十四小时七天为您服务。"}
+{"id": "zh_frac_3", "lang": "zh", "category": "frac", "text": "我考了95/100分。", "llm": "我考了九十五分之一百分。"}
+{"id": "zh_frac_4", "lang": "zh", "category": "frac", "text": "3A-12-3单位，B座，Jalan 3/14，八打灵再也。", "llm": "三 A 一二 三单位，B座，Jalan 三 slash 十四，八打灵再也。"}
+{"id": "zh_version_1", "lang": "zh", "category": "version", "text": "请在星期五前更新到2.0版本或iOS 17.4.1。", "llm": "请在星期五前更新到二点零版本或iOS 十七点四点一。"}
+{"id": "zh_neg_1", "lang": "zh", "category": "neg", "text": "昨晚气温降到-5°C。", "llm": "昨晚气温降到负五摄氏度。"}
+{"id": "zh_neg_2", "lang": "zh", "category": "neg", "text": "股价下跌了-3.5%。", "llm": "股价下跌了负百分之三点五。"}
+{"id": "zh_range_4", "lang": "zh", "category": "range", "text": "折扣是10-15%。", "llm": "折扣是百分之十到百分之十五。"}
+{"id": "zh_range_5", "lang": "zh", "category": "range", "text": "价格从RM50-RM100不等。", "llm": "价格从五十令吉到一百令吉不等。"}
+{"id": "zh_range_6", "lang": "zh", "category": "range", "text": "烤箱设置180°C烤25-30分钟。", "llm": "烤箱设置一百八十度烤二十五到三十分钟。"}
+{"id": "zh_range_7", "lang": "zh", "category": "range", "text": "需要1-2天，最多3-5个工作日。", "llm": "需要一到两天，最多三到五个工作日。"}
+{"id": "zh_per_1", "lang": "zh", "category": "per", "text": "米价RM5/kg，费用RM50/月。", "llm": "米价五令吉每公斤，费用五十令吉每月。"}
+{"id": "zh_per_2", "lang": "zh", "category": "per", "text": "限速110 km/h。", "llm": "限速一百一十公里每小时。"}
+{"id": "zh_int_8", "lang": "zh", "category": "int", "text": "目前有超过10k用户和100k下载。", "llm": "目前有超过一万用户和十万下载。"}
+{"id": "zh_int_9", "lang": "zh", "category": "int", "text": "1990年人口是1000000。", "llm": "一九九零年人口是一百万。"}
+{"id": "zh_int_10", "lang": "zh", "category": "int", "text": "请拨100联系客服或999报警。", "llm": "请拨一百联系客服或九九九报警。"}
+{"id": "zh_int_11", "lang": "zh", "category": "int", "text": "按1选择英文，按2选择马来文，按0转接人工。", "llm": "按一选择英文，按二选择马来文，按零转接人工。"}
+{"id": "zh_int_12", "lang": "zh", "category": "int", "text": "这个要2块钱，那个要2元。", "llm": "这个要2块钱，那个要2元。"}
+{"id": "zh_int_13", "lang": "zh", "category": "int", "text": "我有2个哥哥和3个姐姐，一共5个人。", "llm": "我有两个哥哥和三个姐姐，一共五个人。"}
+{"id": "zh_int_14", "lang": "zh", "category": "int", "text": "他今年22岁，明年23岁。", "llm": "他今年二十二岁，明年二十三岁。"}
+{"id": "zh_int_15", "lang": "zh", "category": "int", "text": "这本书有200多页，我看了100页。", "llm": "这本书有两百多页，我看了一百页。"}
+{"id": "zh_int_16", "lang": "zh", "category": "int", "text": "我买了10斤苹果，花了20块5毛。", "llm": "我买了十斤苹果，花了二十块五毛。"}
+{"id": "zh_int_17", "lang": "zh", "category": "int", "text": "增长了3倍，达到1.5万。", "llm": "增长了三倍，达到一点五万。"}
+{"id": "zh_int_18", "lang": "zh", "category": "int", "text": "1万2千人参加了活动。", "llm": "一万二千人参加了活动。"}
+{"id": "zh_int_19", "lang": "zh", "category": "int", "text": "大约250万人受影响。", "llm": "大约二百五十万人受影响。"}
+{"id": "zh_int_20", "lang": "zh", "category": "int", "text": "第3章，第45页，第2段。", "llm": "第三章，第四十五页，第二段。"}
+{"id": "zh_int_21", "lang": "zh", "category": "int", "text": "5个付款中的第3个在15号到期。", "llm": "五个付款中的第三个在十五号到期。"}
+{"id": "zh_score_1", "lang": "zh", "category": "score", "text": "比分是3-1。", "llm": "比分是三比一。"}
+{"id": "zh_code_1", "lang": "zh", "category": "code", "text": "您的验证码是482913，10分钟内有效。", "llm": "您的验证码是四八二九一三，十分钟内有效。"}
+{"id": "zh_code_2", "lang": "zh", "category": "code", "text": "邮编是50450，单位号是12-3-5。", "llm": "邮编是五零四五零，单位号是一二三五。"}
+{"id": "zh_code_3", "lang": "zh", "category": "code", "text": "您的订单123456将在2天内送达。", "llm": "您的订单一二三四五六将在两天内送达。"}
+{"id": "zh_code_4", "lang": "zh", "category": "code", "text": "车牌号WXY 1234已登记。", "llm": "车牌号WXY 一二三四已登记。"}
+{"id": "zh_time_7", "lang": "zh", "category": "time", "text": "会议从下午3点到4点，不是3点半。", "llm": "会议从下午三点到四点，不是三点半。"}
+{"id": "zh_time_8", "lang": "zh", "category": "time", "text": "下午3:30到5:15开会。", "llm": "下午三点三十分到五点十五分开会。"}
+{"id": "zh_time_9", "lang": "zh", "category": "time", "text": "航班在0730起飞，1900降落。", "llm": "航班在零七三零起飞，一九零零降落。"}
+{"id": "zh_time_10", "lang": "zh", "category": "time", "text": "公交车7点出发，9:15到达，5点返回。", "llm": "公交车七点出发，九点十五到达，五点返回。"}
+{"id": "zh_date_6", "lang": "zh", "category": "date", "text": "截止日期是今年12月31日，审核在1月1日。", "llm": "截止日期是今年十二月三十一日，审核在一月一日。"}
+{"id": "zh_date_7", "lang": "zh", "category": "date", "text": "2010年到2020年间人口增长了2.3%。", "llm": "二零一零年到二零二零年间人口增长了百分之二点三。"}
+{"id": "zh_date_8", "lang": "zh", "category": "date", "text": "2024年12月25日是星期三。", "llm": "二零二四年十二月二十五日是星期三。"}
+{"id": "zh_date_9", "lang": "zh", "category": "date", "text": "2月2日下午2点2分。", "llm": "二月二日下午两点二分。"}
+{"id": "zh_money_8", "lang": "zh", "category": "money", "text": "消费税6%，销售税8%，总共RM106。", "llm": "消费税百分之六，销售税百分之八，总共一百零六令吉。"}
+{"id": "zh_unit_5", "lang": "zh", "category": "unit", "text": "身高1.75 m，体重70.5 kg。", "llm": "身高一点七五米，体重七十点五公斤。"}
+{"id": "zh_unit_6", "lang": "zh", "category": "unit", "text": "距离约3.5公里，步行40分钟。", "llm": "距离约三点五公里，步行四十分钟。"}
+{"id": "zh_id_4", "lang": "zh", "category": "id", "text": "COVID-19病例在2025年第3季度上升。", "llm": "COVID-十九病例在二零二五年第三季度上升。"}
+{"id": "ta_time_6", "lang": "ta", "category": "time", "text": "கூட்டம் மாலை 3.30 மணிக்கு தொடங்கி 5.15 மணிக்கு முடியும்.", "llm": "கூட்டம் மாலை மூன்று முப்பது மணிக்கு தொடங்கி ஐந்து பதினைந்து மணிக்கு முடியும்."}
+{"id": "ta_time_7", "lang": "ta", "category": "time", "text": "நாளை காலை 10.45 மணிக்கு வாருங்கள்.", "llm": "நாளை காலை பத்து முப்பத்தைந்து மணிக்கு வாருங்கள்."}
+{"id": "ta_time_8", "lang": "ta", "category": "time", "text": "விமானம் 0730 மணிக்கு புறப்பட்டு 1900 மணிக்கு தரையிறங்கும்.", "llm": "விமானம் பூஜ்ஜியம் ஏழு முப்பது மணிக்கு புறப்பட்டு ஒன்று ஒன்பது பூஜ்ஜியம் பூஜ்ஜியம் மணிக்கு தரையிறங்கும்."}
+{"id": "ta_time_9", "lang": "ta", "category": "time", "text": "பேருந்து 7 மணிக்கு புறப்பட்டு 9:15க்கு வந்து 5 மணிக்கு திரும்பும்.", "llm": "பேருந்து ஏழு மணிக்கு புறப்பட்டு ஒன்பது பதினைந்துக்கு வந்து ஐந்து மணிக்கு திரும்பும்."}
+{"id": "ta_time_10", "lang": "ta", "category": "time", "text": "கடை 9 மணி முதல் 5 மணி வரை திறந்திருக்கும்.", "llm": "கடை ஒன்பது மணி முதல் ஐந்து மணி வரை திறந்திருக்கும்."}
+{"id": "ta_hyphen_1", "lang": "ta", "category": "hyphen", "text": "30 நாள் பணத்திரும்ப உத்தரவாதம் மற்றும் 24 மணி நேர ஆதரவு.", "llm": "30 நாள் பணத்திரும்ப உத்தரவாதம் மற்றும் 24 மணி நேர ஆதரவு."}
+{"id": "ta_frac_1", "lang": "ta", "category": "frac", "text": "எங்கள் ஹாட்லைன் 24/7 செயல்படுகிறது.", "llm": "எங்கள் ஹாட்லைன் இருபத்தி நான்கு மணி நேரம் ஏழு நாட்கள் செயல்படுகிறது."}
+{"id": "ta_frac_2", "lang": "ta", "category": "frac", "text": "1/2 கப் சர்க்கரை மற்றும் 3/4 கப் மாவு சேர்க்கவும்.", "llm": "1/2 கப் சர்க்கரை மற்றும் 3/4 கப் மாவு சேர்க்கவும்."}
+{"id": "ta_frac_3", "lang": "ta", "category": "frac", "text": "100க்கு 95 மதிப்பெண் பெற்றேன்.", "llm": "100க்கு 95 மதிப்பெண் பெற்றேன்."}
+{"id": "ta_neg_1", "lang": "ta", "category": "neg", "text": "நேற்று இரவு வெப்பநிலை -5°C ஆக குறைந்தது.", "llm": "நேற்று இரவு வெப்பநிலை மைனஸ் ஐந்து டிகிரி செல்சியஸ் ஆக குறைந்தது."}
+{"id": "ta_range_4", "lang": "ta", "category": "range", "text": "தள்ளுபடி 10-15%.", "llm": "தள்ளுபடி பத்து முதல் பதினைந்து சதவீதம்."}
+{"id": "ta_range_5", "lang": "ta", "category": "range", "text": "விலை RM50-RM100 வரை.", "llm": "விலை ஐம்பது ரிங்கிட் முதல் நூறு ரிங்கிட் வரை."}
+{"id": "ta_range_6", "lang": "ta", "category": "range", "text": "அடுப்பை 180°C இல் 25-30 நிமிடங்கள் வைக்கவும்.", "llm": "அடுப்பை நூற்று எண்பது டிகிரி செல்சியஸ் இல் இருபத்தைந்து முதல் முப்பது நிமிடங்கள் வைக்கவும்."}
+{"id": "ta_range_7", "lang": "ta", "category": "range", "text": "2010 முதல் 2020 வரை மக்கள் தொகை 2.3% அதிகரித்தது.", "llm": "2010 முதல் 2020 வரை மக்கள் தொகை 2.3% அதிகரித்தது."}
+{"id": "ta_per_1", "lang": "ta", "category": "per", "text": "அரிசி RM5/kg, கட்டணம் RM50/மாதம்.", "llm": "அரிசி ஐந்து ரிங்கிட் ஒரு கிலோகிராம், கட்டணம் ஐம்பது ரிங்கிட் ஒரு மாதம்."}
+{"id": "ta_per_2", "lang": "ta", "category": "per", "text": "வேக வரம்பு 110 km/h.", "llm": "வேக வரம்பு நூற்று பத்து கிலோமீட்டர் ஒரு மணி நேரத்திற்கு."}
+{"id": "ta_code_1", "lang": "ta", "category": "code", "text": "உங்கள் சரிபார்ப்பு குறியீடு 482913, 10 நிமிடங்களுக்கு செல்லுபடியாகும்.", "llm": "உங்கள் சரிபார்ப்பு குறியீடு நான்கு எட்டு இரண்டு ஒன்பது ஒன்று மூன்று, பத்து நிமிடங்களுக்கு செல்லுபடியாகும்."}
+{"id": "ta_code_2", "lang": "ta", "category": "code", "text": "உங்கள் அஞ்சல் குறியீடு 50450, யூனிட் எண் 12-3-5.", "llm": "உங்கள் அஞ்சல் குறியீடு ஐம்பதாயிரத்து நானூற்று ஐபது, யூனிட் எண் பன்னிரண்டு மூன்று ஐந்து."}
+{"id": "ta_code_3", "lang": "ta", "category": "code", "text": "உங்கள் ஆர்டர் 123456 2 நாட்களில் வந்து சேரும்.", "llm": "உங்கள் ஆர்டர் ஒன்று இரண்டு மூன்று நான்கு ஐந்து ஆறு இரண்டு நாட்களில் வந்து சேரும்."}
+{"id": "ta_version_1", "lang": "ta", "category": "version", "text": "பதிப்பு 2.0 அல்லது iOS 17.4.1 க்கு புதுப்பிக்கவும்.", "llm": "பதிப்பு இரண்டு புள்ளி பூஜ்ஜியம் அல்லது iOS பதினேழு புள்ளி நான்கு புள்ளி ஒன்று க்கு புதுப்பிக்கவும்."}
+{"id": "ta_score_1", "lang": "ta", "category": "score", "text": "இறுதி ஸ்கோர் 3-1.", "llm": "இறுதி ஸ்கோர் மூன்று ஒன்று."}
+{"id": "ta_suffix_1", "lang": "ta", "category": "suffix", "text": "2024ல் நிறுவனம் 3 கிளைகளை திறந்தது.", "llm": "இரண்டாயிரத்து இருபத்து நான்கில் நிறுவனம் மூன்று கிளைகளை திறந்தது."}
+{"id": "ta_suffix_2", "lang": "ta", "category": "suffix", "text": "2030க்குள் 50% வளர்ச்சி எதிர்பார்க்கப்படுகிறது.", "llm": "இரண்டாயிரத்து முப்பதுக்குள் ஐம்பது சதவீதம் வளர்ச்சி எதிர்பார்க்கப்படுகிறது."}
+{"id": "ta_suffix_3", "lang": "ta", "category": "suffix", "text": "1990ல் மக்கள் தொகை 1000000.", "llm": "ஆயிரத்து தொள்ளாயிரத்து தொண்ணூறில் மக்கள் தொகை பத்து லட்சம்."}
+{"id": "ta_suffix_4", "lang": "ta", "category": "suffix", "text": "சுமார் 2.5 மில்லியன் மக்கள், அல்லது 12ல் 1 பேர், பாதிக்கப்பட்டுள்ளனர்.", "llm": "சுமார் இரண்டு புள்ளி ஐந்து மில்லியன் மக்கள், அல்லது பன்னிரண்டில் ஒருவர், பாதிக்கப்பட்டுள்ளனர்."}
+{"id": "ta_suffix_5", "lang": "ta", "category": "suffix", "text": "RM1,000ஐ 3 மாதங்களில் செலுத்துங்கள்.", "llm": "one thousand ringgit ஐ 3 மாதங்களில் செலுத்துங்கள்."}
+{"id": "ta_suffix_6", "lang": "ta", "category": "suffix", "text": "2024ஆம் ஆண்டு 4ஆம் காலாண்டில் விற்பனை 15% உயர்ந்தது.", "llm": "இரண்டாயிரத்து இருபத்தி நான்குஆம் ஆண்டு நான்காம் காலாண்டில் விற்பனை பதினைந்து சதவீதம் உயர்ந்தது."}
+{"id": "ta_suffix_7", "lang": "ta", "category": "suffix", "text": "எண் 12ஆல் வகுக்கவும், பின் 3ஆல் பெருக்கவும்.", "llm": "எண் பன்னிரண்டால் வகுக்கவும், பின் மூன்றால் பெருக்கவும்."}
+{"id": "ta_suffix_8", "lang": "ta", "category": "suffix", "text": "1ஆம் நாள் முதல் 15ஆம் நாள் வரை.", "llm": "1ஆம் நாள் முதல் 15ஆம் நாள் வரை."}
+{"id": "ta_suffix_9", "lang": "ta", "category": "suffix", "text": "5ஐ 3ஆல் பெருக்கினால் 15ஆகும்.", "llm": "5ஐ 3ஆல் பெருக்கினால் 15ஆகும்."}
+{"id": "ta_int_8", "lang": "ta", "category": "int", "text": "10 பேரில் 3 பேர் ஒப்புக்கொண்டனர்.", "llm": "பத்து பேரில் மூன்று பேர் ஒப்புக்கொண்டனர்."}
+{"id": "ta_int_9", "lang": "ta", "category": "int", "text": "அத்தியாயம் 3, பக்கம் 45, பத்தி 2.", "llm": "அத்தியாயம் மூன்று, பக்கம் நாற்பத்தைந்து, பத்தி இரண்டு."}
+{"id": "ta_int_10", "lang": "ta", "category": "int", "text": "வாடிக்கையாளர் சேவைக்கு 100 அல்லது அவசரத்திற்கு 999 ஐ அழைக்கவும்.", "llm": "வாடிக்கையாளர் சேவைக்கு நூறு அல்லது அவசரத்திற்கு ஒன்பது ஒன்பது ஒன்பது ஐ அழைக்கவும்."}
+{"id": "ta_int_11", "lang": "ta", "category": "int", "text": "ஆங்கிலத்திற்கு 1, மலாய்க்கு 2, ஆபரேட்டருக்கு 0 அழுத்தவும்.", "llm": "ஆங்கிலத்திற்கு ஒன்று, மலாய்க்கு இரண்டு, ஆபரேட்டருக்கு பூஜ்ஜியம் அழுத்தவும்."}
+{"id": "ta_int_12", "lang": "ta", "category": "int", "text": "எனக்கு 2 அண்ணன்கள் மற்றும் 3 அக்காக்கள், மொத்தம் 5 பேர்.", "llm": "எனக்கு இரண்டு அண்ணன்கள் மற்றும் மூன்று அக்காக்கள், மொத்தம் ஐந்து பேர்."}
+{"id": "ta_int_13", "lang": "ta", "category": "int", "text": "அவருக்கு 22 வயது, அடுத்த ஆண்டு 23.", "llm": "அவருக்கு இருபத்தி இரண்டு வயது, அடுத்த ஆண்டு இருபத்தி மூன்று."}
+{"id": "ta_int_14", "lang": "ta", "category": "int", "text": "கடந்த ஆண்டு 100,000 பேர் பங்கேற்றனர்.", "llm": "கடந்த ஆண்டு ஒரு லட்சம் பேர் பங்கேற்றனர்."}
+{"id": "ta_int_15", "lang": "ta", "category": "int", "text": "1.5 மணி நேரம் மற்றும் 1/2 மணி நேர இடைவேளை.", "llm": "ஒன்றரை மணி நேரம் மற்றும் அரை மணி நேர இடைவேளை."}
+{"id": "ta_ordinal_4", "lang": "ta", "category": "ordinal", "text": "5 தவணைகளில் 3வது 15ஆம் தேதி செலுத்த வேண்டும்.", "llm": "5 தவணைகளில் 3வது 15ஆம் தேதி செலுத்த வேண்டும்."}
+{"id": "ta_date_6", "lang": "ta", "category": "date", "text": "இந்த ஆண்டு டிசம்பர் 31 காலக்கெடு, ஜனவரி 1 அன்று மதிப்பாய்வு.", "llm": "இந்த ஆண்டு டிசம்பர் முப்பத்து ஒன்று காலக்கெடு, ஜனவரி ஒன்று அன்று மதிப்பாய்வு."}
+{"id": "ta_money_7", "lang": "ta", "category": "money", "text": "1,000 ரிங்கிட்டுக்கு 12% வட்டி, அதாவது 120 ரிங்கிட்.", "llm": "ஆயிரம் ரிங்கிட்டுக்கு பன்னிரண்டு சதவீதம் வட்டி, அதாவது நூற்று இருபது ரிங்கிட்."}
+{"id": "ta_unit_5", "lang": "ta", "category": "unit", "text": "உயரம் 1.75 m, எடை 70.5 kg.", "llm": "உயரம் ஒன்று புள்ளி ஏழு ஐந்து மீட்டர், எடை எழுபது புள்ளி ஐந்து கிலோகிராம்."}
+{"id": "cs_19", "lang": "cs", "category": "mixed", "text": "Sorry ya, sistem down since 3.30pm, boleh try again in 30-45 minutes?", "llm": "Sorry ya, sistem down since tiga tiga puluh p m, boleh try again in tiga puluh hingga empat puluh lima minutes?"}
+{"id": "cs_20", "lang": "cs", "category": "mixed", "text": "Your 30-day trial habis on 15/10, lepas tu RM29.90/month ya.", "llm": "Your thirty-day trial habis on fifteen October, lepas tu dua puluh sembilan ringgit sembilan puluh sen per month ya."}
+{"id": "cs_21", "lang": "cs", "category": "mixed", "text": "Kalau bayar before 31/12, dapat 10-15% discount.", "llm": "Kalau bayar before tiga puluh satu Disember, dapat sepuluh hingga lima belas peratus discount."}
+{"id": "cs_22", "lang": "cs", "category": "mixed", "text": "Meeting pukul 2.30 petang at level 12, bring the Q3 2025 report.", "llm": "Meeting pukul dua tiga puluh petang at level dua belas, bring the Q three dua ribu dua puluh lima report."}

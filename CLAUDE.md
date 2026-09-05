@@ -54,18 +54,26 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   output is identical (51/51 sentences vs the live LLM, `bench/normalizer_gate_eval.py` — rerun
   it after touching the gate or the prompt). Conservative: anything doubtful still goes to the LLM.
 - `app/spoken_normalizer/` — **rule-based replica of the LLM normalizer** (`mode: "spoken"`), pure Python,
-  importable anywhere: `numbers.py` (cardinals/ordinals/years/digits for en, ms, zh, ta — Tamil with sandhi),
-  `lang.py` (script → zh/ta; Malay-vs-English by marker words per sentence, and per number in code-switched sentences: distance-weighted neighbour vote + sentence prior), `core.py` (ordered regex
-  handlers: email, url, IC, numeric dates, month-name dates, phone, time ranges, times, money, percent,
-  units, ordinals, ranges, `#N`, alphanumeric ids, years, plain numbers, abbreviations). Built against the
-  LLM's own outputs (`bench/normalizer_corpus.py` → `bench/normalizer_truth.py` →
-  `bench/results/normalizer_truth.jsonl`, 300 sentences) and scored by `bench/normalizer_agreement.py`: 85% verbatim
-  agreement (en 91 / ms 91 / zh 90 / ta 72 / code-switch 67; the residue is mostly LLM errors or the LLM
-  contradicting itself), every digit read, full write-up in `bench/NORMALIZER.md`,
-  ~25 µs. Also the fallback for `mode=llm`, and with `LLM_NORMALIZER_RULE_FIRST=true` the LLM is only
-  called for what the rules leave unspeakable. Regex gotcha that cost a whole language: Python's `\w`/`\b`
-  treat CJK and Tamil letters as word characters, so digit boundaries must be ASCII classes
-  (`(?<![A-Za-z0-9_])`), and trailing lookaheads must allow a sentence-final `.`.
+  importable anywhere: `numbers.py` (cardinals/ordinals/years/digits for en, ms, zh, ta — Tamil with sandhi,
+  lakhs below 10⁷, `ta_attach()` glues case suffixes: 2024ல் → …நான்கில்), `lang.py` (script → zh/ta;
+  Malay-vs-English by marker words per sentence, and per number in code-switched sentences: distance-weighted
+  neighbour vote + sentence prior), `core.py` (ordered regex handlers: email, url, negative sign, IC, numeric
+  dates, month-name dates, phone, military time, Malay period ranges, time ranges, times, dotted times with a
+  cue, versions, percent/money/unit ranges, money, percent, units, `/unit`, ordinals, decades, hyphenated
+  compounds, `10k`/`2x`, digit groups, fractions & slashes & d/m dates, ranges & scores, `#N`, alphanumeric
+  ids, years, plain numbers, abbreviations). Built against the LLM's own outputs (`bench/normalizer_corpus.py`
+  → `bench/normalizer_truth.py` → `bench/results/normalizer_truth.jsonl`, 497 sentences: 300 everyday +
+  197 harder cases added 2026-09-04) and scored by `bench/normalizer_agreement.py`: 82% verbatim agreement
+  (en 89 / ms 87 / zh 88 / ta 67 / code-switch 59; the original 300 still 85%). Of the 88 residual diffs, 28
+  are LLM errors (it returned 8 Tamil sentences with digits in them), 50 the LLM contradicting itself, 10
+  code-switch hybrids; every digit is read in all 497. Full write-up in `bench/NORMALIZER.md`, 1,726 tests,
+  ~45 µs. Also the fallback for `mode=llm`, and with `LLM_NORMALIZER_RULE_FIRST=true` the LLM is only
+  called for what the rules leave unspeakable. Regex gotchas that each cost a whole language or category:
+  Python's `\w`/`\b` treat CJK and Tamil letters as word characters, so digit boundaries must be ASCII
+  classes (`(?<![A-Za-z0-9_])`); trailing lookaheads must allow a sentence-final `.` (`(?![...])(?!\.\d)`,
+  never a class containing `.`); a letter glued to a digit (`3A`) must not vote in language detection; a
+  bare 7-digit run is a phone number *unless* it is round (`1000000`); and a new time/number shape needs a
+  cue word or it will eat decimals (`at 3.25 per annum` is not a time).
 - `app/tracing.py` — OpenTelemetry spans on the hot path (`ENABLE_TRACING_SPANS`, **default on**,
   but gated on an exporter actually being configured; off, no exporter, or no opentelemetry ⇒
   every helper is a shared `nullcontext()` / a `None`-returning no-op, so the GIL-bound decode
@@ -83,6 +91,17 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   track is intrinsically jumpier in both conditions (warble clips 3.5% → 10.0%), though sustained
   seams don't differ. UTMOSv2 scoring is stochastic — **use `reps=16`** (`reps=1` spreads ±0.17 MOS on
   a bit-identical file, larger than the effect).
+- `bench/multilingual_normalizer/` — **written → spoken dataset generator for fine-tuning a small normalizer LLM**,
+  16 locales (en ms id zh ta ta-LK si tl ar fr es de it pt nl pl). Two sources, tagged per row: `template` (LLM-written
+  sentence templates with typed slots `{money} {date} {phone} …`, filled with random locale-formatted values and
+  verbalized **deterministically** — `verbalize.py`: num2words for ar/fr/id/es/de/it/pt/nl/pl, own tables for tl/si,
+  `app.spoken_normalizer` for en/ms/zh/ta; `SAFE_SLOTS` keeps grammar-sensitive shapes out of pl/ar/si/tl) and `llm`
+  (natural sentences written and normalized by the OPENAI_* LLM with a multilingual prompt + 2 deterministic few-shots,
+  kept only if no digit survives, right script, ≥80% words preserved). Output in `bench/results/multilingual_normalizer/`
+  (`train/val/test.jsonl`, `*_sft.jsonl`, `stats.md`; build 2026-09-05: 43,698 rows, 40k template + 3.7k LLM); split by template id so no frame leaks across splits. README there
+  has the per-locale grammar caveats (si/tl/ar/pl deterministic rows need native review). Commands: `templates_llm` →
+  `generate --per-locale N` (free) → `llm_pairs` → `build --sft`, all via `python -m bench.multilingual_normalizer.<step>`
+  with `uv run --with num2words --with aiohttp`; every LLM stage is cached and incremental.
 - `bench/livekit/` — LiveKit agent stress rig (no-STT/no-LLM agent + load client): measures TTFB and
   per-utterance loudness through a real agent + WebRTC path. See its README for setup and results.
 
@@ -147,7 +166,16 @@ for ~4.6 s of audio (RTF ≈0.15).
 
 ### Time to first byte (TTFB)
 
-Measured 2026-09-04 on tm-h20 (8× H20-3e; prod vLLM, TP=2) with `bench/ttfb_probe.py`, which times the
+**Full write-up: `bench/TTFB.md`** (measured 2026-09-05 against the staging deployment: vLLM TP=2 on
+2× H20-3e + the app on 1× H20-3e with 4 workers). Headline: the rule path and `mode=llm` are
+indistinguishable at **~235 ms wall / ~115 ms on-box** because `SKIP_PLAIN` + `RULE_FIRST` skip the
+LLM on 99.8% of the 497-sentence corpus; when a request does reach the LLM it costs **+633 ms**.
+The post-header pipeline (LM first window + first codec decode) is a constant **~113 ms**.
+End-to-end RTF 0.16–0.23, and 34 audio-s/wall-s at concurrency 8. `bench/ttfb_report.py` reproduces
+it. Note two different rule paths: `mode=spoken` is correct, legacy `mode=rule` misreads
+`RM1,250.50` as "ringgit. five zero".
+
+Earlier decomposition, measured 2026-09-04 on tm-h20 (8× H20-3e; prod vLLM, TP=2) with `bench/ttfb_probe.py`, which times the
 first **audio** byte on a `pcm` stream (WAV emits its header before any decode, so `bench.py`'s wav TTFB
 is meaningless). Staging's ~1 s decomposed as:
 
@@ -223,11 +251,13 @@ uv run --with aiohttp --with pytest -- pytest tests/test_llm_normalizer.py -v  #
 
 # TTFB / first-window tooling (talks to a running app; see "Time to first byte")
 python bench/ttfb_probe.py --url http://127.0.0.1:9091 --playback 1.5,0.75 --overlap 0.2 --reps 3   # first-audio-byte latency + client stall margin
+uv run --with aiohttp python bench/ttfb_report.py --url http://127.0.0.1:9091 --reps 5   # TTFB + end-to-end per normalizer mode (rules vs llm); writes bench/TTFB.md's numbers
 python bench/lm_probe.py --gates 35,60,85,110          # vLLM alone: prefill, tok/s, arrival of the N-th token (source .env first)
 python bench/window_ab.py --url ... --configs 1.5:0.2,0.75:0.2   # temp-0 streamed vs one-shot decode: envelope, clicks (+ --save-dir, then bench/cer_wavs.py)
 PYTHONPATH=. python bench/normalizer_gate_eval.py --old-url ... --new-url ...   # LLM-skip gate: outputs must be identical
-uv run --with pytest pytest tests/test_spoken_normalizer.py -q   # rule normalizer (994 tests, no deps)
+uv run --with pytest pytest tests/test_spoken_normalizer.py -q   # rule normalizer (1,726 tests, no deps)
 PYTHONPATH=. python bench/normalizer_agreement.py               # rule vs LLM ground truth, per language/category
+uv run --with fasttext-wheel --with "numpy<2" --with huggingface_hub --with aiohttp python bench/langid_compare.py --llm   # marker words vs fastText vs LLM language detection (results in bench/NORMALIZER.md)
 set -a; source .env; set +a; uv run --with aiohttp python bench/normalizer_truth.py   # extend the ground truth (new corpus ids only)
 
 # local docker stack
