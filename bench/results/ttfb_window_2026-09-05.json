@@ -1,0 +1,317 @@
+{
+ "args": {
+  "url": "https://tts-api-tm-l40.aies.scicom.dev",
+  "voice": "TM_English_Normal",
+  "ids": "en_short_1,en_med_1,ms_short_1,ms_med_1,cs_1",
+  "playback": "2.0,1.5,1.0,0.75,0.5",
+  "overlap": "0.2",
+  "mode": "spoken",
+  "text": [
+   "Your balance is RM1,250.50 as of 15/3/2024 and the meeting is at 3pm."
+  ],
+  "temperature": 0.6,
+  "speaking_rate": null,
+  "reps": 4,
+  "warmup": 2,
+  "out": "/private/tmp/claude-2078641114/-Users-husein-z-Documents-TTS-API-Neucodec/0199221c-0049-4c16-90a5-4bbc1d7cb58c/scratchpad/window.json",
+  "label": "",
+  "api_key": ""
+ },
+ "results": {
+  "ps=2.0 ov=0.2": {
+   "playback_speed": 2.0,
+   "overlap": 0.2,
+   "summary": {
+    "n": 4,
+    "ttfb_mean": 0.391,
+    "ttfb_p50": 0.361,
+    "ttfb_p90": 0.427,
+    "ttfb_max": 0.427,
+    "t_headers_mean": 0.148,
+    "min_lead_min": 0.049,
+    "min_lead_p10": 0.049,
+    "stalls": 0,
+    "audio_s_mean": 10.42,
+    "total_mean": 1.757
+   },
+   "rows": [
+    {
+     "t_headers": 0.13503166707232594,
+     "ttfb": 0.3576916251331568,
+     "total": 1.638001125305891,
+     "audio_s": 9.620000000000005,
+     "min_lead_s": 0.14591558384771147,
+     "reads": 83,
+     "id": "text0",
+     "rep": 0
+    },
+    {
+     "t_headers": 0.1489832503721118,
+     "ttfb": 0.36115095810964704,
+     "total": 1.8097966252826154,
+     "audio_s": 10.680000000000014,
+     "min_lead_s": 0.13636695747325817,
+     "reads": 137,
+     "id": "text0",
+     "rep": 1
+    },
+    {
+     "t_headers": 0.1433872077614069,
+     "ttfb": 0.4270948749035597,
+     "total": 1.79029779182747,
+     "audio_s": 10.580000000000014,
+     "min_lead_s": 0.09797399961451689,
+     "reads": 105,
+     "id": "text0",
+     "rep": 2
+    },
+    {
+     "t_headers": 0.1650089998729527,
+     "ttfb": 0.4199077091179788,
+     "total": 1.7914581671357155,
+     "audio_s": 10.780000000000003,
+     "min_lead_s": 0.04906345889965693,
+     "reads": 106,
+     "id": "text0",
+     "rep": 3
+    }
+   ]
+  },
+  "ps=1.5 ov=0.2": {
+   "playback_speed": 1.5,
+   "overlap": 0.2,
+   "summary": {
+    "n": 4,
+    "ttfb_mean": 0.344,
+    "ttfb_p50": 0.328,
+    "ttfb_p90": 0.38,
+    "ttfb_max": 0.38,
+    "t_headers_mean": 0.166,
+    "min_lead_min": -0.105,
+    "min_lead_p10": -0.105,
+    "stalls": 3,
+    "audio_s_mean": 10.41,
+    "total_mean": 1.877
+   },
+   "rows": [
+    {
+     "t_headers": 0.17744004214182496,
+     "ttfb": 0.38045437494292855,
+     "total": 1.7641199170611799,
+     "audio_s": 10.020000000000003,
+     "min_lead_s": 0.024556291523079078,
+     "reads": 77,
+     "id": "text0",
+     "rep": 0
+    },
+    {
+     "t_headers": 0.18941024970263243,
+     "ttfb": 0.32813299959525466,
+     "total": 1.9873718325980008,
+     "audio_s": 11.160000000000005,
+     "min_lead_s": -0.10002020862822732,
+     "reads": 84,
+     "id": "text0",
+     "rep": 1
+    },
+    {
+     "t_headers": 0.15319766709581017,
+     "ttfb": 0.31668791733682156,
+     "total": 1.723354000132531,
+     "audio_s": 9.40000000000001,
+     "min_lead_s": -0.10532716591780385,
+     "reads": 97,
+     "id": "text0",
+     "rep": 2
+    },
+    {
+     "t_headers": 0.14234666619449854,
+     "ttfb": 0.350335625000298,
+     "total": 2.0315031660720706,
+     "audio_s": 11.040000000000006,
+     "min_lead_s": -0.06926041631897291,
+     "reads": 102,
+     "id": "text0",
+     "rep": 3
+    }
+   ]
+  },
+  "ps=1.0 ov=0.2": {
+   "playback_speed": 1.0,
+   "overlap": 0.2,
+   "summary": {
+    "n": 4,
+    "ttfb_mean": 0.3,
+    "ttfb_p50": 0.3,
+    "ttfb_p90": 0.32,
+    "ttfb_max": 0.32,
+    "t_headers_mean": 0.155,
+    "min_lead_min": -0.08,
+    "min_lead_p10": -0.08,
+    "stalls": 2,
+    "audio_s_mean": 10.46,
+    "total_mean": 2.005
+   },
+   "rows": [
+    {
+     "t_headers": 0.12613929202780128,
+     "ttfb": 0.26155054196715355,
+     "total": 1.8900241670198739,
+     "audio_s": 9.160000000000007,
+     "min_lead_s": -0.07955883315578102,
+     "reads": 86,
+     "id": "text0",
+     "rep": 0
+    },
+    {
+     "t_headers": 0.1628261674195528,
+     "ttfb": 0.3001930844038725,
+     "total": 2.1746512092649937,
+     "audio_s": 10.720000000000011,
+     "min_lead_s": 0.023168334152549507,
+     "reads": 101,
+     "id": "text0",
+     "rep": 1
+    },
+    {
+     "t_headers": 0.14351979084312916,
+     "ttfb": 0.3176170829683542,
+     "total": 2.116082957945764,
+     "audio_s": 11.740000000000013,
+     "min_lead_s": 0.19356804189458487,
+     "reads": 121,
+     "id": "text0",
+     "rep": 2
+    },
+    {
+     "t_headers": 0.18779104063287377,
+     "ttfb": 0.3202765407040715,
+     "total": 1.839580707717687,
+     "audio_s": 10.220000000000004,
+     "min_lead_s": -0.07961558422818779,
+     "reads": 104,
+     "id": "text0",
+     "rep": 3
+    }
+   ]
+  },
+  "ps=0.75 ov=0.2": {
+   "playback_speed": 0.75,
+   "overlap": 0.2,
+   "summary": {
+    "n": 4,
+    "ttfb_mean": 0.272,
+    "ttfb_p50": 0.24,
+    "ttfb_p90": 0.315,
+    "ttfb_max": 0.315,
+    "t_headers_mean": 0.147,
+    "min_lead_min": 0.098,
+    "min_lead_p10": 0.098,
+    "stalls": 0,
+    "audio_s_mean": 10.79,
+    "total_mean": 1.945
+   },
+   "rows": [
+    {
+     "t_headers": 0.1425868747755885,
+     "ttfb": 0.2374816657975316,
+     "total": 1.9710807078517973,
+     "audio_s": 11.020000000000007,
+     "min_lead_s": 0.1721944575868547,
+     "reads": 130,
+     "id": "text0",
+     "rep": 0
+    },
+    {
+     "t_headers": 0.12869624979794025,
+     "ttfb": 0.2402962907217443,
+     "total": 1.9049120829440653,
+     "audio_s": 10.26000000000001,
+     "min_lead_s": 0.09827199966832996,
+     "reads": 107,
+     "id": "text0",
+     "rep": 1
+    },
+    {
+     "t_headers": 0.16724529210478067,
+     "ttfb": 0.2940205833874643,
+     "total": 1.8666119580157101,
+     "audio_s": 10.660000000000009,
+     "min_lead_s": 0.11768383325263858,
+     "reads": 102,
+     "id": "text0",
+     "rep": 2
+    },
+    {
+     "t_headers": 0.14973037503659725,
+     "ttfb": 0.3151865000836551,
+     "total": 2.0379496668465436,
+     "audio_s": 11.200000000000012,
+     "min_lead_s": 0.2989386659786105,
+     "reads": 104,
+     "id": "text0",
+     "rep": 3
+    }
+   ]
+  },
+  "ps=0.5 ov=0.2": {
+   "playback_speed": 0.5,
+   "overlap": 0.2,
+   "summary": {
+    "n": 4,
+    "ttfb_mean": 0.252,
+    "ttfb_p50": 0.217,
+    "ttfb_p90": 0.293,
+    "ttfb_max": 0.293,
+    "t_headers_mean": 0.137,
+    "min_lead_min": 0.022,
+    "min_lead_p10": 0.022,
+    "stalls": 0,
+    "audio_s_mean": 10.23,
+    "total_mean": 1.809
+   },
+   "rows": [
+    {
+     "t_headers": 0.14388941694051027,
+     "ttfb": 0.2931854580529034,
+     "total": 1.9030280830338597,
+     "audio_s": 9.980000000000011,
+     "min_lead_s": 0.1497860409989953,
+     "reads": 81,
+     "id": "text0",
+     "rep": 0
+    },
+    {
+     "t_headers": 0.15364399971440434,
+     "ttfb": 0.2915300829336047,
+     "total": 1.7561439578421414,
+     "audio_s": 10.540000000000008,
+     "min_lead_s": 0.07409362501651048,
+     "reads": 123,
+     "id": "text0",
+     "rep": 1
+    },
+    {
+     "t_headers": 0.12418537540361285,
+     "ttfb": 0.2074114172719419,
+     "total": 1.733265375252813,
+     "audio_s": 10.100000000000005,
+     "min_lead_s": 0.021676708824932577,
+     "reads": 86,
+     "id": "text0",
+     "rep": 2
+    },
+    {
+     "t_headers": 0.12724279100075364,
+     "ttfb": 0.2174672083929181,
+     "total": 1.844725125003606,
+     "audio_s": 10.280000000000005,
+     "min_lead_s": 0.0717509580515325,
+     "reads": 84,
+     "id": "text0",
+     "rep": 3
+    }
+   ]
+  }
+ }
+}

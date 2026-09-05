@@ -16,7 +16,7 @@ import re
 
 TAMIL_RE = re.compile(r'[஀-௿]')
 CJK_RE = re.compile(r'[一-鿿㐀-䶿豈-﫿]')
-_WORD_RE = re.compile(r"[A-Za-z][A-Za-z']*")
+_WORD_RE = re.compile(r"(?<![A-Za-z0-9])[A-Za-z][A-Za-z']*")     # not the A of "3A"
 
 MS_WORDS = set('''
 saya anda awak kamu kami kita dia mereka beliau ini itu yang dan atau untuk dengan pada di ke
@@ -37,9 +37,13 @@ selamat datang jumpa baik baiklah okey ok ye betul salah lain lagi sangat amat p
 kurangkan tambah tambahan sila mohon harap sekiranya sebarang pertanyaan lanjut jangan teragak
 kemaskini setakat termasuk cukai jimat berharga juta ribu deposit sewa suhu badan darjah penilaian
 purata kadar faedah jualan naik turun bateri diskaun tiada tertunggak dewan memuatkan penduduk
-mendaftar pilihan setiap dijadualkan program berlangsung dilahirkan denda dikenakan unit dihantar
+mendaftar pilihan setiap dijadualkan program berlangsung dilahirkan denda dikenakan dihantar
 pesan pesanan laporan rujukan penerbangan tempat duduk ditubuhkan berkembang berubah polisi
 menjelang jangka berganda dokumen invois kaunter masukkan dihantar melalui layari pergi ke
+bab muka surat perenggan ketinggian berat blok poskod kod pengesahan versi cawan gula tepung skor
+sambungan seramai saluran muzik ketuhar ansuran abad panaskan campurkan tekan lorong kaki persegi
+had laju lebuh raya plat didaftarkan jaminan sokongan seminggu tempoh menjadikan kesemuanya denda
+muat turun pengguna bermula berlepas tiba berlangsung semakan tengahari kepada ialah iaitu
 '''.split())
 
 EN_WORDS = set('''
@@ -61,6 +65,11 @@ send visit learn report shipped reference tracking flight seat rescheduled compa
 expanded policy changed double waiting lobby located documents invoice committee people enter
 items item copies level extension transfer received ticket tickets minutes seconds units
 sent counter returned statement joint issued patience shortly worry sort quietly meet half past
+block floor page chapter version guarantee warranty hotel cup sugar flour odds test score postcode
+serial model plate registered dropped speed limit highway downloads population dial volume car
+landed gate faster cheaper upload lasts height weight oven heater applicants accepted prices ages
+verification valid cases rose noon lands bus leaves arrives returns reopens payments due affected
+music channel odds convenience printer week stock fell hotline
 '''.split())
 
 
@@ -84,6 +93,7 @@ sixteen seventeen eighteen nineteen twenty thirty forty fifty sixty seventy eigh
 thousand million billion point percent ringgit sen dollars dollar cents plus minus
 kosong sifar satu dua tiga empat lima enam tujuh lapan sembilan sepuluh sebelas belas puluh seratus
 ratus seribu ribu juta bilion perpuluhan peratus pagi petang tambah hingga dolar
+per minus negatif slash times kali half third quarter quarters thirds out
 '''.split())
 _CLAUSE_END = re.compile(r'[.!?;:]')
 
