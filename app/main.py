@@ -5,7 +5,7 @@ import torch
 torch._dynamo.config.recompile_limit = 128
 torch.set_float32_matmul_precision('high')
 
-from typing import Literal
+from typing import Literal, Optional
 import re
 import json
 import base64
@@ -26,6 +26,10 @@ from app.normalizer.chinese import normalize_chinese, is_chinese_dominant, CJK_R
 from app.llm_normalizer import llm_normalize, needs_normalization, has_unspoken, LLMNormalizerError, NormalizerMode
 from app.spoken_normalizer import normalize as spoken_normalize
 from app import tracing
+from app.interleave import (
+    make_store, RequestInterleave, build_prompt, fit_interleave, select_voice,
+    seconds_to_tokens, total_tokens,
+)
 import torch.cuda as cuda
 import uuid
 import bisect
@@ -137,6 +141,30 @@ if wan is not None:
 # them" is actually visible instead of being swallowed by the unconfigured root logger.
 tracing.log_status()
 
+# Interleaved generation (`interleave_id` on /v1/audio/speech), shared across worker
+# processes -- see app/interleave.py for the why and the prompt format.
+INTERLEAVE_MAX_TOKENS = seconds_to_tokens(INTERLEAVE_MAX_S)
+try:
+    interleave_store = make_store(
+        INTERLEAVE_STORE, INTERLEAVE_STORE_DIR, INTERLEAVE_TTL_S,
+        INTERLEAVE_MAX_TOKENS, MAX_RETAIN_INTERLEAVE,
+    )
+except Exception as e:
+    # an unwritable store directory (read-only rootfs, no /dev/shm) disables an optional
+    # feature -- it must never stop the API from starting.
+    logging.warning(f'interleave: store unavailable ({e}); interleave_id will be ignored')
+    interleave_store = None
+if interleave_store is None:
+    logging.info('interleave: off -- interleave_id is ignored')
+else:
+    logging.info(
+        f'interleave: {INTERLEAVE_STORE} store'
+        f'{" at " + interleave_store.directory if hasattr(interleave_store, "directory") else ""}, '
+        f'retains {MAX_RETAIN_INTERLEAVE or "unlimited"} turns / {INTERLEAVE_MAX_S:g}s '
+        f'({INTERLEAVE_MAX_TOKENS} speech tokens) per id, '
+        f'ttl {INTERLEAVE_TTL_S:g}s, LM window {LM_MAX_MODEL_LEN}'
+    )
+
 torch.set_grad_enabled(False)
 
 if DEVICE:
@@ -190,6 +218,7 @@ logging.info('loading audio encoder')
 codec = NeuCodec.from_pretrained("neuphonic/neucodec").eval().to(device)
 codebook_size = 50
 sr = 24000
+TOKEN_RE = re.compile(r'<\|s_(\d+)\|>')
 
 logging.info('done load audio encoder')
 
@@ -583,7 +612,13 @@ async def stream_speech(
     stream_format="audio",
     stream_normalize=STREAM_NORMALIZE,
     speaking_rate=DEFAULT_SPEAKING_RATE,
+    interleave=None,
+    extra_headers=None,
 ):
+    """`interleave` is the request's RequestInterleave (app/interleave.py) or None: when
+    set, the prompt already carries the previous turns and the LM reader commits this
+    turn's tokens to the store once generation finishes cleanly. `extra_headers` are
+    added to every response shape (the X-Interleave-* headers)."""
     headers = {
         'accept': 'application/json',
         'Content-Type': 'application/json',
@@ -618,6 +653,9 @@ async def stream_speech(
         'tts.stream_normalize': stream_normalize,
         'tts.speaking_rate': speaking_rate,
         'tts.crossfade': STREAM_CROSSFADE,
+        'tts.interleave_id': interleave.key if interleave is not None else '',
+        'tts.interleave_turns': len(interleave.turns) if interleave is not None else 0,
+        'tts.interleave_tokens': interleave.tokens if interleave is not None else 0,
     })
     stream_ctx = tracing.context_with(stream_span)
     t_stream_start = time.perf_counter() if traced else 0.0
@@ -679,6 +717,13 @@ async def stream_speech(
         })
         lm_ctx = tracing.context_with(lm_span)
         n_deltas = 0
+        # Interleaved generation: everything the LM emits, saved as the next turn once
+        # the stream ended cleanly. A `length` finish means max_tokens cut the speech
+        # short -- the text says one thing and the tokens stop halfway, and a misaligned
+        # pair is worse history than none.
+        lm_text = []
+        lm_done = False
+        finish_reason = None
         # `request.is_disconnected()` performs a real ASGI receive on every call, and
         # aiohttp yields two lines per SSE event (the data line and the blank one), so
         # polling it per line meant ~2 receives per speech token -- pure overhead on the
@@ -711,47 +756,99 @@ async def stream_speech(
                             await asyncio.sleep(DUMMY_TOKEN_DELAY)
                 return
 
-            t_post = tracing.now_ns()
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    TTS_API,
-                    headers=headers,
-                    json=json_data,
-                ) as resp:
-                    t_headers = tracing.now_ns()
-                    tracing.record_span(
-                        'lm.connect', t_post, t_headers, parent=lm_ctx,
-                        attrs={'http.response.status_code': resp.status},
-                    )
-                    tracing.set_attributes(lm_span, {'http.response.status_code': resp.status})
-                    if resp.status != 200:
-                        error_text = await resp.text()
-                        logging.error(f"Backend error: {resp.status} - {error_text}")
-                        queue.put_nowait({'error': f'backend returned {resp.status}: {error_text[:200]}'})
-                        return
+            # Interleave: with history in the prompt the LM can decide the utterance is
+            # already over and emit end-of-speech after a handful of tokens (see FALLBACK_*
+            # in app/interleave.py). Hold the first tokens back -- at most 1 s of speech,
+            # about what the first decode window needs anyway, so the wait it can add is a
+            # few milliseconds at 530 LM tok/s -- and if the LM stops before that many have
+            # arrived, regenerate this chunk from the plain prompt: exactly what a request
+            # without an interleave_id would have produced. Nothing has reached the stitcher
+            # at that point, so the switch is invisible to the client.
+            hold_tokens = (
+                interleave.fallback_hold_tokens()
+                if (INTERLEAVE_FALLBACK and interleave is not None) else 0
+            )
+            attempt_prompt = prompt
+            fallback_used = False
+            while True:
+                held = []                   # deltas withheld from the stitcher so far
+                held_tokens = 0
+                released = hold_tokens == 0
+                lm_text = []
+                lm_done = False
+                finish_reason = None
+                json_data['prompt'] = attempt_prompt
+                t_post = tracing.now_ns()
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(
+                        TTS_API,
+                        headers=headers,
+                        json=json_data,
+                    ) as resp:
+                        t_headers = tracing.now_ns()
+                        tracing.record_span(
+                            'lm.connect', t_post, t_headers, parent=lm_ctx,
+                            attrs={'http.response.status_code': resp.status},
+                        )
+                        tracing.set_attributes(lm_span, {'http.response.status_code': resp.status})
+                        if resp.status != 200:
+                            error_text = await resp.text()
+                            logging.error(f"Backend error: {resp.status} - {error_text}")
+                            queue.put_nowait({'error': f'backend returned {resp.status}: {error_text[:200]}'})
+                            return
 
-                    async for line in resp.content:
-                        if await client_gone():
-                            tracing.add_event(lm_span, 'client_disconnected')
-                            break
-                        if line.startswith(b"data: "):
-                            data_str = line.decode("utf-8").strip()[6:]
-                            if data_str == "[DONE]":
+                        async for line in resp.content:
+                            if await client_gone():
+                                tracing.add_event(lm_span, 'client_disconnected')
                                 break
-                            try:
-                                data_json = json.loads(data_str)
-                                delta = data_json["choices"][0]
-                                if "text" in delta:
-                                    if not n_deltas:
-                                        # prefill: what the request actually waited for
-                                        tracing.record_span(
-                                            'lm.first_token', t_headers, tracing.now_ns(),
-                                            parent=lm_ctx,
-                                        )
-                                    n_deltas += 1
-                                    await queue.put({'result': delta["text"]})
-                            except json.JSONDecodeError:
-                                continue
+                            if line.startswith(b"data: "):
+                                data_str = line.decode("utf-8").strip()[6:]
+                                if data_str == "[DONE]":
+                                    lm_done = True
+                                    break
+                                try:
+                                    data_json = json.loads(data_str)
+                                    delta = data_json["choices"][0]
+                                    finish_reason = delta.get("finish_reason") or finish_reason
+                                    if "text" in delta:
+                                        if not n_deltas:
+                                            # prefill: what the request actually waited for
+                                            tracing.record_span(
+                                                'lm.first_token', t_headers, tracing.now_ns(),
+                                                parent=lm_ctx,
+                                            )
+                                        n_deltas += 1
+                                        text = delta["text"]
+                                        if interleave is not None:
+                                            lm_text.append(text)
+                                        if released:
+                                            await queue.put({'result': text})
+                                        else:
+                                            held.append(text)
+                                            held_tokens += text.count('<|s_')
+                                            if held_tokens >= hold_tokens:
+                                                for h in held:
+                                                    await queue.put({'result': h})
+                                                held = []
+                                                released = True
+                                except json.JSONDecodeError:
+                                    continue
+
+                if not released and lm_done and interleave is not None and not fallback_used:
+                    logging.warning(
+                        f'interleave {interleave.key}: LM stopped after {held_tokens} speech '
+                        f'tokens (< {hold_tokens}) -- regenerating without history'
+                    )
+                    tracing.add_event(lm_span, 'interleave_fallback', {
+                        'lm.tokens': held_tokens, 'lm.hold': hold_tokens,
+                    })
+                    tracing.set_attributes(stream_span, {'tts.interleave_fallback': True})
+                    fallback_used = True
+                    attempt_prompt = interleave.plain_prompt()
+                    continue
+                for h in held:              # short but final: release what there is
+                    await queue.put({'result': h})
+                break
 
         except asyncio.CancelledError:
             tracing.add_event(lm_span, 'cancelled')
@@ -761,7 +858,27 @@ async def stream_speech(
             tracing.record_exception(lm_span, e)
             queue.put_nowait({'error': str(e)})
         finally:
-            tracing.end_span(lm_span, attrs={'lm.deltas': n_deltas})
+            tracing.end_span(lm_span, attrs={
+                'lm.deltas': n_deltas, 'lm.finish_reason': finish_reason or '',
+            })
+            if interleave is not None:
+                if lm_done and finish_reason != 'length':
+                    # Synchronous and *before* the terminator below: the stitcher cannot
+                    # finish the response until it sees None, so by the time the client
+                    # has chunk N, chunk N is in the store for chunk N+1 -- whichever
+                    # worker that one lands on.
+                    ids = [int(m) for m in TOKEN_RE.findall(''.join(lm_text))]
+                    turns = interleave.commit(ids)
+                    if turns is not None:
+                        logging.info(
+                            f'interleave {interleave.key}: +{len(ids)} tokens -> '
+                            f'{len(turns)} turns / {total_tokens(turns)} tokens retained'
+                        )
+                else:
+                    logging.info(
+                        f'interleave {interleave.key}: turn not stored '
+                        f'(lm_done={lm_done}, finish_reason={finish_reason})'
+                    )
             # unbounded queue -> put_nowait cannot block or raise, and is safe to run
             # while the task is being cancelled. A duplicate terminator is harmless:
             # the consumer stops at the first one and drops the queue.
@@ -781,7 +898,6 @@ async def stream_speech(
     xf = max(2, min(xf, ctx * samples_per_token, (chunk_size * samples_per_token) // 2))
     half = xf // 2
 
-    TOKEN_RE = re.compile(r'<\|s_(\d+)\|>')
     all_ids = []
 
     def cos_ramp(n):
@@ -1072,6 +1188,8 @@ async def stream_speech(
         'Cache-Control': 'no-cache, no-store',
         'X-Accel-Buffering': 'no',
     }
+    if extra_headers:
+        stream_headers.update(extra_headers)
 
     # OpenAI-compatible SSE streaming (stream_format="sse"). The livekit
     # openai TTS plugin (>=1.x) requests this and parses speech.audio.delta /
@@ -1135,6 +1253,8 @@ async def stream_speech(
                 "Accept-Ranges": "bytes",
                 "Content-Length": str(len(wav_bytes)),
             }
+            if extra_headers:
+                resp_headers.update(extra_headers)
             return Response(content=wav_bytes, headers=resp_headers)
 
         else:
@@ -1144,7 +1264,8 @@ async def stream_speech(
             return FileResponse(
                 path=tmp.name,
                 media_type="audio/L16; rate=24000; channels=1",
-                filename="merged_audio.pcm"
+                filename="merged_audio.pcm",
+                headers=dict(extra_headers or {}),
             )
 
 class NormalizeRequest(BaseModel):
@@ -1179,6 +1300,21 @@ class TTSRequest(NormalizeRequest):
         DEFAULT_SPEAKING_RATE, ge=MIN_RATE, le=MAX_RATE,
         validation_alias=AliasChoices('speaking_rate', 'speed'),
     )
+    # Interleaved generation (app/interleave.py): requests that share an interleave_id are
+    # prompted with the previous turns' text + speech tokens, in the interleaved format the
+    # LM was trained on, so a reply an agent chunks into several TTS calls (LiveKit sentence
+    # chunks) keeps one continuous prosody instead of restarting cold at every chunk.
+    # Aliases `request_id` / `context_id`; the `X-Interleave-Id` (or `X-Context-Id`) request
+    # header works too, for clients that cannot add body fields. Omit it for independent
+    # utterances. Ignored when INTERLEAVE_STORE=off.
+    interleave_id: Optional[str] = Field(
+        None, max_length=256,
+        validation_alias=AliasChoices('interleave_id', 'request_id', 'context_id'),
+    )
+    # How many previous turns of this id go into the prompt. The store retains
+    # MAX_RETAIN_INTERLEAVE (default 5), so asking for more than that gets what is there;
+    # 0 means "no turn limit" and leaves INTERLEAVE_MAX_S the only bound.
+    max_retain_interleave: int = Field(MAX_RETAIN_INTERLEAVE, ge=0, le=64)
 
 # pydantic does not validate defaults, so a bad env value would bypass the range above.
 if not MIN_RATE <= DEFAULT_SPEAKING_RATE <= MAX_RATE:
@@ -1376,9 +1512,91 @@ async def normalize_text(data: NormalizeRequest):
 async def speaker():
     return SPEAKERS
 
+def load_interleave(key, voice, text, max_tokens, max_retain):
+    """Read an interleave id's history and size it for this request (app/interleave.py).
+
+    Returns (RequestInterleave, max_tokens): the turns that go into the prompt -- the
+    trailing run in this voice, capped to `max_retain` turns and left-trimmed to
+    INTERLEAVE_MAX_S and to the LM window -- and the request's max_tokens clamped so
+    prompt + generation fit LM_MAX_MODEL_LEN. A store read failure degrades to no history
+    rather than failing the request.
+    """
+    with tracing.span('tts.interleave', attrs={'interleave.id': key}) as sp:
+        try:
+            history = interleave_store.get(key)
+        except Exception as e:
+            logging.warning(f'interleave {key}: store read failed, generating cold: {e}')
+            history = []
+        turns, fitted = fit_interleave(
+            select_voice(history, voice), text, max_tokens,
+            LM_MAX_MODEL_LEN, INTERLEAVE_MAX_TOKENS, INTERLEAVE_MIN_GEN_TOKENS,
+            max_retain,
+        )
+        ctx = RequestInterleave(store=interleave_store, key=key, voice=voice, text=text,
+                                turns=turns, max_retain=max_retain)
+        logging.info(
+            f'interleave {key}: {len(turns)}/{len(history)} turns, {ctx.tokens} speech '
+            f'tokens in prompt'
+            + (f', max_tokens {max_tokens} -> {fitted}' if fitted != max_tokens else '')
+        )
+        tracing.set_attributes(sp, {
+            'interleave.history_turns': len(history),
+            'interleave.turns': len(turns),
+            'interleave.tokens': ctx.tokens,
+            'interleave.max_retain': max_retain,
+            'interleave.max_tokens': fitted,
+        })
+        return ctx, fitted
+
+
+def prompt_for_log(prompt):
+    """Collapse speech-token runs so an interleaved prompt (thousands of tokens) logs as
+    one line."""
+    return re.sub(
+        r'(?:<\|s_\d+\|>)+',
+        lambda m: f'<{m.group(0).count("<|s_")} speech tokens>',
+        prompt,
+    )
+
+
+@app.get('/v1/audio/interleave/{interleave_id}')
+async def get_interleave(interleave_id: str):
+    """Inspect an interleave id: the retained turns (text + token counts, not the tokens)."""
+    if interleave_store is None:
+        raise HTTPException(status_code=400, detail='interleaved generation is disabled (INTERLEAVE_STORE=off)')
+    turns = interleave_store.get(interleave_id)
+    return {
+        'interleave_id': interleave_id,
+        'turns': [
+            {'voice': t.voice, 'text': t.text, 'tokens': len(t.tokens), 'ts': t.ts}
+            for t in turns
+        ],
+        'tokens': total_tokens(turns),
+        'max_retain': MAX_RETAIN_INTERLEAVE,
+        'max_tokens': INTERLEAVE_MAX_TOKENS,
+        'ttl_s': INTERLEAVE_TTL_S,
+    }
+
+
+@app.delete('/v1/audio/interleave/{interleave_id}')
+async def delete_interleave(interleave_id: str):
+    """Forget an interleave id (e.g. when the agent session ends); the next request on it
+    starts cold. Idle ids expire by themselves after INTERLEAVE_TTL_S."""
+    if interleave_store is None:
+        raise HTTPException(status_code=400, detail='interleaved generation is disabled (INTERLEAVE_STORE=off)')
+    return {'interleave_id': interleave_id, 'deleted': interleave_store.delete(interleave_id)}
+
+
 @app.post('/v1/audio/speech')
 async def tts_stream(data: TTSRequest, request: Request = None):
     speaker = data.voice
+    max_tokens = data.max_tokens
+    interleave = None
+    # body field first; the header is for clients that cannot add body fields
+    interleave_key = data.interleave_id or (
+        request.headers.get('x-interleave-id') or request.headers.get('x-context-id')
+        if request is not None else None
+    )
 
     if DUMMY_TOKENS_FILE:
         # tokens are replayed from DUMMY_TOKENS_FILE; the prompt is unused.
@@ -1386,13 +1604,18 @@ async def tts_stream(data: TTSRequest, request: Request = None):
     else:
         s = await normalize_request_text(data, fallback_to_rule=True)
         logging.info(f'normalized: {s}')
-        prompt = f'<|im_start|>{speaker}: {s}<|speech_start|>'
-        logging.info(f'prompt: {prompt}')
+        if interleave_key and interleave_store is not None:
+            interleave, max_tokens = load_interleave(
+                interleave_key, speaker, s, data.max_tokens, data.max_retain_interleave,
+            )
+        # with no history this is exactly the plain single-turn prompt
+        prompt = build_prompt(interleave.turns if interleave is not None else [], speaker, s)
+        logging.info(f'prompt: {prompt_for_log(prompt)}')
 
     return await stream_speech(
         prompt=prompt,
         model=data.model,
-        max_tokens=data.max_tokens,
+        max_tokens=max_tokens,
         temperature=data.temperature,
         repetition_penalty=data.repetition_penalty,
         playback_speed=data.playback_speed,
@@ -1403,6 +1626,8 @@ async def tts_stream(data: TTSRequest, request: Request = None):
         stream_format=data.stream_format,
         stream_normalize=data.stream_normalize,
         speaking_rate=data.speaking_rate,
+        interleave=interleave,
+        extra_headers=interleave.headers() if interleave is not None else None,
     )
 
 def batch_encode(ys):

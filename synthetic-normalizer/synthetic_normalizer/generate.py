@@ -24,6 +24,7 @@ from . import verbalize as V  # noqa: E402
 from .locales import (PHONE_FORMATS, DATE_FORMATS, TIME_FORMATS, ORDINAL_FORMATS, MY_UNITS, MY_CURRENCIES,  # noqa: E402
                       SEED_TEMPLATES)
 from .llm_common import RESULTS  # noqa: E402
+from .codeswitch import CS_LOCALES, CS_PAIRS, CS_TEMPLATES, CS_EXTRA_SLOTS, SLOT_TAG_RE, cs_safe_slots, validate as cs_valid  # noqa: E402
 
 MY = set(V.SPOKEN_NORMALIZER_LANG)
 SLOT_RE = re.compile(r'\{(' + '|'.join(V.ALL_SLOTS) + r')\}')
@@ -122,6 +123,8 @@ def f_time(loc, rng):
         pass
     if fmt.endswith('h') or fmt.endswith(' uur') or fmt == '{H}' or fmt == '{h}{ap}' or fmt == '{h} {ms_period}' or fmt == '{h}点':
         MM = '00'
+    if '点{MM}分' in fmt and MM == '00':
+        MM = rng.choice(['15', '30', '45'])       # 3点00分 is read '三点零零分'; nobody says that
     written = fmt.format(H=H, h=h, MM=MM, ap=rng.choice([ap, ap.upper(), ap[0] + '.' + ap[1] + '.']) if '{ap}' in fmt else '',
                          ms_period=ms_period, zh_period=zh_period).strip()
     if loc in MY:
@@ -183,9 +186,43 @@ def f_id(loc, rng):
     return tok, None if loc in MY else V.spell_id(tok, loc)
 
 
+def f_int_small(loc, rng):
+    """A count that has to stay plausible in the frame it sits in ("in {n} minutes"): f_int goes
+    up to 999, which reads correctly but says a survey takes 682 minutes."""
+    return str(rng.choice([rng.randint(2, 15), rng.randint(2, 15), rng.randint(15, 60)])), None
+
+
+def f_time_plain(loc, rng):
+    """A clock time with no am/pm and no period word, for frames that carry their own time cue
+    ("... மணிக்கு", "pukul ..."): f_time may return '2:00 pm', and "காலை 2:00 pm மணிக்கு" says
+    the hour three times over and contradicts itself."""
+    H = rng.randint(1, 23)
+    colon = rng.random() < 0.6
+    MM = rng.choice(['00', '05', '15', '30', '45']) if colon else rng.choice(['05', '15', '30', '45'])
+    return (f'{H}:{MM}' if colon else f'{H}.{MM}'), None
+
+
+def f_unit_data(loc, rng):
+    """A data allowance/usage, so a frame that says "data plan" gets GB and not kilograms
+    (f_unit picks any unit). zh is excluded by the templates: the normalizer leaves GB/MB as
+    letters in Chinese, and a spoken side with a Latin unit left in it is rejected."""
+    n = rng.choice([str(rng.randint(1, 500)), f'{rng.randint(1, 9)}.{rng.randint(1, 9)}'])
+    u = rng.choice(['GB', 'GB', 'MB', 'TB', 'Mbps'])
+    return f'{n}{rng.choice(["", " "])}{u}', None
+
+
+def f_unit_temp(loc, rng):
+    """A body temperature, for the clinic frames."""
+    n = f'{rng.randint(36, 40)}.{rng.randint(0, 9)}'
+    return f'{n}{rng.choice(["°C", " °C"])}', None
+
+
 FILLERS = {'int': f_int, 'big': f_big, 'money': f_money, 'decimal': f_decimal, 'percent': f_percent, 'phone': f_phone,
            'digits': f_digits, 'date': f_date, 'time': f_time, 'ordinal': f_ordinal, 'range': f_range, 'unit': f_unit,
            'year': f_year, 'email': f_email, 'url': f_url, 'id': f_id}
+# code-switched frames may also ask for a unit of a known family (see codeswitch.CS_EXTRA_SLOTS)
+CS_FILLERS = dict(FILLERS, unit_data=f_unit_data, unit_temp=f_unit_temp, int_small=f_int_small,
+                  time_plain=f_time_plain)
 
 
 # --------------------------------------------------------------------------- templates
@@ -239,10 +276,82 @@ def fill_template(tpl, loc, rng):
     return written, spoken, slots
 
 
+# --------------------------------------------------------------------------- code-switched pairs
+CTX_WORDS = 4          # carrier words taken from each side of a slot as its reading context
+CTX_CHARS = 8          # ... or characters, for a script that does not space its words
+
+
+def _ctx(text, side):
+    """The few carrier characters/words next to a slot -- the cue that decides how the number is
+    read ('nombor rujukan' -> digit by digit, 'மணிக்கு' -> a time). Never crosses another slot,
+    because the caller passes only the text between this slot and its neighbour."""
+    if not text.strip():
+        return ''
+    if re.search(r'[一-鿿]', text):
+        return text[-CTX_CHARS:] if side == 'left' else text[:CTX_CHARS]
+    parts = text.split(' ')
+    return ' '.join(parts[-CTX_WORDS:] if side == 'left' else parts[:CTX_WORDS])
+
+
+def spoken_in_context(value, lang, left, right):
+    """Read `value` in `lang` with its carrier context, then strip the context off again.
+
+    my_normalize() reads a bare token out of context ('9.50' is a decimal, '704251' a quantity);
+    with the cue words around it the same token is a time and a reference number. The context is
+    digit-free carrier text, so it normalizes to itself and the strip is exact -- and when it is
+    not (the normalizer rewrote a context word), the isolated reading is used instead.
+    """
+    L, R = _ctx(left, 'left'), _ctx(right, 'right')
+    # .strip() on every side: my_normalize keeps the outer spaces of a text it did not rewrite
+    # ('  அன்று ') but strips them from one it did, so an unstripped comparison fails the
+    # startswith/endswith test and silently falls back to the context-free reading.
+    full = my_normalize(L + value + R, lang=lang).strip()
+    nl = my_normalize(L, lang=lang).strip() if L.strip() else ''
+    nr = my_normalize(R, lang=lang).strip() if R.strip() else ''
+    if full.startswith(nl) and full.endswith(nr) and len(full) > len(nl) + len(nr):
+        return full[len(nl):len(full) - len(nr)].strip()
+    return my_normalize(value, lang=lang).strip()
+
+
+def load_cs_templates(loc):
+    out = []
+    for t in CS_TEMPLATES[loc]:
+        ok, why = cs_valid(t, loc, cs_safe_slots(V.SAFE_SLOTS))
+        if not ok:
+            print(f'  ! {loc}: {why}: {t}')
+            continue
+        out.append(t)
+    return out
+
+
+def fill_cs_template(tpl, loc, rng):
+    """-> (written, spoken, slots) for a code-switched frame: every slot is filled AND read in
+    the language its tag names, the carrier text is copied through unchanged."""
+    slots = []
+    written_parts, spoken_parts = [], []
+    matches = list(SLOT_TAG_RE.finditer(tpl))
+    pos = 0
+    for i, m in enumerate(matches):
+        slot, lang = m.group(1), m.group(2)
+        w, _ = CS_FILLERS[slot](lang, rng)
+        left = tpl[pos:m.start()]
+        right = tpl[m.end():matches[i + 1].start()] if i + 1 < len(matches) else tpl[m.end():]
+        slots.append(f'{slot}:{lang}')
+        written_parts.append(left + w)
+        spoken_parts.append(left + spoken_in_context(w, lang, left, right))
+        pos = m.end()
+    written = ''.join(written_parts) + tpl[pos:]
+    spoken = re.sub(r'[ \t]{2,}', ' ', ''.join(spoken_parts) + tpl[pos:]).strip()
+    if re.search(r'[0-9]', spoken) or spoken == written or not spoken or LEFTOVER_RE.search(spoken):
+        return None
+    return written, spoken, slots
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--per-locale', type=int, default=2500)
-    ap.add_argument('--locales', default=','.join(V.LOCALES))
+    ap.add_argument('--cs-per-locale', type=int, default=1500, help='rows per code-switched pair')
+    ap.add_argument('--locales', default=','.join(V.ALL_LOCALES))
     ap.add_argument('--seed', type=int, default=20260905)
     ap.add_argument('--out', default=os.path.join(RESULTS, 'template_pairs.jsonl'))
     args = ap.parse_args()
@@ -250,14 +359,16 @@ def main():
     n_written = 0
     with open(args.out, 'w') as f:
         for loc in args.locales.split(','):
-            tpls = load_templates(loc)
+            cs = loc in CS_LOCALES
+            tpls = load_cs_templates(loc) if cs else load_templates(loc)
             if not tpls:
                 print(f'{loc}: no templates'); continue
+            target = args.cs_per_locale if cs else args.per_locale
             made, tries, seen = 0, 0, set()
-            while made < args.per_locale and tries < args.per_locale * 4:
+            while made < target and tries < target * 4:
                 tries += 1
                 tpl = rng.choice(tpls)
-                res = fill_template(tpl, loc, rng)
+                res = fill_cs_template(tpl, loc, rng) if cs else fill_template(tpl, loc, rng)
                 if res is None or res[0] in seen:
                     continue
                 seen.add(res[0])

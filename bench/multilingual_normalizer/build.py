@@ -44,6 +44,28 @@ def template_splits(rows):
 _LEAD_JUNK = re.compile(r'^[\s,;:،、]+')
 
 
+def release_row(r):
+    """One row shape for the whole release.
+
+    Template and LLM rows carry different fields (`template_id`/`slots` vs `category`/`checks`),
+    and a jsonl dataset whose rows disagree on their columns cannot be loaded: the Arrow builder
+    infers the schema from the first chunk and then fails on the rest with "column names don't
+    match". So every row gets every key, with an empty default -- and `checks` (a nested struct
+    that only LLM rows can fill honestly) stays behind in raw/llm_pairs.jsonl."""
+    return {
+        'id': r['id'],
+        'lang': r['lang'],
+        'language': r['language'],
+        'source': r['source'],
+        'template_id': r.get('template_id') or '',
+        'slots': r.get('slots') or [],
+        'category': r.get('category') or '',
+        'text': r['text'],
+        'normalized': r['normalized'],
+        'split': r['split'],
+    }
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--sft', action='store_true')
@@ -82,7 +104,7 @@ def main():
     for split, rs in by_split.items():
         with open(os.path.join(RESULTS, f'{split}.jsonl'), 'w') as f:
             for r in rs:
-                f.write(json.dumps(r, ensure_ascii=False) + '\n')
+                f.write(json.dumps(release_row(r), ensure_ascii=False) + '\n')
         if args.sft:
             with open(os.path.join(RESULTS, f'{split}_sft.jsonl'), 'w') as f:
                 for r in rs:
@@ -92,7 +114,7 @@ def main():
                                         'lang': r['lang'], 'source': r['source']}, ensure_ascii=False) + '\n')
     # stats
     c = Counter((r['lang'], r['source'], r['split']) for r in out)
-    langs = [l for l in V.LOCALES if any(k[0] == l for k in c)]
+    langs = [l for l in V.ALL_LOCALES if any(k[0] == l for k in c)]
     lines = ['# Multilingual normalizer dataset: stats', '', f'Total rows: {len(out)}', '',
              '| lang | language | template train/val/test | llm train/val/test | total |', '|---|---|---|---|---|']
     for l in langs:

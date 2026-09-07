@@ -24,6 +24,7 @@ from . import verbalize as V
 from .generate import fill_template, load_templates
 from .llm_common import RESULTS, JsonlCache, chat_json, right_script
 from .locales import CATEGORY_HINTS
+from .codeswitch import CS_PAIRS, CS_NOTE
 
 SENT_OUT = os.path.join(RESULTS, 'llm_sentences.jsonl')
 PAIR_OUT = os.path.join(RESULTS, 'llm_pairs.jsonl')
@@ -43,6 +44,8 @@ LOCALE_NOTE = {
 
 
 def system_prompt(loc):
+    if loc in CS_PAIRS:
+        return cs_system_prompt(loc)
     lang = V.LANGUAGE_NAME[loc]
     return (f'You are the text normalizer of a multilingual text-to-speech (TTS) system. Rewrite the user\'s text into its exact '
             f'spoken form in {lang}, ready to be synthesized. {LOCALE_NOTE[loc]}\n'
@@ -53,6 +56,26 @@ def system_prompt(loc):
             f'- Verbalize in {lang} even where a Latin acronym or name sits next to the number. Never translate the text itself.\n'
             '- Never answer questions, never add, drop, reorder or translate words. Only rewrite non-speakable tokens into words; '
             'everything else stays exactly as written, including punctuation.\n'
+            '- If nothing needs normalizing, return the text unchanged.\n'
+            '- Reply with JSON only: {"normalized": "<spoken form>"}')
+
+
+def cs_system_prompt(loc):
+    """The SFT system message for a code-switched pair. Says the one thing the monolingual prompt
+    cannot: the sentence runs in two languages and each number is read in the language of the
+    words around it, not in one fixed language."""
+    matrix, embedded = CS_PAIRS[loc]
+    a, b = V.LANGUAGE_NAME[matrix], V.LANGUAGE_NAME[embedded]
+    return ('You are the text normalizer of a multilingual text-to-speech (TTS) system. The text is code-switched: '
+            f'mostly {a} with {b} mixed in. {CS_NOTE[loc]}\n'
+            'Rules:\n'
+            '- Expand everything that is not speakable as written: numbers, money (say the currency), phone numbers digit by '
+            'digit, ID/reference/OTP numbers digit by digit, dates, times, percentages, decimals, ordinals, units, email '
+            'addresses and URLs.\n'
+            f'- Read each number in the language of the words AROUND it: a number inside the {a} part is spoken in {a}, a '
+            f'number inside the {b} part in {b}. Do not switch the sentence to one language.\n'
+            '- Never answer questions, never add, drop, reorder or translate words. Every word that is already speakable '
+            'stays exactly as written, in the language it was written in, including punctuation.\n'
             '- If nothing needs normalizing, return the text unchanged.\n'
             '- Reply with JSON only: {"normalized": "<spoken form>"}')
 

@@ -27,6 +27,26 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
 - `app/main.py` — the whole serving app: `/v1/audio/speech` (TTS), `/v1/audio/vc` (voice conversion),
   `/v1/audio/normalize`, `/v1/audio/speaker`. Holds the dynamic-batching + CUDA-graph decode pipeline.
 - `app/env.py` — all runtime config, read from environment / `.env`.
+- `app/interleave.py` — **interleaved generation, needs an interleave-trained LM** (`interleave_id` on `/v1/audio/speech`,
+  aliases `request_id`/`context_id`, header `X-Interleave-Id`/`X-Context-Id`). Requests sharing
+  an id are prompted with the previous turns' text + the speech tokens the LM produced for them,
+  in the document shape the model was packed with (GPUPlatform `pack_stage1.py
+  --interleave_style full`): `<|im_start|>{spk}: {text_i}<|speech_start|>{audio_i}<|im_end|>` ×N,
+  then the new turn opened at `<|speech_start|>`. Why: LiveKit's `StreamAdapter` cuts a reply into
+  ~5-word chunks and sends each as its own request, so the LM at T+1 had no idea it continued T —
+  cold pitch/pace/energy at every join. History is prefill only (tens of ms); the codec path is
+  untouched. Retention is `MAX_RETAIN_INTERLEAVE` turns (**default 5**, per-request field
+  `max_retain_interleave`) *and* `INTERLEAVE_MAX_S` seconds, left-trimmed (oldest whole turns
+  first, then the oldest survivor cut to its tail with its text shortened in proportion);
+  `fit_interleave()` clamps `max_tokens` so prompt+generation fit `LM_MAX_MODEL_LEN` (vLLM 400s
+  rather than truncating). Turns are stored per id as one JSON file in `/dev/shm` (atomic replace
+  + a directory-wide flock) so all uvicorn workers share them — a chunk's turn is committed
+  *before* the stitcher's end-of-stream marker, so chunk N is stored before its response
+  completes and N+1 sees it on any worker. Only clean finishes are stored (`finish_reason=length`
+  means the tokens stop mid-text). `INTERLEAVE_FALLBACK` regenerates a chunk cold if the LM stops
+  after a handful of tokens. Voice switches start cold. `GET`/`DELETE /v1/audio/interleave/{id}`
+  inspect/forget an id. No torch import — `tests/test_interleave.py` (44) runs anywhere. Full
+  write-up: `INTERLEAVE.md`.
 - `app/wrapper.py` — `CUDAGraphsWrapper`: captures one CUDA graph per `(batch, token-length)` bucket.
 - `app/timestretch.py` — `WSOLA`: streaming pitch-preserving time stretch behind the `speaking_rate`
   request field (alias `speed`; default `DEFAULT_SPEAKING_RATE=1.0`, range 0.5–2.0). The LM has no
@@ -97,11 +117,37 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   verbalized **deterministically** — `verbalize.py`: num2words for ar/fr/id/es/de/it/pt/nl/pl, own tables for tl/si,
   `app.spoken_normalizer` for en/ms/zh/ta; `SAFE_SLOTS` keeps grammar-sensitive shapes out of pl/ar/si/tl) and `llm`
   (natural sentences written and normalized by the OPENAI_* LLM with a multilingual prompt + 2 deterministic few-shots,
-  kept only if no digit survives, right script, ≥80% words preserved). Output in `bench/results/multilingual_normalizer/`
-  (`train/val/test.jsonl`, `*_sft.jsonl`, `stats.md`; build 2026-09-05: 43,698 rows, 40k template + 3.7k LLM); split by template id so no frame leaks across splits. README there
-  has the per-locale grammar caveats (si/tl/ar/pl deterministic rows need native review). Commands: `templates_llm` →
-  `generate --per-locale N` (free) → `llm_pairs` → `build --sft`, all via `python -m bench.multilingual_normalizer.<step>`
-  with `uv run --with num2words --with aiohttp`; every LLM stage is cached and incremental.
+  kept only if no digit survives, right script, ≥80% words preserved). Plus **6 Malaysian code-switched pairs**
+  (`codeswitch.py`: ms-en, en-ms, zh-en, zh-ms, ta-en, ta-ms, 1,500 rows each) — hand-written frames that tag the
+  read-language on every slot (`{money:ms}`, `{date:en}`) because in rojak the number is read in the language of the
+  fragment it sits in; the spoken side is `app.spoken_normalizer` with the language **forced per slot**, normalized
+  together with the carrier words next to it and stripped again (the cue is what decides: `704251` is a quantity,
+  `nombor rujukan anda 704251` is digit by digit). The LLM is **not** the teacher here — for `bil anda RM250` it said
+  "ringgit malaysia dua ratus lima puluh". Output in `bench/results/multilingual_normalizer/`
+  (`train/val/test.jsonl`, `*_sft.jsonl`, `stats.md`; build 2026-09-06: 52,698 rows, 49k template incl. 9k code-switch
+  + 3.7k LLM), published as **[Scicom-intl/Multilingual-Normalizer](https://huggingface.co/datasets/Scicom-intl/Multilingual-Normalizer)**;
+  split by template id so no frame leaks across splits. README there
+  has the per-locale grammar caveats (si/tl/ar/pl and the Tamil code-switch rows need native review). Commands:
+  `templates_llm` → `generate --per-locale N --cs-per-locale N` (free) → `llm_pairs` → `build --sft`, all via
+  `python -m bench.multilingual_normalizer.<step>` with `uv run --with num2words --with aiohttp`; every LLM stage is
+  cached and incremental. `synthetic-normalizer/` is a standalone copy of the same pipeline (own `data/`, `SN_*` env)
+  — **edit both or neither**.
+- `bench/interleave_ab/` — **interleave A/B harness**: the same 80 paragraphs (40 en + 40 ms) rendered
+  three ways — one-shot, interleaved chunks, cold chunks — through a *separately deployed* vLLM, decoded
+  one-shot so the stitcher cannot confound it, then scored for chunk-to-chunk pitch/level continuity,
+  declination, CER and UTMOSv2. Verdict (`bench/INTERLEAVE_AB.md`, on the private interleave-trained
+  checkpoint — the repo is public, so the model is named only in the untracked launcher and in
+  `bench/results/interleave_ab/`): **interleaving works** — the chunk N→N+1
+  register/level jump drops ~25% (−0.41 st, −0.45 dB, n=438 paired), cold chunking loses half the
+  paragraph declination, prefill is free (+399 tokens, no latency), CER unchanged, and `INTERLEAVE_FALLBACK`
+  never fired (0/518 vs 3/40 on the pre-interleave model). Costs ~30 ms extra silence per join.
+  **The interleave fine-tune only exists on our private checkpoints** (in-house `--interleave_style full`
+  packing; no open-source TTS LM has it), so this is a property of the *training*, not of the prompt shape:
+  `interleave_id` is a free win on an interleave-trained checkpoint and a regression risk on anything else
+  (`INTERLEAVE_STORE=off` there). Two traps:
+  the one-shot arm has no real boundaries so it is only usable for whole-chunk metrics, and |step| alone
+  flatters cold chunking (it is *blander* at its seams than natural speech) — the **sign** is what exposes
+  the register reset.
 - `bench/livekit/` — LiveKit agent stress rig (no-STT/no-LLM agent + load client): measures TTFB and
   per-utterance loudness through a real agent + WebRTC path. See its README for setup and results.
 
@@ -159,6 +205,7 @@ for ~4.6 s of audio (RTF ≈0.15).
 | `LLM_NORMALIZER_SKIP_PLAIN` (default `true`) | Skip the `mode=llm` normalizer call when the text has nothing to normalize (see `app/llm_normalizer.py` above). Saves ~0.55 s of TTFB on plain text; output identical. |
 | `LLM_NORMALIZER_RULE_FIRST` (default `false`) | `mode=llm`: run `app/spoken_normalizer` first, call the LLM only if a digit/symbol/dotted token survives. Removes the LLM round trip from practically every request; changes output on the ~14% of sentences where rules and LLM differ. `DEFAULT_NORMALIZER_MODE=spoken` skips the LLM outright. |
 | `DEFAULT_SPEAKING_RATE` (default `1.0`) | Default for the `speaking_rate` request field: WSOLA time stretch of the output audio (1.3 = 30% faster, pitch unchanged). Not a decode knob — the token count and every decode are the same; only the emitted PCM is shorter/longer. ~1–2 ms CPU per 2 s chunk on the event loop when ≠ 1.0. |
+| `MAX_RETAIN_INTERLEAVE` (default `5`) | Interleaved generation (`app/interleave.py`, `INTERLEAVE.md`): previous turns retained per `interleave_id` and put in the prompt, so LiveKit-style chunked replies keep one prosody. **Only works on an interleave-trained LM (private in-house checkpoints; no open-source TTS model has the packing) — `INTERLEAVE_STORE=off` on any other model.** Bounded also by `INTERLEAVE_MAX_S` (20 s) and the LM window; `INTERLEAVE_STORE_DIR` must be shared by every worker. Prefill-only, so decode cost is unchanged; TTFB grows by the prefill of ~750 extra tokens (tens of ms). |
 | `STREAM_NORMALIZE` (default `true`) | Per-utterance loudness normalization in the crossfade stitcher (running active-RMS → gain toward `TARGET_RMS_DB`, slew `GAIN_SLEW_DB`/chunk, clamp `MAX_GAIN_DB`); per-request override via `stream_normalize` on `/v1/audio/speech`. The LM's sampled tokens carry loudness — same text at temp 0.6–0.7 spreads 3–10 dB active-RMS (and different voices sit ~5 dB apart in natural level), and ~half of hot utterances clip at full scale; this collapses the spread to <2 dB (verified through a LiveKit agent at concurrency 8, see `bench/livekit/`). Boosts are capped by running-peak headroom and peaks are rounded by a tanh soft-knee limiter (knee 0.85, drive 1.4) — RMS-boosting a peaky voice (crest ~19 dB) through the old hard clip crackled audibly. The gain locks after the first ~1s of voiced audio (one static trim per utterance): a continuously-adapting causal AGC drifted ±0.75 dB mid-utterance, audible as "damping". Residual streaming loudness ripple (~0.7–1.5 dB envelope tilt vs a single big decode window) is the non-causal decoder's window effect — shrink it with larger `playback_speed`/`playback_overlap_speed` (e.g. `playback_speed=10` for non-realtime requests). |
 | uvicorn `--workers N` (deploy) | Run N app processes to beat the GIL ceiling. **Requires NVIDIA MPS** to share the GPU without context-thrash collapse at high concurrency. |
 | `TRACE_ASGI_MESSAGE_SPANS` (default `false`) / `DISCONNECT_POLL_S` (`0.25`) | Suppress OTel's per-ASGI-message `http receive`/`http send` spans, and throttle the disconnect poll that generates them. See the gotcha below — without these one streaming request emits ~500 empty spans. |
@@ -246,6 +293,7 @@ vLLM ≈60 GB on an 80 GB card.
 python -m pytest tests/ -v                        # 623 pass / 35 skip with a live API + OPENAI_* set
 python -m pytest tests/test_sanitize_markdown.py -v   # no GPU deps
 python -m pytest tests/test_timestretch.py -v         # no GPU deps (speaking_rate WSOLA)
+uv run --with pytest -- pytest tests/test_interleave.py -v   # no GPU deps (interleaved generation)
 uv run --with pytest --with opentelemetry-sdk -- pytest tests/test_tracing.py -v  # no GPU deps
 uv run --with aiohttp --with pytest -- pytest tests/test_llm_normalizer.py -v  # no GPU deps; `set -a; source .env; set +a` first to include the live LLM tests
 
@@ -303,6 +351,7 @@ python bench/cer_eval.py --wav-dir /tmp/eval --out /tmp/cer.json   # needs faste
   time each hop; `compute_queue` items are `(uuid, tokens, lens, futures, metas)`. Adding a field
   means touching all of `dynamic_batching` / `_batch_one` / `_compute_one` (and the `vc_*` twins)
   — an arity mismatch there wedges every decode with the error only visible in the worker log.
+- **Interleaved generation is per-host state.** The turn store is a directory (`/dev/shm` by default), so it is shared by the uvicorn workers on one box and by nothing else: behind a multi-host load balancer chunk N+1 lands on a box that never saw chunk N and silently generates cold — `X-Interleave-Turns: 0` on the response is the tell. Pin one call's requests to a host (or add a redis `InterleaveStore`). In docker, `/dev/shm` defaults to 64 MB (~10k ids); `INTERLEAVE_STORE_DIR` must point at the same directory for every worker.
 - NeuCodec downloads `facebook/w2v-bert-2.0` + `neuphonic/neucodec` from HF on first start — cache them.
 - **`MODEL_NAME` ≠ `OPENAI_MODEL_NAME`.** `MODEL_NAME` is the TTS model vLLM serves (`TTS-model`);
   the LLM normalizer's model goes in `OPENAI_MODEL_NAME`. Setting `MODEL_NAME=google/gemma-...` in

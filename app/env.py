@@ -103,6 +103,39 @@ LLM_NORMALIZER_RULE_FIRST = os.environ.get('LLM_NORMALIZER_RULE_FIRST', 'false')
 DEBUG_AUDIO = os.environ.get('DEBUG_AUDIO', 'false').lower() == 'true'
 SENTRY_DSN = os.environ.get('SENTRY_DSN', '')
 
+# Interleaved generation, keyed by the `interleave_id` field (aliases `request_id` /
+# `context_id`, or the X-Interleave-Id / X-Context-Id header) on /v1/audio/speech -- see
+# app/interleave.py. Requests sharing an id are prompted with the previous turns' text +
+# speech tokens, in the interleaved document format the LM was trained on, so an agent
+# that cuts its reply into sentence-sized TTS calls (LiveKit) gets one continuous prosody
+# instead of a cold start at every chunk. Requests without an id are untouched.
+#   INTERLEAVE_STORE: 'file' (default) = one small JSON per id in INTERLEAVE_STORE_DIR,
+#     shared by every uvicorn worker on the host; 'memory' = this process only;
+#     'off' = ignore ids entirely.
+#   INTERLEAVE_STORE_DIR: '' = /dev/shm/tts-interleave (RAM) when /dev/shm exists, else
+#     $TMPDIR/tts-interleave. Must be the same directory for all workers.
+#   MAX_RETAIN_INTERLEAVE: how many previous turns are retained per id and put in the
+#     prompt (the request field `max_retain_interleave` may ask for fewer; more than this
+#     has no effect, the store keeps no more). 0 = no turn limit, seconds only.
+#   INTERLEAVE_MAX_S: second cap, in seconds of previous speech tokens (x50). Bounds a
+#     long previous utterance that would otherwise eat the LM window on its own.
+#   INTERLEAVE_TTL_S: idle seconds after which an id's history is dropped.
+#   INTERLEAVE_MIN_GEN_TOKENS: generation room the history may never squeeze below; past
+#     that the request's max_tokens is clamped instead (vLLM rejects prompt+max_tokens >
+#     LM_MAX_MODEL_LEN with a 400 rather than truncating).
+#   LM_MAX_MODEL_LEN: the LM server's --max-model-len (vllm.yaml: 4096).
+INTERLEAVE_STORE = os.environ.get('INTERLEAVE_STORE', 'file')
+INTERLEAVE_STORE_DIR = os.environ.get('INTERLEAVE_STORE_DIR', '')
+MAX_RETAIN_INTERLEAVE = int(os.environ.get('MAX_RETAIN_INTERLEAVE', '5'))
+INTERLEAVE_MAX_S = float(os.environ.get('INTERLEAVE_MAX_S', '20'))
+INTERLEAVE_TTL_S = float(os.environ.get('INTERLEAVE_TTL_S', '600'))
+INTERLEAVE_MIN_GEN_TOKENS = int(os.environ.get('INTERLEAVE_MIN_GEN_TOKENS', '1000'))
+LM_MAX_MODEL_LEN = int(os.environ.get('LM_MAX_MODEL_LEN', '4096'))
+# If the LM, prompted with history, stops before a text-proportional minimum of speech
+# tokens (it "decided the utterance was over"), regenerate that chunk without history
+# instead of returning near-silence. Costs one extra LM call on those chunks only.
+INTERLEAVE_FALLBACK = os.environ.get('INTERLEAVE_FALLBACK', 'true').lower() == 'true'
+
 # Hot-path OpenTelemetry spans: how long a request spent queued in dynamic batching,
 # waiting on vLLM, and inside the codec decode. On by default (~19 spans per request), but
 # only when something will actually collect them -- both this AND an exporter are needed.
