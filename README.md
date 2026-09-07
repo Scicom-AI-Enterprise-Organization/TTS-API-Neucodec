@@ -288,6 +288,8 @@ Accepts JSON body.
 | `mode` | `rule` \| `llm` \| `spoken` | `DEFAULT_NORMALIZER_MODE` (`rule`) | Normalization engine (see `/v1/audio/normalize`); `llm` falls back to `spoken` if the LLM call fails or is not configured, so speech is still produced |
 | `stream_normalize` | bool | `STREAM_NORMALIZE` (`true`) | Per-utterance loudness normalization toward `TARGET_RMS_DB` |
 | `speaking_rate` | float | `DEFAULT_SPEAKING_RATE` (`1.0`) | Speaking rate, `0.5`–`2.0`: `1.3` speaks 30% faster, `0.8` slower, **pitch unchanged**. Also accepted as `speed` (OpenAI-compatible clients). See [Speaking rate](#speaking-rate) |
+| `interleave_id` | string | none | Interleaved generation: requests sharing this id continue each other's prosody. **Needs an interleave-trained LM — no open-source TTS model supports this.** Aliases `request_id` / `context_id`; header `X-Interleave-Id` / `X-Context-Id`. See [Interleaved generation](#interleaved-generation) |
+| `max_retain_interleave` | int | `MAX_RETAIN_INTERLEAVE` (`5`) | How many previous turns of that id go into the prompt (`0` = no turn limit, seconds cap only). Same model requirement as `interleave_id` |
 
 **Example:**
 
@@ -330,6 +332,68 @@ curl -X POST 'http://localhost:9091/v1/audio/speech' -H 'Content-Type: applicati
   -d '{"input": "Hello there, how can I help you?", "voice": "husein", "speaking_rate": 1.3,
        "response_format": "wav", "stream": false}' --output fast.wav
 ```
+
+#### Interleaved generation
+
+An agent that streams (LiveKit's `StreamAdapter`, for one) does not send a reply as one
+request: it cuts the text into sentence-sized chunks and synthesizes each with its own
+`/v1/audio/speech` call. The request at T+1 knows nothing about T, so the LM starts cold —
+pitch register, pace and energy reset at every join and the reply sounds stitched.
+
+Pass the same `interleave_id` on the chunks of one reply and each request is prompted with
+the previous turns' text **and the speech tokens the LM generated for them**, in the
+interleaved document format the model was trained on:
+
+```
+<|im_start|>husein: hello my name is husein,<|speech_start|><|s_1834|>…<|s_77|><|im_end|>
+<|im_start|>husein: i like to eat chicken rice.<|speech_start|>      ← the LM continues here
+```
+
+The history is prefill only — nothing extra is decoded or streamed, and the codec path (the
+bottleneck) is untouched. The last **5** turns are retained per id (`MAX_RETAIN_INTERLEAVE`,
+per-request `max_retain_interleave`), also bounded by `INTERLEAVE_MAX_S` seconds of speech
+and by the LM window. Turns live in `/dev/shm`, shared by every uvicorn worker on the host,
+and expire after `INTERLEAVE_TTL_S` idle seconds. A voice switch on the same id starts cold.
+Design and configuration: [INTERLEAVE.md](INTERLEAVE.md).
+
+> **This requires an LM trained on interleaved documents, and no open-source TTS model is.**
+> The packing (`pack_stage1.py --interleave_style full`) is an in-house recipe and the
+> checkpoints that have it are private model repos — so the benefit comes from the
+> *model*, not from the prompt shape. Measured on a private interleave-trained checkpoint, it cuts
+> the jump in pitch register and loudness between consecutive chunks by ~25% at no latency cost
+> ([bench/INTERLEAVE_AB.md](bench/INTERLEAVE_AB.md)); on a model packed *without* it the same
+> prompt bought nothing and made the LM cut 7.5% of chunks short. **Serving any other model —
+> an open-source TTS LM, or an older in-house one — set `INTERLEAVE_STORE=off`**, and check
+> what your vLLM actually loads before relying on the feature.
+
+```bash
+curl -s -D - -X POST localhost:9091/v1/audio/speech -H 'Content-Type: application/json' \
+  -d '{"input":"hello my name is husein,","voice":"husein","interleave_id":"room-42",
+       "response_format":"wav","stream":false}' -o c1.wav
+curl -s -D - -X POST localhost:9091/v1/audio/speech -H 'Content-Type: application/json' \
+  -d '{"input":"i like to eat chicken rice.","voice":"husein","interleave_id":"room-42",
+       "response_format":"wav","stream":false}' -o c2.wav
+#   X-Interleave-Turns: 1        ← chunk 1 was in the prompt
+#   X-Interleave-Tokens: 137     ← its speech tokens (2.7 s)
+
+curl -s localhost:9091/v1/audio/interleave/room-42            # retained turns
+curl -s -X DELETE localhost:9091/v1/audio/interleave/room-42  # forget now (else TTL)
+```
+
+For LiveKit, the `openai.TTS` plugin cannot add body fields but accepts a pre-built client,
+so pass the id as a default header — one id per room:
+
+```python
+tts_client = openai_sdk.AsyncClient(api_key="unused", base_url=TTS_BASE_URL,
+                                    default_headers={"X-Interleave-Id": ctx.room.name})
+session = AgentSession(tts=openai.TTS(model=..., voice=..., client=tts_client,
+                                      response_format="pcm"))
+```
+
+### `GET` / `DELETE /v1/audio/interleave/{id}`
+
+Inspect (`GET`: retained turns, their text and token counts, the caps and TTL) or forget
+(`DELETE`) one interleave id. Both return `400` when `INTERLEAVE_STORE=off`.
 
 ### `POST /v1/audio/vc` — Voice Conversion
 

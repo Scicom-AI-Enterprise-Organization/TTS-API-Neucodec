@@ -35,6 +35,13 @@ _UNSAFE = {
 }
 SAFE_SLOTS = {loc: [s for s in ALL_SLOTS if s not in _UNSAFE.get(loc, set())] for loc in LOCALES}
 
+# Code-switched pairs (codeswitch.py): hand-written frames, one language per slot. They are not
+# in LOCALES because nothing here verbalizes a *pair* -- every slot is filled and read as one of
+# the two real languages, all of which are app.spoken_normalizer languages.
+from .codeswitch import CS_LOCALES, CS_PAIRS, CS_LANGUAGE_NAME  # noqa: E402
+LANGUAGE_NAME.update(CS_LANGUAGE_NAME)
+ALL_LOCALES = LOCALES + CS_LOCALES
+
 DIGIT_WORDS = {
     'fr': 'zéro un deux trois quatre cinq six sept huit neuf'.split(),
     'de': 'null eins zwei drei vier fünf sechs sieben acht neun'.split(),

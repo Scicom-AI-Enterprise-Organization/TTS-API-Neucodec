@@ -41,6 +41,9 @@ class LiveClient:
         return requests.post(f'{BASE_URL}{path}', json=json, data=data,
                              files=files, timeout=120, **kwargs)
 
+    def delete(self, path, **kwargs):
+        return requests.delete(f'{BASE_URL}{path}', timeout=120, **kwargs)
+
 
 client = LiveClient()
 
@@ -397,6 +400,119 @@ class TestTTSTextVariations:
         })
         assert r.status_code == 200
         assert is_valid_wav(r.content)
+
+
+@skipif_no_app
+class TestTTSInterleave:
+    """Interleaved generation (app/interleave.py): consecutive requests on one
+    interleave_id are prompted with the previous turns' text + speech tokens. Skipped
+    when the server runs with INTERLEAVE_STORE=off (the endpoints return 400)."""
+
+    @pytest.fixture
+    def il_id(self):
+        import uuid
+        iid = f'pytest-{uuid.uuid4().hex[:12]}'
+        r = client.get(f'/v1/audio/interleave/{iid}')
+        if r.status_code == 400:
+            pytest.skip('interleaved generation disabled on the server (INTERLEAVE_STORE=off)')
+        yield iid
+        client.delete(f'/v1/audio/interleave/{iid}')
+
+    def _speak(self, text, iid=None, headers=None, **fields):
+        body = {'input': text, 'voice': 'husein', 'response_format': 'wav', 'stream': False}
+        if iid is not None:
+            body['interleave_id'] = iid
+        body.update(fields)
+        r = client.post('/v1/audio/speech', json=body, headers=headers)
+        assert r.status_code == 200, r.text[:300]
+        assert is_valid_wav(r.content)
+        return r
+
+    def test_no_id_no_interleave_headers(self):
+        r = self._speak('Hello there.')
+        assert 'X-Interleave-Id' not in r.headers
+
+    def test_second_chunk_gets_first_as_history(self, il_id):
+        r1 = self._speak('hello my name is husein,', iid=il_id)
+        assert r1.headers['X-Interleave-Id'] == il_id
+        assert r1.headers['X-Interleave-Turns'] == '0'          # nothing retained yet
+        assert r1.headers['X-Interleave-Tokens'] == '0'
+        r2 = self._speak('i like to eat chicken rice.', iid=il_id)
+        assert r2.headers['X-Interleave-Turns'] == '1'
+        tokens = int(r2.headers['X-Interleave-Tokens'])
+        # the first chunk's speech tokens: 50/s, so roughly its duration
+        assert tokens == pytest.approx(wav_duration_s(r1.content) * 50, abs=10)
+        assert wav_duration_s(r2.content) > 0.5
+
+    def test_interleave_endpoint_reflects_retained_turns(self, il_id):
+        self._speak('hello my name is husein,', iid=il_id)
+        self._speak('i like to eat chicken rice.', iid=il_id)
+        r = client.get(f'/v1/audio/interleave/{il_id}')
+        assert r.status_code == 200
+        doc = r.json()
+        assert doc['interleave_id'] == il_id
+        assert [t['voice'] for t in doc['turns']] == ['husein', 'husein']
+        assert 'husein' in doc['turns'][0]['text'].lower()
+        assert 'chicken rice' in doc['turns'][1]['text'].lower()
+        assert doc['tokens'] == sum(t['tokens'] for t in doc['turns']) > 0
+        assert doc['tokens'] <= doc['max_tokens']
+
+    def test_retains_at_most_max_retain_turns(self, il_id):
+        """Default MAX_RETAIN_INTERLEAVE=5: a 7-chunk reply keeps the last 5."""
+        doc = client.get(f'/v1/audio/interleave/{il_id}').json()
+        cap = doc['max_retain']
+        if not cap:
+            pytest.skip('server runs with MAX_RETAIN_INTERLEAVE=0 (no turn cap)')
+        for i in range(cap + 2):
+            r = self._speak(f'this is chunk number {i + 1},', iid=il_id)
+            assert int(r.headers['X-Interleave-Turns']) == min(i, cap)
+        turns = client.get(f'/v1/audio/interleave/{il_id}').json()['turns']
+        assert len(turns) == cap
+
+    def test_max_retain_interleave_field_limits_the_prompt(self, il_id):
+        for i in range(3):
+            self._speak(f'this is chunk number {i + 1},', iid=il_id)
+        r = self._speak('and this is the last one.', iid=il_id, max_retain_interleave=1)
+        assert r.headers['X-Interleave-Turns'] == '1'
+        assert r.headers['X-Interleave-Max-Retain'] == '1'
+
+    def test_delete_forgets_history(self, il_id):
+        self._speak('hello my name is husein,', iid=il_id)
+        r = client.delete(f'/v1/audio/interleave/{il_id}')
+        assert r.status_code == 200 and r.json()['deleted'] is True
+        assert client.delete(f'/v1/audio/interleave/{il_id}').json()['deleted'] is False
+        assert client.get(f'/v1/audio/interleave/{il_id}').json()['turns'] == []
+        r = self._speak('i like to eat chicken rice.', iid=il_id)
+        assert r.headers['X-Interleave-Turns'] == '0'
+
+    def test_header_and_alias_forms(self, il_id):
+        self._speak('hello my name is husein,', headers={'X-Interleave-Id': il_id})
+        r = self._speak('i like to eat chicken rice.', headers={'X-Context-Id': il_id})
+        assert r.headers['X-Interleave-Id'] == il_id and r.headers['X-Interleave-Turns'] == '1'
+        r = self._speak('and also nasi lemak.', request_id=il_id)
+        assert r.headers['X-Interleave-Turns'] == '2'
+
+    def test_voice_switch_starts_cold(self, il_id):
+        self._speak('hello my name is husein,', iid=il_id)
+        r = self._speak('i like to eat chicken rice.', iid=il_id, voice='idayu')
+        assert r.headers['X-Interleave-Turns'] == '0'
+        r = self._speak('and also nasi lemak.', iid=il_id, voice='idayu')
+        assert r.headers['X-Interleave-Turns'] == '1'
+
+    def test_streaming_pcm_and_sse_carry_headers(self, il_id):
+        self._speak('hello my name is husein,', iid=il_id)
+        r = client.post('/v1/audio/speech', json={
+            'input': 'i like to eat chicken rice.', 'voice': 'husein', 'interleave_id': il_id,
+            'response_format': 'pcm', 'stream': True,
+        })
+        assert r.status_code == 200 and r.headers['X-Interleave-Turns'] == '1'
+        assert is_valid_pcm(r.content)
+        r = client.post('/v1/audio/speech', json={
+            'input': 'and also nasi lemak.', 'voice': 'husein', 'interleave_id': il_id,
+            'stream': True, 'stream_format': 'sse',
+        })
+        assert r.status_code == 200 and r.headers['X-Interleave-Turns'] == '2'
+        assert b'speech.audio.done' in r.content
 
 
 # ===========================================================================

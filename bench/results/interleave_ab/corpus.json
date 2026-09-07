@@ -1,0 +1,1083 @@
+{
+ "model": "google/gemma-4-31b-it",
+ "texts": [
+  {
+   "id": "en000",
+   "lang": "en",
+   "text": "To fix that leaking tap, you should start by turning off the water. Then, carefully remove the handle with a wrench. Check if the washer is worn out, as that is usually the problem. Replace the rubber seal, put it all back together, and your sink will be quiet again.",
+   "chunks": [
+    "To fix that leaking tap,",
+    "you should start by turning off the water.",
+    "Then, carefully remove the handle with a wrench.",
+    "Check if the washer is worn out,",
+    "as that is usually the problem.",
+    "Replace the rubber seal,",
+    "put it all back together,",
+    "and your sink will be quiet again."
+   ]
+  },
+  {
+   "id": "en001",
+   "lang": "en",
+   "text": "The weather is finally turning, and the crisp air feels wonderful. You might want to grab a warm coat, because a chill is moving in. The leaves are starting to change colors, which makes the park look lovely. It is a perfect time for a long walk outdoors.",
+   "chunks": [
+    "The weather is finally turning,",
+    "and the crisp air feels wonderful.",
+    "You might want to grab a warm coat,",
+    "because a chill is moving in.",
+    "The leaves are starting to change colors,",
+    "which makes the park look lovely.",
+    "It is a perfect time for a long walk outdoors."
+   ]
+  },
+  {
+   "id": "en002",
+   "lang": "en",
+   "text": "Planning a weekend trip is always exciting, especially when you go somewhere new. You could look for a cozy cabin in the woods, or maybe a quiet beach house. Just remember to pack some snacks, and do not forget your camera. It will be a great break.",
+   "chunks": [
+    "Planning a weekend trip is always exciting,",
+    "especially when you go somewhere new.",
+    "You could look for a cozy cabin in the woods,",
+    "or maybe a quiet beach house.",
+    "Just remember to pack some snacks,",
+    "and do not forget your camera.",
+    "It will be a great break."
+   ]
+  },
+  {
+   "id": "en003",
+   "lang": "en",
+   "text": "I can certainly help you with your bill, so let us take a look together. There seems to be a small error in the total, but I can fix that now. I will apply a credit to your account, and you will see the change soon. Does that sound good.",
+   "chunks": [
+    "I can certainly help you with your bill,",
+    "so let us take a look together.",
+    "There seems to be a small error in the total,",
+    "but I can fix that now.",
+    "I will apply a credit to your account,",
+    "and you will see the change soon.",
+    "Does that sound good."
+   ]
+  },
+  {
+   "id": "en004",
+   "lang": "en",
+   "text": "It is such a slow morning at home, and the house feels so peaceful. The sunlight is streaming through the windows, while the coffee is brewing in the kitchen. There is no rush to start the day, so you can just relax. It is a lovely way to begin.",
+   "chunks": [
+    "It is such a slow morning at home,",
+    "and the house feels so peaceful.",
+    "The sunlight is streaming through the windows,",
+    "while the coffee is brewing in the kitchen.",
+    "There is no rush to start the day,",
+    "so you can just relax.",
+    "It is a lovely way to begin."
+   ]
+  },
+  {
+   "id": "en005",
+   "lang": "en",
+   "text": "Choosing a new phone plan can be tricky, but I can guide you. Think about how much data you actually use, and if you make many long calls. Some plans offer unlimited streaming, while others are much cheaper. Let us find the one that fits your life.",
+   "chunks": [
+    "Choosing a new phone plan can be tricky,",
+    "but I can guide you.",
+    "Think about how much data you actually use,",
+    "and if you make many long calls.",
+    "Some plans offer unlimited streaming,",
+    "while others are much cheaper.",
+    "Let us find the one that fits your life."
+   ]
+  },
+  {
+   "id": "en006",
+   "lang": "en",
+   "text": "Your first day at a new job is always a bit nerve racking, but you will do great. Just remember to smile, and be ready to ask plenty of questions. Your new coworkers will be friendly, and you will find your rhythm soon. Good luck with everything today.",
+   "chunks": [
+    "Your first day at a new job is always a bit nerve racking,",
+    "but you will do great.",
+    "Just remember to smile,",
+    "and be ready to ask plenty of questions.",
+    "Your new coworkers will be friendly,",
+    "and you will find your rhythm soon.",
+    "Good luck with everything today."
+   ]
+  },
+  {
+   "id": "en007",
+   "lang": "en",
+   "text": "Waiting at a clinic can feel like it takes forever, so try to stay patient. You might want to read a book, or listen to some calming music. The staff is working hard to see everyone, and you will be called in shortly. Just take a deep breath.",
+   "chunks": [
+    "Waiting at a clinic can feel like it takes forever,",
+    "so try to stay patient.",
+    "You might want to read a book,",
+    "or listen to some calming music.",
+    "The staff is working hard to see everyone,",
+    "and you will be called in shortly.",
+    "Just take a deep breath."
+   ]
+  },
+  {
+   "id": "en008",
+   "lang": "en",
+   "text": "Your flight has been delayed for a few hours. I know this is frustrating, and I am sorry for the wait. You might want to grab a coffee, and stretch your legs. I will keep you updated.",
+   "chunks": [
+    "Your flight has been delayed for a few hours.",
+    "I know this is frustrating,",
+    "and I am sorry for the wait.",
+    "You might want to grab a coffee,",
+    "and stretch your legs.",
+    "I will keep you updated."
+   ]
+  },
+  {
+   "id": "en009",
+   "lang": "en",
+   "text": "Getting ready for the big wedding day is so exciting. You should start by laying out your clothes, and then remember to pack your bag. Make sure the rings are safe. It will be a beautiful celebration, and everyone is looking forward to it.",
+   "chunks": [
+    "Getting ready for the big wedding day is so exciting.",
+    "You should start by laying out your clothes,",
+    "and then remember to pack your bag.",
+    "Make sure the rings are safe.",
+    "It will be a beautiful celebration,",
+    "and everyone is looking forward to it."
+   ]
+  },
+  {
+   "id": "en010",
+   "lang": "en",
+   "text": "Waiting at the clinic can feel a bit tedious. You might want to read a magazine, or perhaps listen to a podcast. Just relax and breathe deeply. The doctor will be with you shortly, so please take a seat.",
+   "chunks": [
+    "Waiting at the clinic can feel a bit tedious.",
+    "You might want to read a magazine,",
+    "or perhaps listen to a podcast.",
+    "Just relax and breathe deeply.",
+    "The doctor will be with you shortly,",
+    "so please take a seat."
+   ]
+  },
+  {
+   "id": "en011",
+   "lang": "en",
+   "text": "Fixing that leaking tap is easier than it looks. First, turn off the water supply, and then unscrew the handle. You may need a new washer. Once that is in place, tighten everything back up. Your sink will be dry again.",
+   "chunks": [
+    "Fixing that leaking tap is easier than it looks.",
+    "First, turn off the water supply,",
+    "and then unscrew the handle.",
+    "You may need a new washer.",
+    "Once that is in place,",
+    "tighten everything back up.",
+    "Your sink will be dry again."
+   ]
+  },
+  {
+   "id": "en012",
+   "lang": "en",
+   "text": "Learning your grandmother's secret recipe is a wonderful way to bond. Start by chopping the fresh herbs, and then simmer the sauce slowly. Do not rush the process. It takes a little patience, but the flavor is worth it.",
+   "chunks": [
+    "Learning your grandmother's secret recipe is a wonderful way to bond.",
+    "Start by chopping the fresh herbs,",
+    "and then simmer the sauce slowly.",
+    "Do not rush the process.",
+    "It takes a little patience,",
+    "but the flavor is worth it."
+   ]
+  },
+  {
+   "id": "en013",
+   "lang": "en",
+   "text": "I can certainly help you understand your monthly bill. Let us look at the recent charges, and then we can find a better plan. I want to make sure this is clear. We will get this sorted out together.",
+   "chunks": [
+    "I can certainly help you understand your monthly bill.",
+    "Let us look at the recent charges,",
+    "and then we can find a better plan.",
+    "I want to make sure this is clear.",
+    "We will get this sorted out together."
+   ]
+  },
+  {
+   "id": "en014",
+   "lang": "en",
+   "text": "The long drive up north is quite a journey. You will see beautiful forests, and the air becomes much cooler. Remember to stop for a stretch. It is a scenic route, so keep your eyes open for wildlife.",
+   "chunks": [
+    "The long drive up north is quite a journey.",
+    "You will see beautiful forests,",
+    "and the air becomes much cooler.",
+    "Remember to stop for a stretch.",
+    "It is a scenic route,",
+    "so keep your eyes open for wildlife."
+   ]
+  },
+  {
+   "id": "en015",
+   "lang": "en",
+   "text": "Starting your first day at a new job is always a bit nerve wracking. Just be yourself, and remember to ask plenty of questions. Your new colleagues are very friendly. You will settle into the routine quickly enough.",
+   "chunks": [
+    "Starting your first day at a new job is always a bit nerve wracking.",
+    "Just be yourself, and remember to ask plenty of questions.",
+    "Your new colleagues are very friendly.",
+    "You will settle into the routine quickly enough."
+   ]
+  },
+  {
+   "id": "en016",
+   "lang": "en",
+   "text": "A slow morning at home is exactly what you need. Brew a pot of coffee, and then listen to the birds outside. There is no need to rush. Just enjoy the quiet peace before the busy day begins.",
+   "chunks": [
+    "A slow morning at home is exactly what you need.",
+    "Brew a pot of coffee,",
+    "and then listen to the birds outside.",
+    "There is no need to rush.",
+    "Just enjoy the quiet peace before the busy day begins."
+   ]
+  },
+  {
+   "id": "en017",
+   "lang": "en",
+   "text": "Let us get your weekend getaway sorted. I can find some cozy cabins in the mountains, or maybe a beach house by the coast. Once you pick a spot, I will handle the bookings. It should be a relaxing break.",
+   "chunks": [
+    "Let us get your weekend getaway sorted.",
+    "I can find some cozy cabins in the mountains,",
+    "or maybe a beach house by the coast.",
+    "Once you pick a spot,",
+    "I will handle the bookings.",
+    "It should be a relaxing break."
+   ]
+  },
+  {
+   "id": "en018",
+   "lang": "en",
+   "text": "The neighborhood football match is starting soon. Everyone is gathering at the local park, and the energy is high. You should grab your gear and head over there. It looks like it will be a great game.",
+   "chunks": [
+    "The neighborhood football match is starting soon.",
+    "Everyone is gathering at the local park,",
+    "and the energy is high.",
+    "You should grab your gear and head over there.",
+    "It looks like it will be a great game."
+   ]
+  },
+  {
+   "id": "en019",
+   "lang": "en",
+   "text": "I know waiting at the clinic can be quite boring. While you sit in the lobby, maybe you could read a book or listen to a podcast. The doctor should be ready for you shortly. Just hang in there.",
+   "chunks": [
+    "I know waiting at the clinic can be quite boring.",
+    "While you sit in the lobby,",
+    "The doctor should be ready for you shortly. Just hang in there.",
+    "The doctor should be ready for you shortly."
+   ]
+  },
+  {
+   "id": "en020",
+   "lang": "en",
+   "text": "It has been far too long since you last spoke. You should call your old friend today, and perhaps suggest meeting for a coffee. It would be wonderful to catch up on everything. They would love to hear from you.",
+   "chunks": [
+    "It has been far too long since you last spoke.",
+    "You should call your old friend today,",
+    "and perhaps suggest meeting for a coffee.",
+    "It would be wonderful to catch up on everything.",
+    "They would love to hear from you."
+   ]
+  },
+  {
+   "id": "en021",
+   "lang": "en",
+   "text": "I can certainly help you with your bill today. Let us look at the charges together, and I will explain every detail. If something looks wrong, we can fix it right now. I am here to help.",
+   "chunks": [
+    "I can certainly help you with your bill today.",
+    "Let us look at the charges together,",
+    "and I will explain every detail.",
+    "we can fix it right now. I am here to help.",
+    "we can fix it right now."
+   ]
+  },
+  {
+   "id": "en022",
+   "lang": "en",
+   "text": "Choosing a new phone plan can feel a bit overwhelming. We can look for one with plenty of data, or maybe a simple budget option. I will compare the best deals for you. We will find the perfect fit.",
+   "chunks": [
+    "Choosing a new phone plan can feel a bit overwhelming.",
+    "We can look for one with plenty of data,",
+    "or maybe a simple budget option.",
+    "I will compare the best deals for you.",
+    "We will find the perfect fit."
+   ]
+  },
+  {
+   "id": "en023",
+   "lang": "en",
+   "text": "Moving to a new house is always a huge adventure. You will need to pack your boxes carefully, and then arrange for a moving truck. It is hard work, but it will be worth it. Your new home awaits.",
+   "chunks": [
+    "Moving to a new house is always a huge adventure.",
+    "You will need to pack your boxes carefully,",
+    "and then arrange for a moving truck.",
+    "It is hard work, but it will be worth it.",
+    "Your new home awaits."
+   ]
+  },
+  {
+   "id": "en024",
+   "lang": "en",
+   "text": "A long drive up north is a wonderful way to see the scenery. You will pass through beautiful forests, and you might see some wildlife along the way. Just remember to take a few breaks. Enjoy the open road.",
+   "chunks": [
+    "A long drive up north is a wonderful way to see the scenery.",
+    "You will pass through beautiful forests,",
+    "and you might see some wildlife along the way.",
+    "Just remember to take a few breaks.",
+    "Enjoy the open road."
+   ]
+  },
+  {
+   "id": "en025",
+   "lang": "en",
+   "text": "I can certainly help you with your recent bill. First, let us look at the charges together. We can find any mistakes, and then I will apply a discount. It should only take a moment. Please stay on the line.",
+   "chunks": [
+    "I can certainly help you with your recent bill.",
+    "First, let us look at the charges together.",
+    "We can find any mistakes,",
+    "and then I will apply a discount.",
+    "It should only take a moment.",
+    "Please stay on the line."
+   ]
+  },
+  {
+   "id": "en026",
+   "lang": "en",
+   "text": "Planning a wedding is such a special time. You should start with the guest list, and then pick a lovely venue. Once those are done, you can choose the flowers. It will be a magical day for everyone involved.",
+   "chunks": [
+    "Planning a wedding is such a special time.",
+    "You should start with the guest list,",
+    "and then pick a lovely venue.",
+    "Once those are done,",
+    "you can choose the flowers.",
+    "It will be a magical day for everyone involved."
+   ]
+  },
+  {
+   "id": "en027",
+   "lang": "en",
+   "text": "The neighbourhood football match starts very soon. Everyone is gathering on the green, and the kids are cheering loudly. It is a wonderful way to meet the neighbours. I hope your favourite team wins the game today.",
+   "chunks": [
+    "The neighbourhood football match starts very soon.",
+    "Everyone is gathering on the green,",
+    "and the kids are cheering loudly.",
+    "It is a wonderful way to meet the neighbours.",
+    "I hope your favourite team wins the game today."
+   ]
+  },
+  {
+   "id": "en028",
+   "lang": "en",
+   "text": "It is a lovely slow morning at home. You can sip your warm tea, and listen to the birds outside. There is no need to rush today. Just relax, breathe deeply, and enjoy the quiet peace of the house.",
+   "chunks": [
+    "It is a lovely slow morning at home.",
+    "You can sip your warm tea,",
+    "and listen to the birds outside.",
+    "There is no need to rush today.",
+    "Just relax, breathe deeply,",
+    "and enjoy the quiet peace of the house."
+   ]
+  },
+  {
+   "id": "en029",
+   "lang": "en",
+   "text": "Moving to a new house is a big adventure. You should pack your fragile items first, and label every single box. It helps to stay organised during the chaos. Soon, you will be settled in your beautiful new space.",
+   "chunks": [
+    "Moving to a new house is a big adventure.",
+    "You should pack your fragile items first,",
+    "and label every single box.",
+    "It helps to stay organised during the chaos.",
+    "Soon, you will be settled in your beautiful new space."
+   ]
+  },
+  {
+   "id": "en030",
+   "lang": "en",
+   "text": "Teaching a child to swim requires a lot of patience. Start with small splashes, and encourage them to blow bubbles. It is important to keep it fun. They will feel so proud when they finally float alone.",
+   "chunks": [
+    "Teaching a child to swim requires a lot of patience.",
+    "Start with small splashes,",
+    "and encourage them to blow bubbles.",
+    "It is important to keep it fun.",
+    "They will feel so proud when they finally float alone."
+   ]
+  },
+  {
+   "id": "en031",
+   "lang": "en",
+   "text": "Waiting at a clinic can feel quite tedious. You might want to read a book, or listen to some calming music. The doctor will be with you shortly. Thank you for being so patient during the wait.",
+   "chunks": [
+    "Waiting at a clinic can feel quite tedious.",
+    "You might want to read a book,",
+    "or listen to some calming music.",
+    "The doctor will be with you shortly.",
+    "Thank you for being so patient during the wait."
+   ]
+  },
+  {
+   "id": "en032",
+   "lang": "en",
+   "text": "I can help you sort out that online order. Let us check the tracking status, and see where the package is now. If it is lost, I will request a refund. We will get this fixed quickly.",
+   "chunks": [
+    "I can help you sort out that online order.",
+    "Let us check the tracking status,",
+    "and see where the package is now.",
+    "If it is lost, I will request a refund.",
+    "We will get this fixed quickly."
+   ]
+  },
+  {
+   "id": "en033",
+   "lang": "en",
+   "text": "Imagine a quiet evening walk through the park. The air feels cool, and the stars are starting to peek out. You can hear the soft rustle of leaves, and everything feels peaceful. It is the perfect way to end your day.",
+   "chunks": [
+    "Imagine a quiet evening walk through the park.",
+    "The air feels cool, and the stars are starting to peek out.",
+    "You can hear the soft rustle of leaves,",
+    "and everything feels peaceful.",
+    "It is the perfect way to end your day."
+   ]
+  },
+  {
+   "id": "en034",
+   "lang": "en",
+   "text": "Waiting at a clinic can feel a bit tedious. You might watch the clock, or flip through an old magazine. Try to take a deep breath, and just relax for a moment. Your turn will come soon enough.",
+   "chunks": [
+    "Waiting at a clinic can feel a bit tedious.",
+    "You might watch the clock,",
+    "or flip through an old magazine.",
+    "Try to take a deep breath,",
+    "and just relax for a moment.",
+    "Your turn will come soon enough."
+   ]
+  },
+  {
+   "id": "en035",
+   "lang": "en",
+   "text": "Your first day at a new job is always a whirlwind. There are so many names to learn, and a lot of new faces. Just take it slow, and ask plenty of questions. You will settle in quickly.",
+   "chunks": [
+    "Your first day at a new job is always a whirlwind.",
+    "There are so many names to learn,",
+    "and a lot of new faces.",
+    "Just take it slow, and ask plenty of questions.",
+    "You will settle in quickly."
+   ]
+  },
+  {
+   "id": "en036",
+   "lang": "en",
+   "text": "Catching up with an old friend is a wonderful feeling. You talk for hours, and the time just flies by. It is amazing how you can pick up right where you left off. Some bonds never fade.",
+   "chunks": [
+    "Catching up with an old friend is a wonderful feeling.",
+    "You talk for hours, and the time just flies by.",
+    "It is amazing how you can pick up right where you left off.",
+    "Some bonds never fade."
+   ]
+  },
+  {
+   "id": "en037",
+   "lang": "en",
+   "text": "Choosing a phone plan can be quite confusing. You have to look at the data, and check the monthly cost. It helps to compare a few options, and then pick the best one. Just take your time.",
+   "chunks": [
+    "Choosing a phone plan can be quite confusing.",
+    "You have to look at the data,",
+    "and check the monthly cost.",
+    "It helps to compare a few options,",
+    "and then pick the best one.",
+    "Just take your time."
+   ]
+  },
+  {
+   "id": "en038",
+   "lang": "en",
+   "text": "A long drive up north is a great way to see the sights. The landscape changes slowly, and the roads open up. You can put on some music, and just enjoy the view. It is a lovely trip.",
+   "chunks": [
+    "A long drive up north is a great way to see the sights.",
+    "The landscape changes slowly,",
+    "and the roads open up.",
+    "You can put on some music,",
+    "and just enjoy the view.",
+    "It is a lovely trip."
+   ]
+  },
+  {
+   "id": "en039",
+   "lang": "en",
+   "text": "The sun is barely up, and the house is still quiet. You can smell the fresh coffee brewing in the kitchen. It is the perfect time to relax. Just take a deep breath, and enjoy this peaceful start to your day.",
+   "chunks": [
+    "The sun is barely up,",
+    "and the house is still quiet.",
+    "You can smell the fresh coffee brewing in the kitchen.",
+    "It is the perfect time to relax.",
+    "Just take a deep breath,",
+    "and enjoy this peaceful start to your day."
+   ]
+  },
+  {
+   "id": "ms000",
+   "lang": "ms",
+   "text": "Alamak, nampaknya paip dapur anda bocor lagi ya. Jangan risau, kita boleh cuba baiki sendiri dengan menggunakan pita pelekat khas. Pastikan anda tutup punca air terlebih dahulu, supaya air tidak memancut keluar. Selepas itu, bersihkan kawasan yang bocor, dan lilitkan pita itu dengan kemas. Mudah sahaja kan, kalau buat perlahan lahan pasti menjadi.",
+   "chunks": [
+    "Alamak, nampaknya paip dapur anda bocor lagi ya.",
+    "Jangan risau, kita boleh cuba baiki sendiri dengan menggunakan pita pelekat khas.",
+    "Pastikan anda tutup punca air terlebih dahulu,",
+    "supaya air tidak memancut keluar.",
+    "Selepas itu, bersihkan kawasan yang bocor,",
+    "dan lilitkan pita itu dengan kemas.",
+    "Mudah sahaja kan, kalau buat perlahan lahan pasti menjadi."
+   ]
+  },
+  {
+   "id": "ms001",
+   "lang": "ms",
+   "text": "Wah, pagi ini terasa sangat tenang dan damai sekali. Saya syorkan anda bancuh secawan kopi panas, sambil menikmati angin sepoi sepoi bahasa di beranda. Bunyi burung berkicau di luar rumah, benar benar memberikan rasa tenang pada jiwa. Inilah masanya untuk anda berehat sebentar, sebelum memulakan segala rutin harian yang sibuk nanti.",
+   "chunks": [
+    "Wah, pagi ini terasa sangat tenang dan damai sekali.",
+    "Saya syorkan anda bancuh secawan kopi panas,",
+    "sambil menikmati angin sepoi sepoi bahasa di beranda.",
+    "Bunyi burung berkicau di luar rumah,",
+    "benar benar memberikan rasa tenang pada jiwa.",
+    "Inilah masanya untuk anda berehat sebentar,",
+    "sebelum memulakan segala rutin harian yang sibuk nanti."
+   ]
+  },
+  {
+   "id": "ms002",
+   "lang": "ms",
+   "text": "Suasana di pasar petang ini agak riuh, tetapi hujan mula turun dengan lebat. Ramai orang berlari mencari tempat berteduh, manakala peniaga pula tergesa gesa menutup barang jualan mereka. Bau tanah basah selepas hujan, memberikan aroma yang sangat menyegarkan hidung. Walaupun basah sedikit, pengalaman membeli barang dalam hujan, ada keunikannya yang tersendiri.",
+   "chunks": [
+    "Suasana di pasar petang ini agak riuh,",
+    "tetapi hujan mula turun dengan lebat.",
+    "Ramai orang berlari mencari tempat berteduh,",
+    "manakala peniaga pula tergesa gesa menutup barang jualan mereka.",
+    "Bau tanah basah selepas hujan,",
+    "memberikan aroma yang sangat menyegarkan hidung.",
+    "Walaupun basah sedikit,",
+    "pengalaman membeli barang dalam hujan,",
+    "ada keunikannya yang tersendiri."
+   ]
+  },
+  {
+   "id": "ms003",
+   "lang": "ms",
+   "text": "Hari pertama bekerja pasti terasa sangat mendebarkan, bukan. Jangan lupa untuk berikan senyuman yang paling manis, kepada semua rakan sekerja baharu anda nanti. Kenali budaya pejabat dengan memerhati, dan jangan malu untuk bertanya jika ada perkara yang kurang jelas. Saya yakin anda boleh lakukan yang terbaik, dan akan cepat menyesuaikan diri di sana.",
+   "chunks": [
+    "Hari pertama bekerja pasti terasa sangat mendebarkan,",
+    "bukan. Jangan lupa untuk berikan senyuman yang paling manis,",
+    "kepada semua rakan sekerja baharu anda nanti.",
+    "Kenali budaya pejabat dengan memerhati,",
+    "dan jangan malu untuk bertanya jika ada perkara yang kurang jelas.",
+    "Saya yakin anda boleh lakukan yang terbaik,",
+    "dan akan cepat menyesuaikan diri di sana."
+   ]
+  },
+  {
+   "id": "ms004",
+   "lang": "ms",
+   "text": "Menunggu giliran di klinik memang memerlukan kesabaran yang tinggi. Sambil menunggu nama dipanggil, anda boleh membaca majalah atau mendengar muzik yang menenangkan. Lihatlah kanak kanak kecil yang sedang bermain, mereka nampak sangat comel walaupun dalam keadaan takut. Harapnya urusan pemeriksaan anda berjalan lancar, dan anda akan cepat sembuh seperti sediakala.",
+   "chunks": [
+    "Menunggu giliran di klinik memang memerlukan kesabaran yang tinggi.",
+    "Sambil menunggu nama dipanggil,",
+    "anda boleh membaca majalah atau mendengar muzik yang menenangkan.",
+    "Lihatlah kanak kanak kecil yang sedang bermain,",
+    "mereka nampak sangat comel walaupun dalam keadaan takut.",
+    "Harapnya urusan pemeriksaan anda berjalan lancar,",
+    "dan anda akan cepat sembuh seperti sediakala."
+   ]
+  },
+  {
+   "id": "ms005",
+   "lang": "ms",
+   "text": "Aduhai, penerbangan anda tertangguh lagi rupanya. Janganlah terlalu stres, gunakan masa terluang ini untuk berjalan jalan di kawasan lapangan terbang. Anda boleh mencari snek kegemaran, atau sekadar duduk berehat sambil memerhati kapal terbang berlepas. Sabar itu separuh daripada iman, jadi tarik nafas dalam dalam dan bertenang sahaja sementara menunggu pengumuman.",
+   "chunks": [
+    "Aduhai, penerbangan anda tertangguh lagi rupanya.",
+    "Janganlah terlalu stres,",
+    "gunakan masa terluang ini untuk berjalan jalan di kawasan lapangan terbang.",
+    "Anda boleh mencari snek kegemaran,",
+    "atau sekadar duduk berehat sambil memerhati kapal terbang berlepas.",
+    "Sabar itu separuh daripada iman,",
+    "jadi tarik nafas dalam dalam dan bertenang sahaja sementara menunggu pengumuman."
+   ]
+  },
+  {
+   "id": "ms006",
+   "lang": "ms",
+   "text": "Berjalan pada waktu petang adalah cara terbaik, untuk mengurangkan tekanan selepas bekerja. Lihatlah warna langit yang bertukar menjadi jingga, sungguh indah dipandang mata. Langkah kaki yang perlahan, membantu anda berfikir dengan lebih jernih tentang kehidupan. Udara yang segar dan nyaman, membuatkan badan terasa lebih ringan serta minda menjadi lebih terbuka.",
+   "chunks": [
+    "Berjalan pada waktu petang adalah cara terbaik,",
+    "untuk mengurangkan tekanan selepas bekerja.",
+    "Lihatlah warna langit yang bertukar menjadi jingga,",
+    "sungguh indah dipandang mata.",
+    "Langkah kaki yang perlahan,",
+    "membantu anda berfikir dengan lebih jernih tentang kehidupan.",
+    "Udara yang segar dan nyaman,",
+    "membuatkan badan terasa lebih ringan serta minda menjadi lebih terbuka."
+   ]
+  },
+  {
+   "id": "ms007",
+   "lang": "ms",
+   "text": "Sudah lama benar kita tidak berjumpa, rasa macam baru semalam kita belajar bersama. Banyak cerita yang ingin saya kongsikan, tentang perjalanan hidup saya sepanjang beberapa tahun ini. Saya sangat gembira melihat anda sudah berjaya, dan tetap rendah diri seperti dahulu. Mari kita luangkan lebih banyak masa, supaya hubungan persahabatan ini kekal abadi sampai bila bila.",
+   "chunks": [
+    "Sudah lama benar kita tidak berjumpa,",
+    "rasa macam baru semalam kita belajar bersama.",
+    "Banyak cerita yang ingin saya kongsikan,",
+    "tentang perjalanan hidup saya sepanjang beberapa tahun ini.",
+    "Saya sangat gembira melihat anda sudah berjaya,",
+    "dan tetap rendah diri seperti dahulu.",
+    "Mari kita luangkan lebih banyak masa,",
+    "supaya hubungan persahabatan ini kekal abadi sampai bila bila."
+   ]
+  },
+  {
+   "id": "ms008",
+   "lang": "ms",
+   "text": "Aduh, lamanya menunggu giliran di klinik ini. Ramai betul orang hari ini, mungkin sebab musim demam. Saya harap doktor dapat panggil nama saya segera, supaya saya boleh pulang berehat. Sambil menunggu, saya hanya mampu melihat jam dan membaca majalah lama di atas meja.",
+   "chunks": [
+    "Aduh, lamanya menunggu giliran di klinik ini.",
+    "Ramai betul orang hari ini,",
+    "mungkin sebab musim demam.",
+    "Saya harap doktor dapat panggil nama saya segera,",
+    "supaya saya boleh pulang berehat.",
+    "Sambil menunggu, saya hanya mampu melihat jam dan membaca majalah lama di atas meja."
+   ]
+  },
+  {
+   "id": "ms009",
+   "lang": "ms",
+   "text": "Pagi ini terasa sangat tenang dan santai di rumah. Saya baru sahaja membancuh kopi panas, sambil menghirup udara segar dari jendela. Tiada apa yang perlu dikejarkan hari ini, jadi saya mahu membaca buku kegemaran saya. Suasana sunyi begini benar benar mendamaikan jiwa saya.",
+   "chunks": [
+    "Pagi ini terasa sangat tenang dan santai di rumah.",
+    "Saya baru sahaja membancuh kopi panas,",
+    "sambil menghirup udara segar dari jendela.",
+    "Tiada apa yang perlu dikejarkan hari ini,",
+    "jadi saya mahu membaca buku kegemaran saya.",
+    "Suasana sunyi begini benar benar mendamaikan jiwa saya."
+   ]
+  },
+  {
+   "id": "ms010",
+   "lang": "ms",
+   "text": "Persiapan untuk majlis perkahwinan bulan depan sudah mula sibuk. Kami sedang memilih warna tema baju, serta menempah katering yang paling sedap. Banyak perkara yang perlu diselesaikan dengan teliti, agar majlis berjalan lancar nanti. Saya rasa sangat teruja, namun sedikit gementar menghadapi hari besar itu.",
+   "chunks": [
+    "Persiapan untuk majlis perkahwinan bulan depan sudah mula sibuk.",
+    "Kami sedang memilih warna tema baju,",
+    "serta menempah katering yang paling sedap.",
+    "Banyak perkara yang perlu diselesaikan dengan teliti,",
+    "agar majlis berjalan lancar nanti.",
+    "Saya rasa sangat teruja,",
+    "namun sedikit gementar menghadapi hari besar itu."
+   ]
+  },
+  {
+   "id": "ms011",
+   "lang": "ms",
+   "text": "Penerbangan saya terpaksa ditangguhkan selama beberapa jam. Keadaan ini agak mengecewakan, tetapi saya cuba bersabar sahaja. Saya mengambil peluang ini untuk berjalan jalan di lapangan terbang, serta mencari makanan ringan. Harapnya pesawat akan berlepas tidak lama lagi, supaya saya sampai ke destinasi.",
+   "chunks": [
+    "Penerbangan saya terpaksa ditangguhkan selama beberapa jam.",
+    "Keadaan ini agak mengecewakan,",
+    "tetapi saya cuba bersabar sahaja.",
+    "Saya mengambil peluang ini untuk berjalan jalan di lapangan terbang,",
+    "serta mencari makanan ringan.",
+    "Harapnya pesawat akan berlepas tidak lama lagi,",
+    "supaya saya sampai ke destinasi."
+   ]
+  },
+  {
+   "id": "ms012",
+   "lang": "ms",
+   "text": "Paip di dapur tiba tiba bocor pagi tadi. Air melimpah ke lantai, jadi saya terpaksa mencari span untuk mengelapnya. Saya cuba membaiki sendiri menggunakan pita pelekat, tetapi nampaknya tidak menjadi. Nampaknya saya perlu memanggil tukang paip profesional, sebelum keadaan menjadi lebih teruk.",
+   "chunks": [
+    "Paip di dapur tiba tiba bocor pagi tadi.",
+    "Air melimpah ke lantai,",
+    "jadi saya terpaksa mencari span untuk mengelapnya.",
+    "Saya cuba membaiki sendiri menggunakan pita pelekat,",
+    "tetapi nampaknya tidak menjadi.",
+    "Nampaknya saya perlu memanggil tukang paip profesional,",
+    "sebelum keadaan menjadi lebih teruk."
+   ]
+  },
+  {
+   "id": "ms013",
+   "lang": "ms",
+   "text": "Hari pertama di tempat kerja baharu terasa sangat mendebarkan. Rakan sekerja semuanya sangat peramah, malah mereka membantu saya menyesuaikan diri. Saya perlu mempelajari banyak perkara baharu, serta mengenali sistem pejabat ini. Saya harap saya dapat memberikan sumbangan yang baik, kepada syarikat ini.",
+   "chunks": [
+    "Hari pertama di tempat kerja baharu terasa sangat mendebarkan.",
+    "Rakan sekerja semuanya sangat peramah,",
+    "malah mereka membantu saya menyesuaikan diri.",
+    "Saya perlu mempelajari banyak perkara baharu,",
+    "serta mengenali sistem pejabat ini.",
+    "Saya harap saya dapat memberikan sumbangan yang baik,",
+    "kepada syarikat ini."
+   ]
+  },
+  {
+   "id": "ms014",
+   "lang": "ms",
+   "text": "Petang ini hujan turun dengan sangat lebat di pasar. Orang ramai mula berlari mencari tempat berteduh, manakala peniaga tergesa gesa menutup payung mereka. Bau tanah basah menusuk hidung, membuatkan suasana terasa sangat dingin. Saya terpaksa menunggu hujan reda, sebelum menyambung pembelian barang dapur.",
+   "chunks": [
+    "Petang ini hujan turun dengan sangat lebat di pasar.",
+    "Orang ramai mula berlari mencari tempat berteduh,",
+    "manakala peniaga tergesa gesa menutup payung mereka.",
+    "Bau tanah basah menusuk hidung,",
+    "membuatkan suasana terasa sangat dingin.",
+    "Saya terpaksa menunggu hujan reda,",
+    "sebelum menyambung pembelian barang dapur."
+   ]
+  },
+  {
+   "id": "ms015",
+   "lang": "ms",
+   "text": "Proses berpindah ke rumah baharu memang sangat memenatkan. Banyak kotak yang perlu diangkat, serta barang yang perlu disusun semula. Walaupun letih, saya rasa sangat gembira kerana akhirnya mempunyai ruang sendiri. Saya tidak sabar untuk menghias ruang tamu, mengikut citarasa saya sendiri.",
+   "chunks": [
+    "Proses berpindah ke rumah baharu memang sangat memenatkan.",
+    "Banyak kotak yang perlu diangkat,",
+    "serta barang yang perlu disusun semula.",
+    "Walaupun letih, saya rasa sangat gembira kerana akhirnya mempunyai ruang sendiri.",
+    "Saya tidak sabar untuk menghias ruang tamu,",
+    "mengikut citarasa saya sendiri."
+   ]
+  },
+  {
+   "id": "ms016",
+   "lang": "ms",
+   "text": "Kalau paip air bocor, jangan risau sangat sebab kita boleh baiki sendiri. Mula mula sekali, tutup punca air utama supaya kawasan itu tidak banjir. Kemudian, gunakan pita putih untuk membalut bahagian yang bocor dengan kemas. Pastikan semua sambungan ketat, baru buka semula punca air untuk melihat hasilnya.",
+   "chunks": [
+    "Kalau paip air bocor,",
+    "jangan risau sangat sebab kita boleh baiki sendiri.",
+    "Mula mula sekali, tutup punca air utama supaya kawasan itu tidak banjir.",
+    "Kemudian, gunakan pita putih untuk membalut bahagian yang bocor dengan kemas.",
+    "Pastikan semua sambungan ketat,",
+    "baru buka semula punca air untuk melihat hasilnya."
+   ]
+  },
+  {
+   "id": "ms017",
+   "lang": "ms",
+   "text": "Berjalan pada waktu petang memang sangat menenangkan jiwa dan minda. Udara terasa lebih segar, manakala cahaya matahari pula tidak terlalu terik. Saya suka melihat orang ramai bersantai di taman, sambil mendengar bunyi burung berkicauan. Aktiviti ringkas seperti ini, sebenarnya mampu mengurangkan tekanan setelah seharian bekerja keras.",
+   "chunks": [
+    "Berjalan pada waktu petang memang sangat menenangkan jiwa dan minda.",
+    "Udara terasa lebih segar,",
+    "manakala cahaya matahari pula tidak terlalu terik.",
+    "Saya suka melihat orang ramai bersantai di taman,",
+    "sambil mendengar bunyi burung berkicauan.",
+    "Aktiviti ringkas seperti ini,",
+    "sebenarnya mampu mengurangkan tekanan setelah seharian bekerja keras."
+   ]
+  },
+  {
+   "id": "ms018",
+   "lang": "ms",
+   "text": "Berpindah ke rumah baharu memang memenatkan, tetapi perasaan terujanya tidak terkata. Kita perlu menyusun kotak dengan teliti, supaya barang mudah dicari nanti. Jangan lupa periksa semua suis lampu, serta pastikan kunci pintu berfungsi dengan baik. Mulakan dengan menghias ruang tamu, agar suasana rumah terasa lebih hangat dan selesa.",
+   "chunks": [
+    "Berpindah ke rumah baharu memang memenatkan,",
+    "tetapi perasaan terujanya tidak terkata.",
+    "Kita perlu menyusun kotak dengan teliti,",
+    "supaya barang mudah dicari nanti.",
+    "Jangan lupa periksa semua suis lampu,",
+    "serta pastikan kunci pintu berfungsi dengan baik.",
+    "Mulakan dengan menghias ruang tamu,",
+    "agar suasana rumah terasa lebih hangat dan selesa."
+   ]
+  },
+  {
+   "id": "ms019",
+   "lang": "ms",
+   "text": "Cuaca sekarang ini sangat tidak menentu, sekejap panas terik sekejap hujan lebat. Kita perlu sentiasa membawa payung, supaya tidak basah kuyup jika tiba tiba hujan. Jangan lupa minum air kosong yang banyak, agar badan kekal hidrat semasa cuaca panas. Jaga kesihatan diri, kerana perubahan suhu boleh menyebabkan kita mudah jatuh sakit.",
+   "chunks": [
+    "Cuaca sekarang ini sangat tidak menentu,",
+    "sekejap panas terik sekejap hujan lebat.",
+    "Kita perlu sentiasa membawa payung,",
+    "supaya tidak basah kuyup jika tiba tiba hujan.",
+    "Jangan lupa minum air kosong yang banyak,",
+    "agar badan kekal hidrat semasa cuaca panas.",
+    "Jaga kesihatan diri,",
+    "kerana perubahan suhu boleh menyebabkan kita mudah jatuh sakit."
+   ]
+  },
+  {
+   "id": "ms020",
+   "lang": "ms",
+   "text": "Apabila penerbangan tertangguh, perkara paling penting adalah kekal tenang dan bersabar. Kita boleh membaca buku, atau sekadar berbual dengan penumpang lain untuk mengisi masa. Pastikan anda menyemak papan maklumat, supaya tidak terlepas waktu berlepas yang baharu. Kadang kadang, waktu menunggu ini boleh digunakan untuk berehat sebentar di ruang menunggu.",
+   "chunks": [
+    "Apabila penerbangan tertangguh,",
+    "perkara paling penting adalah kekal tenang dan bersabar.",
+    "Kita boleh membaca buku,",
+    "atau sekadar berbual dengan penumpang lain untuk mengisi masa.",
+    "Pastikan anda menyemak papan maklumat,",
+    "supaya tidak terlepas waktu berlepas yang baharu.",
+    "Kadang kadang, waktu menunggu ini boleh digunakan untuk berehat sebentar di ruang menunggu."
+   ]
+  },
+  {
+   "id": "ms021",
+   "lang": "ms",
+   "text": "Menjaga pokok baharu memerlukan kesabaran yang tinggi, terutamanya bagi mereka yang baru belajar. Pastikan anda menyiram air mengikut keperluan pokok, dan jangan letak terlalu banyak baja. Cahaya matahari yang cukup sangat penting, supaya daun pokok tumbuh hijau dan segar. Perhatikan setiap helaian daun, jika ada tanda tanda serangan serangga perosak.",
+   "chunks": [
+    "Menjaga pokok baharu memerlukan kesabaran yang tinggi,",
+    "terutamanya bagi mereka yang baru belajar.",
+    "Pastikan anda menyiram air mengikut keperluan pokok,",
+    "dan jangan letak terlalu banyak baja.",
+    "Cahaya matahari yang cukup sangat penting,",
+    "supaya daun pokok tumbuh hijau dan segar.",
+    "Perhatikan setiap helaian daun,",
+    "jika ada tanda tanda serangan serangga perosak."
+   ]
+  },
+  {
+   "id": "ms022",
+   "lang": "ms",
+   "text": "Persiapan majlis perkahwinan biasanya sangat sibuk, malah kadangkala boleh membuatkan kita rasa tertekan. Pemilihan tema warna dan menu makanan, merupakan antara bahagian yang paling mencabar. Pastikan senarai jemputan dikemas kini, supaya tiada tetamu penting yang tertinggal. Kerjasama antara ahli keluarga sangat penting, agar segala urusan berjalan dengan lancar.",
+   "chunks": [
+    "Persiapan majlis perkahwinan biasanya sangat sibuk,",
+    "malah kadangkala boleh membuatkan kita rasa tertekan.",
+    "Pemilihan tema warna dan menu makanan,",
+    "merupakan antara bahagian yang paling mencabar.",
+    "Pastikan senarai jemputan dikemas kini,",
+    "supaya tiada tetamu penting yang tertinggal.",
+    "Kerjasama antara ahli keluarga sangat penting,",
+    "agar segala urusan berjalan dengan lancar."
+   ]
+  },
+  {
+   "id": "ms023",
+   "lang": "ms",
+   "text": "Suasana petang hujan di pasar memang unik, dengan bau tanah basah dan bunyi rintik hujan. Para peniaga mula menutup kanopi mereka, manakala pembeli pula bergegas mencari tempat berteduh. Walaupun keadaan sedikit kelam, namun semangat orang ramai untuk membeli barang dapur tetap kuat. Kita boleh melihat titisan air jatuh, sambil menikmati aroma kopi panas.",
+   "chunks": [
+    "Suasana petang hujan di pasar memang unik,",
+    "dengan bau tanah basah dan bunyi rintik hujan.",
+    "Para peniaga mula menutup kanopi mereka,",
+    "manakala pembeli pula bergegas mencari tempat berteduh.",
+    "Walaupun keadaan sedikit kelam,",
+    "namun semangat orang ramai untuk membeli barang dapur tetap kuat.",
+    "Kita boleh melihat titisan air jatuh,",
+    "sambil menikmati aroma kopi panas."
+   ]
+  },
+  {
+   "id": "ms024",
+   "lang": "ms",
+   "text": "Cuaca sekarang memang tidak menentu, sekejap panas terik dan sekejap pula hujan lebat. Kita kena sentiasa bawa payung, supaya tidak basah kuyup jika tiba tiba hujan turun. Jangan lupa minum air yang cukup, agar badan kekal segar sepanjang hari yang lembap ini.",
+   "chunks": [
+    "Cuaca sekarang memang tidak menentu,",
+    "sekejap panas terik dan sekejap pula hujan lebat.",
+    "Kita kena sentiasa bawa payung,",
+    "supaya tidak basah kuyup jika tiba tiba hujan turun.",
+    "Jangan lupa minum air yang cukup,",
+    "agar badan kekal segar sepanjang hari yang lembap ini."
+   ]
+  },
+  {
+   "id": "ms025",
+   "lang": "ms",
+   "text": "Perlawanan bola sepak kampung petang ini sangat meriah, dengan sorakan penduduk setempat yang memenuhi tepi padang. Pemain semua bersemangat tinggi, walaupun hanya bermain untuk suka suka sahaja. Akhirnya, pasukan tuan rumah menang tipis, dan semua orang pulang dengan hati yang sangat gembira.",
+   "chunks": [
+    "Perlawanan bola sepak kampung petang ini sangat meriah,",
+    "dengan sorakan penduduk setempat yang memenuhi tepi padang.",
+    "Pemain semua bersemangat tinggi,",
+    "walaupun hanya bermain untuk suka suka sahaja.",
+    "Akhirnya, pasukan tuan rumah menang tipis,",
+    "dan semua orang pulang dengan hati yang sangat gembira."
+   ]
+  },
+  {
+   "id": "ms026",
+   "lang": "ms",
+   "text": "Persiapan majlis perkahwinan adik saya sudah hampir siap, cuma tinggal urusan hiasan pelamin yang belum selesai. Kami semua sibuk menguruskan jemputan, serta memastikan katering makanan cukup untuk semua tetamu. Semoga segala urusan berjalan lancar, dan majlis tersebut menjadi kenangan paling indah buat mereka.",
+   "chunks": [
+    "Persiapan majlis perkahwinan adik saya sudah hampir siap,",
+    "cuma tinggal urusan hiasan pelamin yang belum selesai.",
+    "Kami semua sibuk menguruskan jemputan,",
+    "serta memastikan katering makanan cukup untuk semua tetamu.",
+    "Semoga segala urusan berjalan lancar,",
+    "dan majlis tersebut menjadi kenangan paling indah buat mereka."
+   ]
+  },
+  {
+   "id": "ms027",
+   "lang": "ms",
+   "text": "Menunggu giliran di klinik memang memerlukan kesabaran yang tinggi, terutamanya apabila ramai pesakit yang datang sekali gus. Saya hanya membaca buku sambil mendengar lagu, bagi menghilangkan rasa bosan yang melanda. Syukurlah, doktor memanggil nama saya dengan cepat, jadi saya tidak perlu menunggu terlalu lama.",
+   "chunks": [
+    "Menunggu giliran di klinik memang memerlukan kesabaran yang tinggi,",
+    "terutamanya apabila ramai pesakit yang datang sekali gus.",
+    "Saya hanya membaca buku sambil mendengar lagu,",
+    "bagi menghilangkan rasa bosan yang melanda.",
+    "Syukurlah, doktor memanggil nama saya dengan cepat,",
+    "jadi saya tidak perlu menunggu terlalu lama."
+   ]
+  },
+  {
+   "id": "ms028",
+   "lang": "ms",
+   "text": "Suasana petang hujan di pasar sangat mencabar, kerana ramai orang berlari mencari tempat berteduh yang sesuai. Bunyi titisan hujan pada bumbung zink, bercampur dengan suara peniaga yang memanggil pelanggan mereka. Walaupun keadaan agak basah, namun bau tanah dan sayur segar, memberikan rasa tenang yang tersendiri.",
+   "chunks": [
+    "Suasana petang hujan di pasar sangat mencabar,",
+    "kerana ramai orang berlari mencari tempat berteduh yang sesuai.",
+    "Bunyi titisan hujan pada bumbung zink,",
+    "bercampur dengan suara peniaga yang memanggil pelanggan mereka.",
+    "Walaupun keadaan agak basah,",
+    "namun bau tanah dan sayur segar,",
+    "memberikan rasa tenang yang tersendiri."
+   ]
+  },
+  {
+   "id": "ms029",
+   "lang": "ms",
+   "text": "Mengajar anak berenang memerlukan banyak kesabaran, kerana dia pada mulanya sangat takut untuk masuk ke dalam air. Saya memegang tangannya dengan erat, sambil memberi kata kata semangat supaya dia rasa lebih yakin. Lama kelamaan, dia mula berani menggerakkan kaki, dan akhirnya dapat berenang sendiri dengan gembira.",
+   "chunks": [
+    "Mengajar anak berenang memerlukan banyak kesabaran,",
+    "kerana dia pada mulanya sangat takut untuk masuk ke dalam air.",
+    "Saya memegang tangannya dengan erat,",
+    "sambil memberi kata kata semangat supaya dia rasa lebih yakin.",
+    "Lama kelamaan, dia mula berani menggerakkan kaki,",
+    "dan akhirnya dapat berenang sendiri dengan gembira."
+   ]
+  },
+  {
+   "id": "ms030",
+   "lang": "ms",
+   "text": "Membaiki paip bocor di dapur benar benar menguji kesabaran saya, kerana air terus memancut keluar dengan deras. Saya cuba mengetatkan skru dengan sepana, namun nampaknya ada bahagian getah yang sudah reput dan perlu ditukar. Setelah beberapa kali mencuba, akhirnya kebocoran itu berhenti, dan lantai dapur kembali kering.",
+   "chunks": [
+    "Membaiki paip bocor di dapur benar benar menguji kesabaran saya,",
+    "kerana air terus memancut keluar dengan deras.",
+    "Saya cuba mengetatkan skru dengan sepana,",
+    "namun nampaknya ada bahagian getah yang sudah reput dan perlu ditukar.",
+    "Setelah beberapa kali mencuba,",
+    "akhirnya kebocoran itu berhenti,",
+    "dan lantai dapur kembali kering."
+   ]
+  },
+  {
+   "id": "ms031",
+   "lang": "ms",
+   "text": "Memilih pelan telefon yang sesuai sekarang sangat mengelirukan, kerana terlalu banyak pilihan yang ditawarkan oleh syarikat telekomunikasi. Saya mahukan data internet yang banyak, tetapi pada masa yang sama harganya mestilah berpatutan. Setelah membandingkan beberapa tawaran, saya akhirnya memilih satu pelan, yang paling menjimatkan untuk kegunaan bulanan.",
+   "chunks": [
+    "Memilih pelan telefon yang sesuai sekarang sangat mengelirukan,",
+    "kerana terlalu banyak pilihan yang ditawarkan oleh syarikat telekomunikasi.",
+    "Saya mahukan data internet yang banyak,",
+    "tetapi pada masa yang sama harganya mestilah berpatutan.",
+    "Setelah membandingkan beberapa tawaran,",
+    "saya akhirnya memilih satu pelan,",
+    "yang paling menjimatkan untuk kegunaan bulanan."
+   ]
+  },
+  {
+   "id": "ms032",
+   "lang": "ms",
+   "text": "Wah, berpindah ke rumah baharu memang memenatkan, tetapi perasaan terujanya tidak terkata. Anda boleh mula menyusun barang mengikut ruang, supaya semuanya nampak kemas. Jangan lupa untuk menghias ruang tamu, agar suasana terasa lebih selesa. Semoga rumah baharu ini membawa banyak kegembiraan, dan kenangan manis buat anda.",
+   "chunks": [
+    "Wah, berpindah ke rumah baharu memang memenatkan,",
+    "tetapi perasaan terujanya tidak terkata.",
+    "Anda boleh mula menyusun barang mengikut ruang,",
+    "supaya semuanya nampak kemas.",
+    "Jangan lupa untuk menghias ruang tamu,",
+    "agar suasana terasa lebih selesa.",
+    "Semoga rumah baharu ini membawa banyak kegembiraan,",
+    "dan kenangan manis buat anda."
+   ]
+  },
+  {
+   "id": "ms033",
+   "lang": "ms",
+   "text": "Menjaga pokok baharu memerlukan sedikit kesabaran, terutamanya bagi yang baru belajar. Pastikan anda menyiramnya pada waktu pagi, supaya tanah kekal lembap. Letakkan pokok itu di tempat yang cukup cahaya, tetapi jangan terlalu terdedah kepada matahari. Dengan penjagaan yang betul, pokok anda akan tumbuh subur, dan daunnya nampak segar.",
+   "chunks": [
+    "Menjaga pokok baharu memerlukan sedikit kesabaran,",
+    "terutamanya bagi yang baru belajar.",
+    "Pastikan anda menyiramnya pada waktu pagi,",
+    "supaya tanah kekal lembap.",
+    "Letakkan pokok itu di tempat yang cukup cahaya,",
+    "tetapi jangan terlalu terdedah kepada matahari.",
+    "Dengan penjagaan yang betul,",
+    "pokok anda akan tumbuh subur,",
+    "dan daunnya nampak segar."
+   ]
+  },
+  {
+   "id": "ms034",
+   "lang": "ms",
+   "text": "Hari pertama di tempat kerja baharu selalunya mendebarkan, namun ia adalah permulaan yang hebat. Kenali rakan sekerja anda dengan senyuman, dan jangan malu untuk bertanya. Pelajari cara kerja dengan teliti, supaya anda tidak melakukan kesilapan besar. Yakinlah pada kemampuan diri sendiri, kerana anda pasti boleh melakukan yang terbaik.",
+   "chunks": [
+    "Hari pertama di tempat kerja baharu selalunya mendebarkan,",
+    "namun ia adalah permulaan yang hebat.",
+    "Kenali rakan sekerja anda dengan senyuman,",
+    "dan jangan malu untuk bertanya.",
+    "Pelajari cara kerja dengan teliti,",
+    "supaya anda tidak melakukan kesilapan besar.",
+    "Yakinlah pada kemampuan diri sendiri,",
+    "kerana anda pasti boleh melakukan yang terbaik."
+   ]
+  },
+  {
+   "id": "ms035",
+   "lang": "ms",
+   "text": "Cuaca sekarang nampaknya semakin berubah, kadang kala panas terik dan tiba tiba hujan lebat. Sebaiknya anda sentiasa membawa payung, supaya tidak basah ketika pulang. Jaga kesihatan diri dengan minum banyak air, dan makan makanan yang berkhasiat. Kita perlu sentiasa bersedia, agar badan tidak mudah jatuh sakit.",
+   "chunks": [
+    "Cuaca sekarang nampaknya semakin berubah,",
+    "kadang kala panas terik dan tiba tiba hujan lebat.",
+    "Sebaiknya anda sentiasa membawa payung,",
+    "supaya tidak basah ketika pulang.",
+    "Jaga kesihatan diri dengan minum banyak air,",
+    "dan makan makanan yang berkhasiat.",
+    "Kita perlu sentiasa bersedia,",
+    "agar badan tidak mudah jatuh sakit."
+   ]
+  },
+  {
+   "id": "ms036",
+   "lang": "ms",
+   "text": "Penerbangan yang tertangguh memang sangat mengecewakan, terutamanya apabila kita sudah tidak sabar untuk tiba. Sila bertenang dan hubungi pihak syarikat penerbangan, untuk mendapatkan maklumat terkini. Anda boleh membaca buku atau mendengar muzik, sementara menunggu pengumuman seterusnya. Semoga perjalanan anda selamat, dan sampai ke destinasi dengan lancar.",
+   "chunks": [
+    "Penerbangan yang tertangguh memang sangat mengecewakan,",
+    "terutamanya apabila kita sudah tidak sabar untuk tiba.",
+    "Sila bertenang dan hubungi pihak syarikat penerbangan,",
+    "untuk mendapatkan maklumat terkini.",
+    "Anda boleh membaca buku atau mendengar muzik,",
+    "sementara menunggu pengumuman seterusnya.",
+    "Semoga perjalanan anda selamat,",
+    "dan sampai ke destinasi dengan lancar."
+   ]
+  },
+  {
+   "id": "ms037",
+   "lang": "ms",
+   "text": "Berjalan pada waktu petang yang tenang sangat membantu, untuk menghilangkan stres selepas seharian bekerja. Nikmati angin sepoi sepoi bahasa, sambil melihat keindahan alam sekitar. Anda boleh berjalan perlahan bersama teman, atau sekadar menikmati masa sendirian. Aktiviti ringkas seperti ini, sebenarnya dapat menyegarkan semula minda kita.",
+   "chunks": [
+    "Berjalan pada waktu petang yang tenang sangat membantu,",
+    "untuk menghilangkan stres selepas seharian bekerja.",
+    "Nikmati angin sepoi sepoi bahasa,",
+    "sambil melihat keindahan alam sekitar.",
+    "Anda boleh berjalan perlahan bersama teman,",
+    "atau sekadar menikmati masa sendirian.",
+    "Aktiviti ringkas seperti ini,",
+    "sebenarnya dapat menyegarkan semula minda kita."
+   ]
+  },
+  {
+   "id": "ms038",
+   "lang": "ms",
+   "text": "Belajar memasak resipi keluarga adalah satu pengalaman berharga, kerana ia mengekalkan tradisi turun temurun. Ikuti setiap langkah dengan teliti, dan jangan lupa rasa masakan tersebut. Gunakan bahan yang segar, supaya rasa hidangan menjadi lebih asli. Masakan air tangan keluarga, sentiasa mempunyai rasa kasih sayang yang istimewa.",
+   "chunks": [
+    "Belajar memasak resipi keluarga adalah satu pengalaman berharga,",
+    "kerana ia mengekalkan tradisi turun temurun.",
+    "Ikuti setiap langkah dengan teliti,",
+    "dan jangan lupa rasa masakan tersebut.",
+    "Gunakan bahan yang segar,",
+    "supaya rasa hidangan menjadi lebih asli.",
+    "Masakan air tangan keluarga,",
+    "sentiasa mempunyai rasa kasih sayang yang istimewa."
+   ]
+  },
+  {
+   "id": "ms039",
+   "lang": "ms",
+   "text": "Saya sedia membantu anda menyelesaikan masalah bil ini, supaya semuanya menjadi lebih jelas. Mari kita semak butiran caj satu persatu, agar tiada sebarang kesilapan berlaku. Jika ada bahagian yang kurang difahami, sila beritahu saya dengan segera. Saya akan pastikan urusan ini selesai, dengan cepat dan mudah.",
+   "chunks": [
+    "Saya sedia membantu anda menyelesaikan masalah bil ini,",
+    "supaya semuanya menjadi lebih jelas.",
+    "Mari kita semak butiran caj satu persatu,",
+    "agar tiada sebarang kesilapan berlaku.",
+    "Jika ada bahagian yang kurang difahami,",
+    "sila beritahu saya dengan segera.",
+    "Saya akan pastikan urusan ini selesai,",
+    "dengan cepat dan mudah."
+   ]
+  }
+ ]
+}
