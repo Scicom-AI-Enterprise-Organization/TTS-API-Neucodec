@@ -1,7 +1,9 @@
 # Interleaved generation (`interleave_id`)
 
 How consecutive TTS requests are made to sound like one continuous utterance, how much is
-retained, and how the history is shared between uvicorn workers. Code:
+retained, and how the history is shared between uvicorn workers. **Measured effect: §2c**
+(it cuts the pitch/loudness jump between consecutive chunks ~25% at no latency cost — full
+write-up [`bench/INTERLEAVE_AB.md`](bench/INTERLEAVE_AB.md)). Code:
 [`app/interleave.py`](app/interleave.py) (all the logic, no torch), the plumbing in
 [`app/main.py`](app/main.py), tests in [`tests/test_interleave.py`](tests/test_interleave.py)
 (44, no GPU) and `TestTTSInterleave` in
@@ -92,6 +94,57 @@ reached the stitcher at that point, so the client sees a normal chunk; the switc
 logged, an event on `lm.generate`, and `tts.interleave_fallback=true` on `tts.stream`. A
 real rendering runs ~15–20 tokens per word, so the threshold only trips on the collapse.
 Cost: one extra LM call on those chunks.
+
+### 2c. Does it work? Measured, 2026-09-07
+
+Full write-up and method: [`bench/INTERLEAVE_AB.md`](bench/INTERLEAVE_AB.md); harness
+`bench/interleave_ab/`. 80 paragraphs (40 English + 40 Malay, ~44 words, 6.5 chunks each) on the
+private interleave-trained checkpoint, rendered three ways: **A** the whole paragraph in one
+request, **B** chunked with one `interleave_id`, **C** chunked cold (today). B and C get
+byte-identical chunk text, so what differs between them is the prompt shape alone. Straight to
+vLLM and decoded one-shot, so the normalizer, the crossfade stitcher and `STREAM_NORMALIZE` are
+out of the comparison.
+
+| | A one-shot | **B `interleave_id`** | C cold (no id) |
+|---|---|---|---|
+| Register step from chunk N to N+1, \|st\| | 1.60 | **1.24** | 1.65 |
+| Level step from chunk N to N+1, \|dB\| | 1.35 | **1.16** | 1.61 |
+| Signed pitch step *at* the join, st | +0.43 | **−0.35** | +0.53 ← the register reset |
+| Register wander across the whole reply, st | 3.77 | **3.00** | 3.62 |
+| Level SD across the whole reply, dB | 0.99 | **0.96** | 1.20 |
+| Pitch declination over the reply, st/s | −0.161 | **−0.137** | −0.082 |
+| Silence at each join, s | 0.051 | 0.073 | **0.043** |
+| Duration vs A | 1.000 | 1.017 | 1.028 |
+| CER % (Whisper-large-v3-turbo) | 0.50 | 0.44 | 0.58 |
+| UTMOSv2, level-matched | 2.817 | 2.776 | 2.835 |
+| Chunks collapsed (§2b) | — | **0 / 518** | 0 / 518 |
+| Median prompt tokens / LM latency s | 80 / 2.762¹ | **418 / 0.423** | 19 / 0.427 |
+
+¹ A is one call for the whole paragraph, so its latency is not comparable as a per-chunk cost.
+
+**Paired over the 438 matched consecutive-chunk pairs** (B and C chunk the same text at the same
+places, so every join pairs 1:1), bootstrap 95% CI on the mean difference:
+
+| | B − C | vs a one-shot rendering |
+|---|---|---|
+| \|register step\| | **−0.407 st** [−0.556, −0.261] — **−25%** | B −0.363 [−0.501, −0.226]; C +0.044 (ns) |
+| \|level step\| | **−0.451 dB** [−0.586, −0.320] — **−28%** | B −0.191 [−0.309, −0.069]; C **+0.260** [+0.119, +0.407] |
+
+So: **interleaving cuts the jump between consecutive chunks by about a quarter**, and on loudness
+cold chunking is *measurably worse than anything the model does inside a continuous utterance*
+while interleaving is better than one. It recovers ~70% of the reply-level pitch declination cold
+chunking throws away, and it turns the upward register reset at the join (+0.53 st, 56% of joins
+stepping up >1 st) into the gentle downward drift continuous speech has (−0.35 st, 50%).
+
+What it costs: **~30 ms more silence per join** (+1.7% duration) and **+399 prompt tokens of
+prefill, which is free** — 0.423 s against 0.427 s. CER is unchanged; UTMOSv2 is flat and cannot
+see this anyway (it scores random crops of a single clip, so it is blind to continuity across a
+boundary).
+
+Two caveats on reading the table: A has no real chunk boundaries, so its per-join rows rest on
+inferred ones and are soft — the B-vs-C columns are exact. And |step| *alone* flatters cold
+chunking, because a cold chunk is blander at its seams than natural speech and consecutive bland
+chunks meet smoothly; the **sign** is what exposes the reset.
 
 ## 3. Request lifecycle
 
@@ -339,17 +392,7 @@ documents** — which is exactly what changed. Only the `full` turn format is im
 here, because that is the one the packer writes; the fallback guard (§2b) survives from
 that run.
 
-**Does it actually help? Yes — measured 2026-09-07, [`bench/INTERLEAVE_AB.md`](bench/INTERLEAVE_AB.md).**
-80 paragraphs (40 en + 40 ms) rendered three ways on the interleave-trained checkpoint: one
-request for the whole paragraph, chunked with an `interleave_id`, and chunked cold. Over 438
-matched consecutive-chunk pairs the interleaved prompt cuts the chunk N→N+1 discontinuity by
-about a quarter — **−0.41 st of register step** [−0.56, −0.26] and **−0.45 dB of level step**
-[−0.59, −0.32] — and on loudness cold chunking is *significantly worse than a one-shot rendering*
-(+0.26 dB [+0.12, +0.41]) while interleaving is significantly better than one. It also recovers
-~70% of the paragraph pitch declination cold chunking throws away (−0.137 vs −0.082 vs −0.161 st/s),
-and at the seam itself cold joins step **up** +0.53 st (the register reset) where interleaved joins
-step **down** −0.35 st. Costs: ~30 ms more silence per join (+1.7% duration), +399 prompt tokens
-with **no latency change** (0.423 s vs 0.427 s), CER unchanged. Two things that new run settles
+**That question is now answered — §2c has the numbers.** Two things the 2026-09-07 run settles
 about this document:
 
 - **§2b's fallback never fired: 0 collapses in 518 chunks** (against 3/40 on the pre-interleave
