@@ -1,6 +1,6 @@
 # Interleaved multi-turn generation: does chunk N+1 sound like it continues chunk N?
 
-Measured **2026-09-07** on **tm-h20 ("box 1024")**, against a **private interleave-trained
+Measured **2026-09-07** on **tm-h20**, against a **private interleave-trained
 checkpoint** — an in-house 1.7B TTS LM packed with interleaved documents, deliberately not named
 here because this document is public. It is the first checkpoint actually trained that way, and so
 the first one on which `interleave_id` ([`INTERLEAVE.md`](../INTERLEAVE.md),
