@@ -45,8 +45,14 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   completes and N+1 sees it on any worker. Only clean finishes are stored (`finish_reason=length`
   means the tokens stop mid-text). `INTERLEAVE_FALLBACK` regenerates a chunk cold if the LM stops
   after a handful of tokens. Voice switches start cold. `GET`/`DELETE /v1/audio/interleave/{id}`
-  inspect/forget an id. No torch import — `tests/test_interleave.py` (44) runs anywhere. Full
-  write-up: `INTERLEAVE.md`.
+  inspect/forget an id. No torch import — `tests/test_interleave.py` (44) runs anywhere.
+  **Measured (2026-09-07, 80 paragraphs / 438 matched chunk pairs, `INTERLEAVE.md` §2c +
+  `bench/INTERLEAVE_AB.md`): the jump between consecutive chunks drops −0.41 st of pitch register
+  [−0.56, −0.26] and −0.45 dB of level [−0.59, −0.32] (≈−25%), the upward register reset at the
+  join (+0.53 st cold) becomes the −0.35 st downward drift continuous speech has, and ~70% of the
+  reply's pitch declination is recovered. Free: +399 prefill tokens, 0.423 s vs 0.427 s LM latency,
+  CER unchanged. Costs ~30 ms more silence per join. `INTERLEAVE_FALLBACK` fired 0/518 (3/40 on the
+  pre-interleave model).** Full write-up: `INTERLEAVE.md`.
 - `app/wrapper.py` — `CUDAGraphsWrapper`: captures one CUDA graph per `(batch, token-length)` bucket.
 - `app/timestretch.py` — `WSOLA`: streaming pitch-preserving time stretch behind the `speaking_rate`
   request field (alias `speed`; default `DEFAULT_SPEAKING_RATE=1.0`, range 0.5–2.0). The LM has no

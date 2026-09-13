@@ -366,6 +366,23 @@ Design and configuration: [INTERLEAVE.md](INTERLEAVE.md).
 > an open-source TTS LM, or an older in-house one — set `INTERLEAVE_STORE=off`**, and check
 > what your vLLM actually loads before relying on the feature.
 
+**Measured effect** (80 paragraphs, 40 English + 40 Malay, ~6.5 chunks each; the same text rendered
+one-shot, with an id, and cold — [bench/INTERLEAVE_AB.md](bench/INTERLEAVE_AB.md)):
+
+| Between consecutive chunks | one request for the whole reply | **with `interleave_id`** | cold (today) |
+|---|---|---|---|
+| Pitch register step, \|st\| | 1.60 | **1.24** | 1.65 |
+| Loudness step, \|dB\| | 1.35 | **1.16** | 1.61 |
+| Signed pitch step at the join, st | +0.43 | **−0.35** | +0.53 ← restarts |
+| Pitch declination over the reply, st/s | −0.161 | **−0.137** | −0.082 |
+| CER % | 0.50 | 0.44 | 0.58 |
+| Median prompt tokens / LM latency s | — | 418 / **0.423** | 19 / 0.427 |
+
+Paired over 438 matched chunk pairs: **−0.41 st [−0.56, −0.26]** of register step and
+**−0.45 dB [−0.59, −0.32]** of loudness step against cold chunking — about a quarter less jump —
+for +399 tokens of prefill that cost no measurable latency. It costs ~30 ms more silence at each
+join (+1.7% duration).
+
 ```bash
 curl -s -D - -X POST localhost:9091/v1/audio/speech -H 'Content-Type: application/json' \
   -d '{"input":"hello my name is husein,","voice":"husein","interleave_id":"room-42",

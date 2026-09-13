@@ -44,7 +44,7 @@ or change rules until `normalizer_agreement.py` is happy.
 
 ## Agreement with the LLM
 
-| Language | All 497 (offline) | Original 300 | 197 harder cases | Through the API, original 300 (instance C, box 1024) |
+| Language | All 497 (offline) | Original 300 | 197 harder cases | Through the API, original 300 (instance C) |
 |---|---|---|---|---|
 | English | 88.8% (135/152) | 90.7% | 86.4% (57/66) | 90.7% |
 | Malay | 86.8% (99/114) | 90.5% | 80.0% (32/40) | 89.2% |
