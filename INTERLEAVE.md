@@ -47,7 +47,7 @@ document, so chunk 3 can attend to chunk 0's prosody:
 > **This only works on a checkpoint packed that way, and that packing is ours alone.**
 > `--interleave_style full` is an in-house GPUPlatform recipe — **no open-source TTS LM is trained
 > on interleaved documents**, and the checkpoints that are are private model repos (the
-> tm-h20 `HF_TOKEN` reads them; a laptop token gets 401). The benefit is therefore a property of
+> H20 `HF_TOKEN` reads them; a laptop token gets 401). The benefit is therefore a property of
 > the *training*, not of the prompt shape: measured on a private interleave-trained checkpoint it
 > cuts the chunk N→N+1 register/level jump ~25% for free
 > ([`bench/INTERLEAVE_AB.md`](bench/INTERLEAVE_AB.md)); on a model
@@ -84,7 +84,7 @@ Where the history comes from: when a turn's LM stream finishes cleanly, its
 
 With history in the prompt the LM can decide the utterance is *already over* and emit
 end-of-speech after 0–8 tokens — the previous turn ends with the final fall and silence it
-produced when it believed that chunk was the whole utterance. Measured on tm-h20 against
+produced when it believed that chunk was the whole utterance. Measured on H20 against
 the pre-interleave model: 3/40 chunks; without history it never happened (0/40). So the LM
 reader **holds the first tokens back** — `4 × words`, floored at 10 (0.2 s) and capped at
 50 (1 s), always below the first decode window so nothing is delayed — and if the stream
@@ -383,7 +383,7 @@ Request fields: `interleave_id` (aliases `request_id`, `context_id`; header
 ## 9. Prior art in this repo, and what to listen for
 
 An earlier attempt at the same idea lives on the unmerged branch `feat/speech-context`
-(`SPEECH_CONTEXT.md`, `bench/context_ab*.py`, a listening page). Its tm-h20 A/B (2026-08-28,
+(`SPEECH_CONTEXT.md`, `bench/context_ab*.py`, a listening page). Its H20 A/B (2026-08-28,
 40 chunks per condition) found this prompt shape gave **no measurable** reduction of the
 pitch/level jump at the joins, and it also tried a second mode (`continue`: one turn, the
 previous tokens as prefix) that scored better but made the LM emit end-of-speech

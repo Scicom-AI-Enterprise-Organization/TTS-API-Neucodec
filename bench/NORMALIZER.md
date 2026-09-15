@@ -4,7 +4,7 @@
 everything that is not speakable as written into words, in the language of the surrounding text,
 for **English, Malay, Mandarin and Tamil**, exactly as the LLM normalizer (`app/prompt.py`) is asked
 to. Pure Python, no model, no network, **~45 µs** per sentence (1.2 ms through the API, against
-**491 ms** for the LLM call, measured on tm-h20 on 2026-09-04).
+**491 ms** for the LLM call, measured on H20 on 2026-09-04).
 
 ## Why
 

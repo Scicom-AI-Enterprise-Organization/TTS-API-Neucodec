@@ -6,7 +6,7 @@ decomposition in *Where the time goes* separates that out.
 
 ## What was measured
 
-**Hardware and topology.** Both services run on **NVIDIA H20-3e** GPUs in the `tm-h20` cluster
+**Hardware and topology.** Both services run on **NVIDIA H20-3e** GPUs in the `H20` cluster
 (3 GPUs in total; the deployment's public hostname says "l40", which is a naming artefact, not the
 hardware):
 
