@@ -1,11 +1,11 @@
-# NeuCodec vs WideCodec — codec A/B on TTS speech tokens (tm-h20)
+# NeuCodec vs WideCodec — codec A/B on TTS speech tokens (H20)
 
 Does swapping the vocoder for **[`Scicom-intl/WideCodec`](https://huggingface.co/Scicom-intl/WideCodec)**
 (44.1 kHz, 0.8 kbps, single codebook) improve the audio the TTS API serves, versus the
 **[`neuphonic/neucodec`](https://github.com/neuphonic/neucodec)** decoder the app ships today
 (24 kHz, vendored under `app/neucodec/`)?
 
-Measured on **1× H20-3e** (tm-h20, GPU 4 + GPU 7), slurm jobs 599 / 600 / 602, 2026-09-02.
+Measured on **1× H20-3e** (GPU 4 + GPU 7), slurm jobs 599 / 600 / 602, 2026-09-02.
 
 ## TL;DR
 
@@ -53,7 +53,7 @@ Integrity checks that passed:
 | Arm B | WideCodec's own bundled package, `decoder_depth=20` → 44.1 kHz, GPU 7 |
 | Arm C | Arm B resampled to 24 kHz — **bandwidth control** |
 | Arm D/E | Arms A/B level-matched — **loudness control** |
-| MOS | UTMOSv2 (`tm-h20-utmosv2`, internal `:8300`), **`reps=16`** |
+| MOS | UTMOSv2 (internal service on `:8300`), **`reps=16`** |
 | Pitch | `audiocheck.py` f0 gates, every arm resampled to a **common 16 kHz** so sample rate is not a variable |
 
 Decode is **one-shot** (whole utterance, single window), not streamed — so this measures each codec's
@@ -208,14 +208,14 @@ makes new numbers directly comparable to the tables above.
 Harness in `bench/widecodec_ab/`, raw results in `bench/results/widecodec_ab_*.jsonl`.
 
 ```bash
-# on tm-h20, work dir /mnt/data/codec-ab  (NOT / -- rootfs runs ~98% full)
+# on H20, work dir /mnt/data/codec-ab  (NOT / -- rootfs runs ~98% full)
 sbatch run.sbatch        # fetch WideCodec, generate tokens once, decode both arms, score
 sbatch run_norm.sbatch   # level-matched rescore
 sbatch run_resyn.sbatch  # real-audio resynthesis diagnostic
 python analyze.py results.jsonl tokens.jsonl
 ```
 
-GPUs are pinned with `CUDA_VISIBLE_DEVICES` and no `--gres`, matching `jobs/tm-h20/tts-api.yaml`.
+GPUs are pinned with `CUDA_VISIBLE_DEVICES` and no `--gres`, matching `jobs/<cluster>/tts-api.yaml`.
 
 ### Gotchas hit building this
 

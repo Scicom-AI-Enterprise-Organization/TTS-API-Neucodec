@@ -154,6 +154,23 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   the one-shot arm has no real boundaries so it is only usable for whole-chunk metrics, and |step| alone
   flatters cold chunking (it is *blander* at its seams than natural speech) — the **sign** is what exposes
   the register reset.
+- `bench/synth/` — **render a sentence file through N checkpoints** for listening/scoring A/Bs
+  (`gen_tokens.py` → `<|s_N|>` ids with offline vLLM, one process per checkpoint, kept as
+  `tokens/<slug>.json`; `decode_tokens.py` → 24 kHz wav with the vendored NeuCodec; `run_models.sh`
+  = both, LM on one GPU and codec on another). Deliberately *not* the serving app — no normalizer,
+  no stitcher — so only the weights differ between models. Three choices that keep it a checkpoint
+  comparison: **one-shot decode** of the whole token stream (the streaming stitcher's ~0.7–1.5 dB
+  envelope tilt is the non-causal decoder, not the model); **prod's loudness treatment applied
+  identically** — raw peaks exceed full scale on ~half the utterances (1.25–1.40 measured), so
+  `normalize_chunk` from `app/main.py` is re-applied in one-shot form and the untouched output kept
+  as float32 in `raw/`, otherwise a PCM_16 write clips and the louder checkpoint wins on volume;
+  and **tokens are kept**, so a decode change re-runs without the LM. `suspect rows` in the log
+  (finish_reason≠stop, or <10 tokens) is the gate to read before trusting a set. Env pins are
+  load-bearing: **vLLM 0.10.2 needs `transformers==4.56.2`** (5.x ⇒ `Qwen2Tokenizer has no attribute
+  all_special_tokens_extended`, after the weights load) and **numpy ≥2.1, not the repo's 1.26.4**
+  (scipy's `np.long` kills `import vllm`). Driving it on a shared GPU box: skill `tts-synth-checkpoints`.
+  First set: `ucc_ai_research/evaluation/tts/synthetic-audio/2026-09-15/` (20 TM voicebot sentences
+  × 3 interleave checkpoints, `TM_English_Normal`, temp 0.6 / rep 1.15).
 - `bench/livekit/` — LiveKit agent stress rig (no-STT/no-LLM agent + load client): measures TTFB and
   per-utterance loudness through a real agent + WebRTC path. See its README for setup and results.
 
@@ -228,7 +245,7 @@ End-to-end RTF 0.16–0.23, and 34 audio-s/wall-s at concurrency 8. `bench/ttfb_
 it. Note two different rule paths: `mode=spoken` is correct, legacy `mode=rule` misreads
 `RM1,250.50` as "ringgit. five zero".
 
-Earlier decomposition, measured 2026-09-04 on tm-h20 (8× H20-3e; prod vLLM, TP=2) with `bench/ttfb_probe.py`, which times the
+Earlier decomposition, measured 2026-09-04 on H20 (8× H20-3e; prod vLLM, TP=2) with `bench/ttfb_probe.py`, which times the
 first **audio** byte on a `pcm` stream (WAV emits its header before any decode, so `bench.py`'s wav TTFB
 is meaningless). Staging's ~1 s decomposed as:
 
@@ -324,6 +341,9 @@ curl -X POST localhost:9091/v1/audio/speech -H 'Content-Type: application/json' 
   -d '{"input":"Hello there","voice":"husein","response_format":"wav","stream":false}' -o out.wav
 
 # benchmark + CER (see bench/)
+# checkpoint A/B listening set: one sentence file -> N checkpoints (GPU box, own venv; bench/synth/README.md)
+bash bench/synth/run_models.sh sentences.txt /out slug1:Scicom-intl/<repo> slug2:Scicom-intl/<repo>
+
 python bench/bench.py --concurrency 1,4,16,50 --out /tmp/bench.json
 python bench/cer_eval.py --wav-dir /tmp/eval --out /tmp/cer.json   # needs faster-whisper + jiwer
 ```
