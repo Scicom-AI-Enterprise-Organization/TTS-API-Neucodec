@@ -5,7 +5,12 @@ text lines on the "tts-input" topic, captures the agent's published audio and
 measures per utterance: TTFB (text sent -> first audible frame), audio duration,
 wall time, active-speech RMS. Writes JSONL rows + a summary.
 
+With --wav-dir it also writes one wav per utterance plus a records.jsonl in the
+shape bench/pitch_stress_score.py reads, so the audio a caller actually hears can be
+scored for pitch/tone/volume steps with the same metric as the API-direct run.
+
   python load_client.py --concurrency 4 --utterances 3 --out c4.json
+  python load_client.py --texts ../pitch_stress_texts.txt --wav-dir lk/ --arm lk_interleave
 """
 
 import argparse
@@ -34,7 +39,7 @@ def frame_db(a):
     return 20 * np.log10(max(r, 1e-6))
 
 
-async def measure_utterance(frames, cut, t_send, timeout, silence_end):
+async def measure_utterance(frames, cut, t_send, timeout, silence_end, want_samples=False):
     """Poll captured frames after index `cut` for speech onset then trailing silence."""
     t_first = None
     t_last_loud = None
@@ -60,8 +65,10 @@ async def measure_utterance(frames, cut, t_send, timeout, silence_end):
     db = 20 * np.log10(np.maximum(rms, 1e-8))
     active = db[db > -50]
     lvl = 20 * np.log10(np.sqrt(np.mean((10 ** (active / 20)) ** 2))) if len(active) else -120.0
+    out_samples = samples if want_samples else None
     return {
         "ok": True,
+        "samples": out_samples,
         "ttfb": round(t_first - t_send, 3),
         "audio_s": round(len(samples) / 24000, 2),
         "wall_s": round(t_last_loud - t_send, 2),
@@ -110,18 +117,33 @@ async def run_room(i, args, rows):
         return
     await asyncio.sleep(0.5)
 
+    texts = args.text_list
     for j in range(args.utterances):
-        text = SENTENCES[j % len(SENTENCES)]
+        text = texts[j % len(texts)]
         cut = len(frames)
         t_send = time.monotonic()
         try:
             await room.local_participant.send_text(text, topic="tts-input")
-            row = await measure_utterance(frames, cut, t_send, args.timeout, args.silence_end)
+            row = await measure_utterance(frames, cut, t_send, args.timeout,
+                                          args.silence_end, want_samples=bool(args.wav_dir))
         except Exception as e:
             row = {"ok": False, "error": repr(e)}
+        samples = row.pop("samples", None)
+        if args.wav_dir and samples is not None and len(samples):
+            import soundfile as sf
+
+            wav = f"{args.arm}_t{j:02d}_r{i}_c{args.concurrency}.wav"
+            sf.write(f"{args.wav_dir}/{wav}", samples, 24000, subtype="PCM_16")
+            # the scorer's record shape; joins are unknown through LiveKit (the agent
+            # chops the text itself), so it falls back to seams detected from pauses.
+            row["record"] = {"arm": args.arm, "text_id": j, "rep": i,
+                             "concurrency": args.concurrency, "text": text,
+                             "wav": wav, "sr": 24000, "joins": [], "n_pieces": 0,
+                             "duration_s": round(len(samples) / 24000, 3)}
         row.update({"room": i, "utt": j, "text": text[:36]})
         rows.append(row)
-        print(json.dumps(row, ensure_ascii=False), flush=True)
+        print(json.dumps({k: v for k, v in row.items() if k != "record"},
+                         ensure_ascii=False), flush=True)
 
     if args.save_wav and i == 0 and frames:
         import soundfile as sf
@@ -142,7 +164,17 @@ async def main():
     p.add_argument("--prefix", default=f"stress-{int(time.time())}")
     p.add_argument("--save-wav", default="")
     p.add_argument("--out", default="")
+    p.add_argument("--texts", default="", help="one utterance per line; default: SENTENCES")
+    p.add_argument("--wav-dir", default="", help="save one wav per utterance + records.jsonl")
+    p.add_argument("--arm", default="livekit", help="label for the scorer records")
     args = p.parse_args()
+    args.text_list = SENTENCES
+    if args.texts:
+        args.text_list = [l.strip() for l in open(args.texts, encoding="utf-8") if l.strip()]
+    if args.wav_dir:
+        import os
+
+        os.makedirs(args.wav_dir, exist_ok=True)
 
     rows = []
     t0 = time.monotonic()
@@ -168,9 +200,16 @@ async def main():
     if bad:
         summary["error_samples"] = [r.get("error") for r in bad[:3]]
     print("SUMMARY " + json.dumps(summary))
+    if args.wav_dir:
+        with open(f"{args.wav_dir}/records.jsonl", "a") as f:
+            for r in rows:
+                if r.get("record"):
+                    f.write(json.dumps(r["record"], ensure_ascii=False) + "\n")
     if args.out:
         with open(args.out, "w") as f:
-            json.dump({"summary": summary, "rows": rows}, f, ensure_ascii=False, indent=1)
+            json.dump({"summary": summary,
+                       "rows": [{k: v for k, v in r.items() if k != "record"} for r in rows]},
+                      f, ensure_ascii=False, indent=1)
 
 
 if __name__ == "__main__":

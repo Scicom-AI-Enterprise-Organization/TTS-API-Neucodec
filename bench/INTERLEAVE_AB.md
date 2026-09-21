@@ -334,7 +334,12 @@ tokens, prompt size, latency, finish reason), `acoustics.jsonl`, `quality.jsonl`
    the right setting.
 3. **`INTERLEAVE_FALLBACK` can be left on but no longer earns its keep** (0/518). Keep it as
    insurance for other checkpoints; it costs nothing when it does not fire.
-4. **Next**: carry the locked `STREAM_NORMALIZE` gain through the turn store, so the loudness
-   continuity the LM now provides is not re-broken by a per-request gain; and look at the extra 30 ms
-   of join silence — trimming trailing-silence tokens from stored turns is the obvious lever, and
-   `INTERLEAVE.md` §9 already lists it.
+4. **Next**: look at the extra 30 ms of join silence — trimming trailing-silence tokens from
+   stored turns is the obvious lever, and `INTERLEAVE.md` §9 already lists it.
+   ~~carry the locked `STREAM_NORMALIZE` gain through the turn store~~ — **tried 2026-09-18 and it
+   is wrong**: sharing the gain across a reply's chunks raised chunk-to-chunk level sd from
+   1.19 dB to 1.45 dB and the share of replies with a >3 dB step from 29% to 52%, because a shared
+   gain preserves each chunk's deviation instead of correcting it. Per-chunk normalisation is the
+   right design. Implemented and left off as `STREAM_NORMALIZE_CARRY`; see
+   `bench/PITCH_TONE_AB.md` and `scicom/dataset/tm-voice/LOUDNESS.md` for why the residual is the
+   speaker's recordings, not the gain.

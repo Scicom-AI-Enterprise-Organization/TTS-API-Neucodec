@@ -123,11 +123,24 @@ FALLBACK_MAX_TOKENS = TOKENS_PER_SECOND
 @dataclass
 class Turn:
     """One finished utterance: the normalized text that was prompted and the speech
-    tokens the LM produced for it."""
+    tokens the LM produced for it.
+
+    `sq`/`nsamp`/`peak` are the loudness of the audio that was emitted for this turn --
+    sum of squares and count over ACTIVE samples, and the raw peak. They exist so the
+    next chunk of the same reply can normalize against the reply's accumulated level
+    instead of its own noisy first second (see STREAM_NORMALIZE_CARRY in app/main.py).
+    They arrive later than the rest of the turn: the tokens are committed when the LM
+    finishes, but the audio has not all been emitted yet, so the stitcher fills them in
+    with `update_loudness` at end of stream. Zero means "not measured", which is what a
+    pre-carry store file and a turn whose stream died both look like.
+    """
     text: str
     tokens: list[int]
     voice: str
     ts: float = 0.0               # request arrival time; keeps turns in text order
+    sq: float = 0.0               # sum of squares over active samples
+    nsamp: int = 0                # active sample count
+    peak: float = 0.0             # raw (pre-gain) peak
 
     def to_json(self) -> dict:
         return asdict(self)
@@ -139,6 +152,9 @@ class Turn:
             tokens=[int(t) for t in d.get('tokens', [])],
             voice=str(d.get('voice', '')),
             ts=float(d.get('ts', 0.0)),
+            sq=float(d.get('sq', 0.0)),
+            nsamp=int(d.get('nsamp', 0)),
+            peak=float(d.get('peak', 0.0)),
         )
 
 
@@ -148,6 +164,20 @@ def seconds_to_tokens(seconds: float) -> int:
 
 def total_tokens(turns: list[Turn]) -> int:
     return sum(len(t.tokens) for t in turns)
+
+
+def loudness_of(turns: list[Turn]) -> tuple[float, int, float]:
+    """(sum of squares, active samples, peak) over every turn that has been measured.
+
+    Turns whose audio was never measured contribute nothing rather than a zero level,
+    so a partially-populated history still gives a usable estimate. Note a left-trimmed
+    turn keeps the loudness of its whole original audio while its tokens are cut: the
+    number is a level, not an energy budget, so the approximation is harmless.
+    """
+    sq = sum(t.sq for t in turns if t.nsamp)
+    n = sum(t.nsamp for t in turns if t.nsamp)
+    peak = max((t.peak for t in turns if t.nsamp), default=0.0)
+    return sq, n, peak
 
 
 def retain_last(turns: list[Turn], max_retain: int) -> list[Turn]:
@@ -322,6 +352,12 @@ class InterleaveStore:
     def delete(self, key: str) -> bool:
         raise NotImplementedError
 
+    def update_loudness(self, key: str, ts: float, sq: float, nsamp: int, peak: float) -> bool:
+        """Fill in the loudness of the turn committed at `ts`. Returns whether it landed
+        -- it does not when the turn has already been trimmed out of the history, which
+        is normal and not worth logging."""
+        raise NotImplementedError
+
     def _merge(self, turns: list[Turn], turn: Turn) -> list[Turn]:
         turns = turns + [turn]
         turns.sort(key=lambda t: t.ts)        # overlapping requests: keep text order
@@ -354,6 +390,18 @@ class MemoryInterleaveStore(InterleaveStore):
 
     def delete(self, key: str) -> bool:
         return self._data.pop(key, None) is not None
+
+    def update_loudness(self, key, ts, sq, nsamp, peak) -> bool:
+        item = self._data.get(key)
+        if item is None:
+            return False
+        updated, turns = item
+        for t in turns:
+            if t.ts == ts:
+                t.sq, t.nsamp, t.peak = float(sq), int(nsamp), float(peak)
+                self._data[key] = (updated, turns)
+                return True
+        return False
 
     def _sweep(self):
         now = time.time()
@@ -444,6 +492,17 @@ class FileInterleaveStore(InterleaveStore):
         except FileNotFoundError:
             return False
 
+    def update_loudness(self, key, ts, sq, nsamp, peak) -> bool:
+        path = self._path(key)
+        with self._Locked(self._lock_path):
+            turns = self._read(path)
+            for t in turns:
+                if t.ts == ts:
+                    t.sq, t.nsamp, t.peak = float(sq), int(nsamp), float(peak)
+                    self._write(path, turns)
+                    return True
+        return False
+
     def _sweep(self):
         now = time.time()
         if now - self._last_sweep < self.ttl_s / 4:
@@ -527,6 +586,20 @@ class RequestInterleave:
         except Exception as e:  # a lost history must never fail the request
             logging.warning(f'interleave store: commit for {self.key!r} failed: {e}')
             return None
+
+    def loudness(self) -> tuple[float, int, float]:
+        """The reply's accumulated loudness so far, for seeding this request's gain."""
+        return loudness_of(self.turns)
+
+    def update_loudness(self, sq: float, nsamp: int, peak: float) -> bool:
+        """Record what this turn actually sounded like, once its audio has been emitted."""
+        if not nsamp:
+            return False
+        try:
+            return self.store.update_loudness(self.key, self.ts, sq, nsamp, peak)
+        except Exception as e:      # a lost measurement must never fail the request
+            logging.warning(f'interleave store: loudness update for {self.key!r} failed: {e}')
+            return False
 
     def headers(self) -> dict:
         # header values must be latin-1 clean (Starlette would 500 encoding them);

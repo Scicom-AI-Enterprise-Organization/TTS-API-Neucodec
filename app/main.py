@@ -611,6 +611,7 @@ async def stream_speech(
     request,
     stream_format="audio",
     stream_normalize=STREAM_NORMALIZE,
+    stream_normalize_carry=STREAM_NORMALIZE_CARRY,
     speaking_rate=DEFAULT_SPEAKING_RATE,
     interleave=None,
     extra_headers=None,
@@ -955,11 +956,26 @@ async def stream_speech(
         norm_n = 0
         norm_peak = 0.0
         norm_gain_db = None
+        # Seed from the rest of this reply (STREAM_NORMALIZE_CARRY). Each LiveKit chunk
+        # is its own request, so without this every chunk re-estimates its gain from its
+        # own first second and they land at different levels -- measured: 43% of replies
+        # carried a >3 dB step between chunks. With it, every chunk of one reply is
+        # normalized against the same accumulated statistic, and the estimate is drawn
+        # from whole previous chunks rather than one biased opening.
+        if stream_normalize and stream_normalize_carry and interleave is not None:
+            norm_sq, norm_n, norm_peak = interleave.loudness()
+            if norm_n:
+                logging.debug(
+                    f'interleave {interleave.key}: seeded loudness from '
+                    f'{norm_n / sr:.1f}s of prior audio'
+                )
         # Freeze the gain once this much voiced audio has been seen: a causal AGC that
         # keeps adapting produces audible mid-utterance gain drift ("damping"); a single
         # per-utterance trim from the first second is within ~1 dB of the full-utterance
         # estimate and moves nothing afterwards. Later peaks are absorbed by the limiter.
-        norm_lock_n = int(1.0 * sr)
+        norm_lock_n = int(NORM_LOCK_S * sr)
+        # This turn's own loudness, kept apart from the seeded estimate above.
+        own_sq, own_n, own_peak = 0.0, 0, 0.0
         # Peaky voices (crest factor ~19 dB, raw peaks already near full scale) hard-clip
         # audibly when RMS-boosted. Cap the boost so gained peaks stay <= LIMITER_DRIVE,
         # and round whatever still exceeds the knee with a tanh soft clip instead of the
@@ -968,10 +984,20 @@ async def stream_speech(
         LIMITER_DRIVE = 1.4
 
         def normalize_chunk(y):
-            nonlocal norm_sq, norm_n, norm_peak, norm_gain_db
+            nonlocal norm_sq, norm_n, norm_peak, norm_gain_db, own_sq, own_n, own_peak
+            active = y[np.abs(y) > 10 ** (-50 / 20)]        # gate out silence (< -50 dBFS)
+            # `own_*` measures THIS turn and never stops, so what gets handed to the next
+            # chunk is the whole turn's level rather than whatever had been emitted by the
+            # time the gain locked -- the locked prefix is the loud opening, which is the
+            # bias this whole mechanism exists to remove. The estimate accumulators keep
+            # the seed mixed in; the measurement must not, or summing the history would
+            # count every earlier chunk again.
+            if len(active):
+                own_sq += float(np.sum(active.astype(np.float64) ** 2))
+                own_n += len(active)
+                own_peak = max(own_peak, float(np.abs(y).max()))
             locked = norm_gain_db is not None and norm_n >= norm_lock_n
             if not locked:
-                active = y[np.abs(y) > 10 ** (-50 / 20)]    # gate out silence (< -50 dBFS)
                 if len(active):
                     norm_sq += float(np.sum(active.astype(np.float64) ** 2))
                     norm_n += len(active)
@@ -1091,6 +1117,13 @@ async def stream_speech(
         elif prev_xf is not None and len(prev_xf):
             yield counted(to_bytes(prev_xf))
             await asyncio.sleep(0)
+
+        # What this turn actually sounded like, for the next chunk of the same reply.
+        # It has to happen here and not at commit time: the tokens are committed when
+        # the LM finishes, which is before most of the audio exists. `update_loudness`
+        # is a no-op when the turn has already aged out of the history.
+        if stream_normalize and stream_normalize_carry and interleave is not None and own_n:
+            interleave.update_loudness(own_sq, own_n, own_peak)
 
     async def audio_stream_legacy():
         buffer = []
@@ -1293,6 +1326,10 @@ class TTSRequest(NormalizeRequest):
     # per-request override of the STREAM_NORMALIZE env default (utterance loudness
     # normalization toward TARGET_RMS_DB in the crossfade stitcher).
     stream_normalize: bool = STREAM_NORMALIZE
+    # Carry the loudness estimate across the chunks that share an `interleave_id`, so a
+    # chunked reply keeps one level instead of re-estimating per chunk (env
+    # STREAM_NORMALIZE_CARRY). No effect without an interleave_id.
+    stream_normalize_carry: bool = STREAM_NORMALIZE_CARRY
     # speaking rate: 1.0 = as generated, 1.3 = 30% faster, 0.8 = slower; pitch preserved
     # (WSOLA time stretch on the decoded audio, app/timestretch.py). `speed` is accepted as
     # an alias so OpenAI-compatible clients (e.g. the livekit openai TTS plugin) work as is.
@@ -1625,6 +1662,7 @@ async def tts_stream(data: TTSRequest, request: Request = None):
         request=request,
         stream_format=data.stream_format,
         stream_normalize=data.stream_normalize,
+        stream_normalize_carry=data.stream_normalize_carry,
         speaking_rate=data.speaking_rate,
         interleave=interleave,
         extra_headers=interleave.headers() if interleave is not None else None,

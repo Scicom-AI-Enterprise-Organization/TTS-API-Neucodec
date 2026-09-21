@@ -7,6 +7,7 @@ publish) while removing every other moving part.
 
 Run:  python stress_agent.py dev
 Env:  LIVEKIT_URL / LIVEKIT_API_KEY / LIVEKIT_API_SECRET / TTS_BASE_URL / TTS_VOICE
+      TTS_INTERLEAVE=true|false  -- send X-Interleave-Id (default true), see below
 """
 
 import asyncio
@@ -14,6 +15,7 @@ import logging
 import math
 import os
 
+import openai as openai_sdk
 from dotenv import load_dotenv
 from livekit.agents import (
     Agent,
@@ -31,20 +33,44 @@ logger = logging.getLogger("tts-stress-agent")
 TTS_BASE_URL = os.environ.get("TTS_BASE_URL", "http://127.0.0.1:9099/v1")
 TTS_VOICE = os.environ.get("TTS_VOICE", "husein")
 TTS_MODEL = os.environ.get("TTS_MODEL", "TTS-model")
+TTS_INTERLEAVE = os.environ.get("TTS_INTERLEAVE", "true").lower() == "true"
+
+
+def _tts(room_name: str):
+    """The TTS plugin, optionally carrying this room's interleave id.
+
+    `StreamAdapter` cuts one reply into several `/v1/audio/speech` calls, and by
+    default the call for chunk N+1 carries no trace of chunk N -- the LM starts cold
+    and picks a fresh register, pace and energy at every join (INTERLEAVE.md §1).
+    The plugin drives the stock `openai` client and cannot add body fields, so the
+    id goes in the `X-Interleave-Id` header, which the API reads exactly like the
+    `interleave_id` body field (app/main.py, INTERLEAVE.md §6).
+
+    One AgentSession = one TTS instance = one client = one room's id, so every chunk
+    of a room is generated in the context of the ones before it (bounded by
+    MAX_RETAIN_INTERLEAVE turns and INTERLEAVE_MAX_S seconds server-side) and rooms
+    never share history. TTS_INTERLEAVE=false is the cold arm, for the A/B.
+
+    Only worth switching on against an interleave-trained checkpoint -- on anything
+    else the same prompt shape is a regression risk (bench/INTERLEAVE_AB.md §7).
+    """
+    common = dict(model=TTS_MODEL, voice=TTS_VOICE, response_format="pcm")
+    if not TTS_INTERLEAVE:
+        return openai.TTS(api_key="unused", base_url=TTS_BASE_URL, **common)
+    client = openai_sdk.AsyncClient(
+        api_key="unused",
+        base_url=TTS_BASE_URL,
+        default_headers={"X-Interleave-Id": room_name},
+        max_retries=0,          # a retried chunk would be stored twice
+    )
+    return openai.TTS(client=client, **common)
 
 
 async def entrypoint(ctx: JobContext):
     ctx.log_context_fields = {"room": ctx.room.name}
+    logger.info(f"interleave {'ON' if TTS_INTERLEAVE else 'OFF'} for room {ctx.room.name}")
 
-    session = AgentSession(
-        tts=openai.TTS(
-            model=TTS_MODEL,
-            voice=TTS_VOICE,
-            api_key="unused",
-            base_url=TTS_BASE_URL,
-            response_format="pcm",
-        ),
-    )
+    session = AgentSession(tts=_tts(ctx.room.name))
 
     def on_text(reader, participant_identity):
         async def speak():

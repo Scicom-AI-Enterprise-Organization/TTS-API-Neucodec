@@ -55,6 +55,26 @@ STREAM_MAX_CHUNK_S = float(os.environ.get('STREAM_MAX_CHUNK_S', '10.0'))
 # gives the non-causal decoder real history, pulling each window's interior
 # toward the one-shot result. Seconds of audio (x50 = tokens).
 STREAM_PAST_CONTEXT_S = float(os.environ.get('STREAM_PAST_CONTEXT_S', '3.0'))
+# Seconds of ACTIVE (voiced) audio the loudness estimate collects before the gain locks.
+# Raising it to 2.0 was tried on the theory that locking at 1.0 s locks on the loudest
+# second (speech declines; every arm opens 1.2-2.2 dB above its own body) and so
+# under-gains short chunks by a length-dependent amount. Measured on 360 chunked
+# utterances per setting (bench/PITCH_TONE_AB.md): chunk-to-chunk level sd inside one
+# reply was 1.19 dB at 1.0 s and 1.18 dB at 2.0 s -- a wash. Left at 1.0 s, which is
+# also the faster lock. The knob stays because it is the obvious thing to try again if
+# the decode windows change.
+NORM_LOCK_S = float(os.environ.get('NORM_LOCK_S', '1.0'))
+# Carry the loudness estimate across the chunks of one `interleave_id`: chunk N+1 would
+# normalize against the reply's accumulated active-RMS instead of its own first second
+# (app/interleave.py Turn.sq/nsamp/peak). `bench/INTERLEAVE_AB.md` proposed this; it is
+# implemented, measured and DEFAULT OFF because it makes the thing it was meant to fix
+# WORSE -- chunk-to-chunk level sd 1.19 dB -> 1.45 dB, and replies carrying a >3 dB step
+# 29% -> 52% (360 utterances per arm). The reason is now clear: seeding from history is
+# a shared gain by another name, and a shared gain preserves each chunk's own deviation
+# instead of correcting it -- exactly what running with no gain at all (sd 1.87 dB) does,
+# only less so. Per-chunk normalization is the right design. Keep the code so nobody
+# rebuilds the idea from the doc; do not turn it on without re-measuring.
+STREAM_NORMALIZE_CARRY = os.environ.get('STREAM_NORMALIZE_CARRY', 'false').lower() == 'true'
 TARGET_RMS_DB = float(os.environ.get('TARGET_RMS_DB', '-16.0'))
 MAX_GAIN_DB = float(os.environ.get('MAX_GAIN_DB', '12.0'))
 GAIN_SLEW_DB = float(os.environ.get('GAIN_SLEW_DB', '1.0'))
