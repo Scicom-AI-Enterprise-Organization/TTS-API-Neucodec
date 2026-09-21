@@ -266,8 +266,12 @@ deployment — app on one H20, LM a **TP=4 vLLM on another host** — measured o
 RTF p50 0.096→0.152, **181.7 audio-s/s at c=32** with 0 errors and eager decode, i.e. 2.2× the
 H100 row below at lower concurrency because the codec GPU contends with nothing. `lm_probe`
 splits that 102 ms as prefill 9 ms / **autoregressive generation of the first 47 tokens 90 ms
-(88%)** / codec+stitcher+HTTP ~12 ms — so TTFB work has to aim at the LM, and 557 tok/s on TP=4
-against prod's ~530 on TP=2 says to sweep TP before anything harder. Through a real LiveKit
+(88%)** / codec+stitcher+HTTP ~12 ms — so TTFB work has to aim at the LM. The TP sweep is **done**
+(2026-09-22, same node, same client): **TP=1 469 tok/s, TP=2 498, TP=4 557** — TP=4 is the right
+setting and there is no free win there. At batch 1 the ranks run at **98% occupancy and 14%
+memory-bandwidth utilisation**, with the co-tenant STT engine idle and rank 3 no slower than
+rank 0 — so decode is launch/sync-bound (many tiny kernels per token), not bandwidth-bound and
+not contended. Through a real LiveKit
 agent on the same box TTFB p50 is **225-237 ms** (LiveKit adds ~130 ms, and fattens p95/p50 from
 ~1.15× to 2.2-2.5×), against 462 ms on the previous single-box stack.) (measured 2026-09-05 against the staging deployment: vLLM TP=2 on
 2× H20-3e + the app on 1× H20-3e with 4 workers). Headline: the rule path and `mode=llm` are

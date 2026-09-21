@@ -267,11 +267,56 @@ The first window is `playback_speed*50 + overlap*50` = 0.75×50 + 0.2×50 ≈ 47
 `lm_probe` puts token 47 on the wire at 90 ms. **Autoregressive decode is ~88% of TTFB**, which
 is where any further TTFB work has to aim.
 
-⚠ **557 tok/s on TP=4 is suspicious.** Prod's TP=2 measured ~530 — so four H20s buy 5% over two.
-A 1.7B bf16 model is ~3.4 GB against ~4 TB/s of HBM; batch-1 decode should be nearer 1000 tok/s
-on a *single* card. The all-reduce per layer is plausibly costing more than the extra bandwidth
-returns. Sweep TP=1/2/4 with `lm_probe.py` before considering anything harder — at 1000 tok/s
-TTFB would fall to ~60 ms with no new code.
+### The TP sweep — measured 2026-09-22, and it refuted the guess that prompted it
+
+This section previously carried a warning that 557 tok/s on TP=4 looked "suspicious", reasoning
+that a 3.4 GB model against ~4 TB/s of HBM should decode nearer 1000 tok/s on a single card, and
+that four H20s buying only 5% over prod's TP=2 meant the all-reduce was costing more than it
+returned. **All of that was wrong.** The sweep, run on one node with one client so the arms are
+actually comparable:
+
+| TP | GPUs | tok/s | token 47 arrives | TTFB p50 (c=1) | TTFB p50 (c=8) | RTF p50 (c=8) |
+|---|---|---|---|---|---|---|
+| 1 | 4 | **469** | 0.107 s | 0.119 s | 0.134 s | 0.127 |
+| 2 | 4,5 | **498** | 0.102 s | 0.113 s | 0.120 s | 0.110 |
+| **4** | 4–7 | **557** | 0.090 s | **0.102 s** | 0.117 s | 0.109 |
+
+**TP=4 is the fastest of the three and the right setting.** TP=1 is 16% slower, not faster. The
+"5%" figure came from comparing against prod's ~530 tok/s on a *different node with different
+co-tenants* — an invalid comparison; on the same node TP=2 is 498, so TP=4 buys 11.8%. And the
+bandwidth ceiling was the wrong model entirely, as the next paragraph shows. There is no free
+win here: the sweep is done, and re-running it is only worth it if the hardware changes.
+
+### Why it is slow, measured rather than reasoned
+
+Sampling all eight GPUs on the engine node while driving batch-1 decode:
+
+| GPU | role | util | **memory-bandwidth util** |
+|---|---|---|---|
+| 0–3 | STT engine (separate tenant) | 0% | 0% |
+| 4 | TTS rank 0 | 98.1% | 13.9% |
+| 5 | TTS rank 1 | 98.3% | 13.8% |
+| 6 | TTS rank 2 | 98.0% | 13.8% |
+| 7 | TTS rank 3 (+ the 1020 API jobs) | 98.3% | 13.8% |
+
+Two hypotheses die here. **It is not rank contention** — rank 3 shares its GPU with `tts-api-1020`
+and `stt-api-1020`, and in TP every token ends at a barrier so one slow rank would gate the step,
+but rank 3 reads 98.3% against rank 0's 98.1% and the STT engine is completely idle. **And the
+ranks are not idling on all-reduce** — they are pegged at 98% occupancy.
+
+What they are *not* doing is moving data: **14% of memory bandwidth**. Busy essentially all the
+time while moving almost nothing is the signature of many tiny kernels per token — launch- and
+sync-bound, not bandwidth-bound. That also explains the shape of the sweep: TP helps because it
+shrinks each rank's slice, and the gains decay because the fixed per-kernel overhead does not
+shrink with it.
+
+This is the regime a **megakernel** targets — fusing the forward pass into one persistent kernel
+removes exactly the per-launch and inter-op cost that 98%-occupancy-at-14%-bandwidth is made of.
+Note that this contradicts the advice further down about the codec, which is a different claim
+about a different component: for the codec, CUDA graphs are the unpulled lever and capture most
+of the same win for an env var. For the **LM**, this measurement is the best support there is for
+a fused kernel, and TP=1 is the configuration it would have to be built on (published megakernel
+work is single-GPU; fusing cross-rank collectives is research).
 
 ## Through a real LiveKit agent + WebRTC (same box, `bench/livekit/`)
 
