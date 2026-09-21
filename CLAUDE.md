@@ -171,8 +171,32 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   (scipy's `np.long` kills `import vllm`). Driving it on a shared GPU box: skill `tts-synth-checkpoints`.
   First set: `ucc_ai_research/evaluation/tts/synthetic-audio/2026-09-15/` (20 TM voicebot sentences
   × 3 interleave checkpoints, `TM_English_Normal`, temp 0.6 / rep 1.15).
+- `bench/latency_bench.py` — **TTFB + end-to-end + RTF with the full percentile spread**
+  (p10/p50/p90/p95/p99) under closed-loop concurrency. Use this and not `bench/bench.py` for
+  latency: that one requests `wav`, and a wav response emits its 44-byte header before a single
+  token is decoded, so its "TTFB" times the header and reads ~0 whatever the stack is doing. This
+  streams `pcm`, where the first byte IS audio. Also reports `lead` — audio produced minus wall
+  time when the stream ends, i.e. the client's buffer; negative means a caller would have
+  stalled. Latest numbers and the topology they were taken on: `bench/TTFB.md` (2026-09-21).
+- `bench/pitch_stress.py` + `bench/pitch_stress_score.py` — **pitch / tone / volume stress test**, built
+  for the demo report of "calm, even tone, then suddenly loud and excited part-way through". Arms
+  separate the three mechanisms that sound identical: one request with `stream_normalize=false` is the
+  LM alone, +normalizer is the stitcher's gain, +chunking is the chunk joins, +`interleave_id` is what
+  interleaving takes back. The headline is a **rate of audible events** (two adjacent 0.5 s voiced
+  windows where level rises ≥3 dB *and* register ≥1.5 st together) — a mean is what hides a one-off
+  jump. Verdict (`bench/PITCH_TONE_AB.md`, 840 utterances, 0 errors): **the normalizer is not the
+  cause** (gain off is slightly *worse*), chunk joins step **+2.4 dB and +1.7 st upward at two-thirds
+  of joins**, and the floor is the LM itself (31 events/1k in a single un-chunked request). Through
+  LiveKit 42/120 utterances carry an audible jump; `X-Interleave-Id` from the agent takes that to
+  35/120 for +141 ms TTFB. Two traps: an event window that is half pause reads as a huge fake level
+  jump (hence 70%-voiced windows and voiced-only levels — without it the same run reports 3× the
+  events), and **librosa 1.0.0 segfaults in `pyin`** on numba 0.67 / numpy 2.2 (exit 139, no
+  traceback) — pin `librosa==0.11.0`.
 - `bench/livekit/` — LiveKit agent stress rig (no-STT/no-LLM agent + load client): measures TTFB and
-  per-utterance loudness through a real agent + WebRTC path. See its README for setup and results.
+  per-utterance loudness through a real agent + WebRTC path, and with `--wav-dir` saves one wav per
+  utterance for `bench/pitch_stress_score.py`. `TTS_INTERLEAVE=true` (default) makes the agent send
+  `X-Interleave-Id: <room>` so the chunks of one reply share prosody (`INTERLEAVE.md` §6).
+  See its README for setup and results.
 
 ## Decode pipeline internals (`app/main.py`)
 
@@ -236,7 +260,16 @@ for ~4.6 s of audio (RTF ≈0.15).
 
 ### Time to first byte (TTFB)
 
-**Full write-up: `bench/TTFB.md`** (measured 2026-09-05 against the staging deployment: vLLM TP=2 on
+**Full write-up: `bench/TTFB.md`** (a 2026-09-21 update at the end covers the split-box
+deployment — app on one H20, LM a **TP=4 vLLM on another host** — measured on-box with
+`bench/latency_bench.py`: TTFB p50 **102 ms** single-stream and **195 ms at concurrency 32**,
+RTF p50 0.096→0.152, **181.7 audio-s/s at c=32** with 0 errors and eager decode, i.e. 2.2× the
+H100 row below at lower concurrency because the codec GPU contends with nothing. `lm_probe`
+splits that 102 ms as prefill 9 ms / **autoregressive generation of the first 47 tokens 90 ms
+(88%)** / codec+stitcher+HTTP ~12 ms — so TTFB work has to aim at the LM, and 557 tok/s on TP=4
+against prod's ~530 on TP=2 says to sweep TP before anything harder. Through a real LiveKit
+agent on the same box TTFB p50 is **225-237 ms** (LiveKit adds ~130 ms, and fattens p95/p50 from
+~1.15× to 2.2-2.5×), against 462 ms on the previous single-box stack.) (measured 2026-09-05 against the staging deployment: vLLM TP=2 on
 2× H20-3e + the app on 1× H20-3e with 4 workers). Headline: the rule path and `mode=llm` are
 indistinguishable at **~235 ms wall / ~115 ms on-box** because `SKIP_PLAIN` + `RULE_FIRST` skip the
 LLM on 99.8% of the 497-sentence corpus; when a request does reach the LLM it costs **+633 ms**.
@@ -321,6 +354,7 @@ uv run --with pytest --with opentelemetry-sdk -- pytest tests/test_tracing.py -v
 uv run --with aiohttp --with pytest -- pytest tests/test_llm_normalizer.py -v  # no GPU deps; `set -a; source .env; set +a` first to include the live LLM tests
 
 # TTFB / first-window tooling (talks to a running app; see "Time to first byte")
+uv run --with aiohttp python bench/latency_bench.py --url http://127.0.0.1:9091 --concurrency 1,4,8,16,32   # TTFB + e2e + RTF, p10/p50/p90/p95/p99 (pcm, so TTFB is the first AUDIO byte)
 python bench/ttfb_probe.py --url http://127.0.0.1:9091 --playback 1.5,0.75 --overlap 0.2 --reps 3   # first-audio-byte latency + client stall margin
 uv run --with aiohttp python bench/ttfb_report.py --url http://127.0.0.1:9091 --reps 5   # TTFB + end-to-end per normalizer mode (rules vs llm); writes bench/TTFB.md's numbers
 python bench/lm_probe.py --gates 35,60,85,110          # vLLM alone: prefill, tok/s, arrival of the N-th token (source .env first)

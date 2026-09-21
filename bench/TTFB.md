@@ -215,3 +215,111 @@ print(sum(1 for c in CORPUS if needs_normalization(c[3]) and has_unspoken(sp(c[3
   post-header figure either way.
 - The LLM normalizer's 633 ms is a round trip to a model on another cluster through a proxy; it
   will move with that proxy's load and is not a property of this app.
+
+---
+
+# Update 2026-09-21 — the split-box deployment (app + remote TP=4 engine)
+
+A second deployment measured on-box against `127.0.0.1`, so unlike everything above there is
+**no client round trip in these numbers**. Topology is different too, and that is the point:
+the app runs on one H20 (GPU 7, 4 uvicorn workers, eager decode, `MAX_BATCH_SIZE=8`,
+`DEFAULT_PLAYBACK_SPEED=0.75`, normalizer `llm` + `SKIP_PLAIN` + `RULE_FIRST`) while the LM is
+a **TP=4 vLLM on a different host**. The codec GPU therefore contends with nothing.
+
+Tool: `bench/latency_bench.py` — written for this because `bench/bench.py` requests
+`response_format=wav`, and a wav response emits its 44-byte header before a single token is
+decoded, so its "TTFB" measures the header and reads ~0 whatever the stack is doing. This one
+streams `pcm`, where the first byte IS audio, and reports p10/p95/p99.
+
+## TTFB — first audio byte, seconds
+
+| conc | mean | p10 | p50 | p90 | p95 | p99 | max |
+|---|---|---|---|---|---|---|---|
+| 1 | 0.102 | 0.101 | **0.102** | 0.103 | 0.104 | 0.104 | 0.104 |
+| 4 | 0.113 | 0.109 | 0.111 | 0.116 | 0.128 | 0.137 | 0.137 |
+| 8 | 0.120 | 0.115 | 0.117 | 0.128 | 0.141 | 0.159 | 0.159 |
+| 16 | 0.136 | 0.121 | 0.125 | 0.162 | 0.187 | 0.227 | 0.227 |
+| 32 | 0.253 | 0.139 | **0.195** | 0.459 | **0.489** | 0.581 | 0.668 |
+
+## End-to-end and RTF (~5.2 s of audio per request)
+
+| conc | e2e p50 | e2e p95 | RTF p50 | RTF p95 | audio-s/wall-s | req/s | min client lead | errors |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 0.451 | 0.971 | 0.096 | 0.108 | 10.4 | 2.0 | 1.87 s | 0 |
+| 4 | 0.564 | 0.959 | 0.103 | 0.114 | 36.3 | 7.0 | 1.84 s | 0 |
+| 8 | 0.576 | 1.050 | 0.109 | 0.127 | 65.9 | 12.4 | 1.89 s | 0 |
+| 16 | 0.621 | 1.152 | 0.117 | 0.144 | 123.7 | 23.6 | 1.76 s | 0 |
+| 32 | 0.874 | 1.372 | 0.152 | 0.292 | **181.7** | 34.2 | 1.36 s | 0 |
+
+396 requests, **0 errors, 0 stalls**. For scale, the CLAUDE.md table's best is 83.9 audio-s/s at
+concurrency 50 on one H100 with CUDA graphs + MPS; this is 2.2× that at lower concurrency with
+**eager** decode, because the LM is off the box and the codec GPU contends with nothing.
+
+## Where the 102 ms goes (`bench/lm_probe.py` against the same engine)
+
+| stage | time | share |
+|---|---|---|
+| prefill + scheduling (`t_first_token`) | 9 ms | 9% |
+| **generating the first window** (47 tokens @ 557 tok/s) | **90 ms** | **88%** |
+| codec decode + stitcher + HTTP | ~12 ms | 12% |
+
+The first window is `playback_speed*50 + overlap*50` = 0.75×50 + 0.2×50 ≈ 47 tokens, and
+`lm_probe` puts token 47 on the wire at 90 ms. **Autoregressive decode is ~88% of TTFB**, which
+is where any further TTFB work has to aim.
+
+⚠ **557 tok/s on TP=4 is suspicious.** Prod's TP=2 measured ~530 — so four H20s buy 5% over two.
+A 1.7B bf16 model is ~3.4 GB against ~4 TB/s of HBM; batch-1 decode should be nearer 1000 tok/s
+on a *single* card. The all-reduce per layer is plausibly costing more than the extra bandwidth
+returns. Sweep TP=1/2/4 with `lm_probe.py` before considering anything harder — at 1000 tok/s
+TTFB would fall to ~60 ms with no new code.
+
+## Through a real LiveKit agent + WebRTC (same box, `bench/livekit/`)
+
+`TTS_INTERLEAVE=false`, i.e. prod parity — the openai plugin sends no interleave id.
+
+| conc | utterances | mean | p10 | p50 | p90 | p95 | max |
+|---|---|---|---|---|---|---|---|
+| 1 | 12 | 0.248 | 0.183 | **0.225** | 0.267 | 0.555 | 0.555 |
+| 4 | 48 | 0.253 | 0.171 | **0.236** | 0.342 | 0.521 | 0.656 |
+| 8 | 84 | 0.280 | 0.202 | **0.237** | 0.551 | 0.587 | 0.649 |
+
+**The chain, and it accounts for what prod reports:**
+
+| | TTFB p50 |
+|---|---|
+| API direct, on-box | **102 ms** |
+| + LiveKit agent + WebRTC | **225–237 ms** (LiveKit adds ~130 ms) |
+| a prod agent trace, 2026-09-21 | **324 ms** (a further ~90 ms: agent not colocated, busier box) |
+
+Two things this says. **The split-box deployment halved the LiveKit-path TTFB** — the same rig on
+the previous stack (local TP=1 engine) measured p50 462 ms on 2026-09-18, against 225 ms here.
+And **LiveKit fattens the tail far more than the median**: p95/p50 is ~1.15× through the API and
+**2.2–2.5×** through the agent. The median is healthy; the occasional lag a caller hears is the
+agent path, not synthesis.
+
+## Is the codec the thing to optimise? (sampled during a concurrency-32 load)
+
+| | |
+|---|---|
+| GPU 7 (codec) | mean 61%, median 72%, max 84% |
+| app CPU, 4 uvicorn workers | 185% of 400% available |
+
+The codec GPU is the busier of the two — which **contradicts** the H100 finding above that the
+GPU idles while one core pins. That finding was measured with CUDA graphs on; this deployment
+runs `CUDA_GRAPH_BATCH="[]"`, so the GPU is at 72% doing the work the slow way. Enabling CUDA
+graphs (~1.7× on the codec, CLAUDE.md) should take it to ~42% and hand the constraint back to
+the CPU, exactly as the older measurement predicts. A fused/megakernel codec attacks the same
+dominant cost a CUDA graph does — per-launch overhead — for weeks of work instead of an env var,
+and lands on a resource that would no longer bind. The 4 uvicorn workers are the real ceiling.
+
+## Reproducing the update
+
+```bash
+python bench/latency_bench.py --url http://127.0.0.1:9091 --voice TM_English_Normal \
+  --concurrency 1,4,8,16,32 --out latency.json
+set -a; source /etc/profile.d/aura.sh; set +a          # VLLM_AUTH_KEY for the engine
+TTS_API=http://<engine>:9093 python bench/lm_probe.py --voice TM_English_Normal --gates 37,47,60,85
+python bench/livekit/load_client.py --concurrency 4 --utterances 12 --texts bench/pitch_stress_texts.txt
+```
+
+Raw JSON: `bench/results/latency-2026-09-21/`.

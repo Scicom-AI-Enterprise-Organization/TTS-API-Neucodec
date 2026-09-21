@@ -1,0 +1,151 @@
+{
+ "summary": {
+  "concurrency": 1,
+  "utterances": 12,
+  "ok": 12,
+  "errors": 0,
+  "wall_s": 126.3,
+  "ttfb_p50": 0.229,
+  "ttfb_p95": 0.555,
+  "ttfb_max": 0.555,
+  "audio_s_total": 98.9,
+  "rms_db_mean": -17.6,
+  "rms_db_spread": 3.02,
+  "rms_db_std": 0.82,
+  "peak_max": 1.0
+ },
+ "rows": [
+  {
+   "ok": true,
+   "ttfb": 0.555,
+   "audio_s": 5.97,
+   "wall_s": 6.51,
+   "rms_db": -17.71,
+   "peak": 0.831,
+   "room": 0,
+   "utt": 0,
+   "text": "Selamat pagi, saya Maya, pembantu AI"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.229,
+   "audio_s": 7.84,
+   "wall_s": 8.06,
+   "rms_db": -18.68,
+   "peak": 0.994,
+   "room": 0,
+   "utt": 1,
+   "text": "Hi, I'm Maya, TM's AI assistant for "
+  },
+  {
+   "ok": true,
+   "ttfb": 0.243,
+   "audio_s": 4.29,
+   "wall_s": 4.52,
+   "rms_db": -17.78,
+   "peak": 0.77,
+   "room": 0,
+   "utt": 2,
+   "text": "Untuk pengesahan, boleh saya dapatka"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.167,
+   "audio_s": 7.72,
+   "wall_s": 7.88,
+   "rms_db": -16.51,
+   "peak": 1.0,
+   "room": 0,
+   "utt": 3,
+   "text": "Saya sahkan nombor kad pengenalan pu"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.202,
+   "audio_s": 10.22,
+   "wall_s": 10.41,
+   "rms_db": -17.78,
+   "peak": 0.99,
+   "room": 0,
+   "utt": 4,
+   "text": "Maaf, nombor kad pengenalan 750322-0"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.238,
+   "audio_s": 6.98,
+   "wall_s": 7.21,
+   "rms_db": -17.27,
+   "peak": 1.0,
+   "room": 0,
+   "utt": 5,
+   "text": "Your account is registered to IC num"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.252,
+   "audio_s": 9.77,
+   "wall_s": 10.01,
+   "rms_db": -17.89,
+   "peak": 1.0,
+   "room": 0,
+   "utt": 6,
+   "text": "Alamat pemasangan yang berdaftar ial"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.216,
+   "audio_s": 9.62,
+   "wall_s": 9.83,
+   "rms_db": -15.66,
+   "peak": 1.0,
+   "room": 0,
+   "utt": 7,
+   "text": "Boleh saya sahkan alamat encik: Blok"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.183,
+   "audio_s": 10.44,
+   "wall_s": 10.61,
+   "rms_db": -17.06,
+   "peak": 0.997,
+   "room": 0,
+   "utt": 8,
+   "text": "I have your service address as Numbe"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.2,
+   "audio_s": 9.63,
+   "wall_s": 9.82,
+   "rms_db": -18.41,
+   "peak": 0.997,
+   "room": 0,
+   "utt": 9,
+   "text": "Alamat bil puan telah dikemas kini k"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.225,
+   "audio_s": 7.65,
+   "wall_s": 7.86,
+   "rms_db": -18.3,
+   "peak": 0.994,
+   "room": 0,
+   "utt": 10,
+   "text": "Bil bulan Disember encik berjumlah d"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.267,
+   "audio_s": 8.77,
+   "wall_s": 9.03,
+   "rms_db": -18.09,
+   "peak": 0.998,
+   "room": 0,
+   "utt": 11,
+   "text": "Nombor akaun Unifi puan ialah satu d"
+  }
+ ]
+}
