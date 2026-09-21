@@ -17,3 +17,19 @@ bench/results/multilingual_normalizer/template_pairs.jsonl
 bench/results/multilingual_normalizer/train*.jsonl
 bench/results/multilingual_normalizer/val*.jsonl
 bench/results/multilingual_normalizer/test*.jsonl
+# synthetic-normalizer/ is the standalone copy of that pipeline with its own data/ —
+# same rule, same reason. The splits are published as
+# huggingface.co/datasets/Scicom-intl/Multilingual-Normalizer, so the HF dataset is the
+# source of truth and these are a 105 MB duplicate of it; `train_sft.jsonl` alone is
+# 60 MB and trips GitHub's large-file warning on every push. The cached LLM files
+# (llm_*.jsonl, templates_llm.jsonl) stay tracked: they cost API calls to recreate,
+# and `build` regenerates everything below from them in minutes.
+synthetic-normalizer/data/template_pairs.jsonl
+synthetic-normalizer/data/train*.jsonl
+synthetic-normalizer/data/val*.jsonl
+synthetic-normalizer/data/test*.jsonl
+
+# Bench audio is regenerable bulk and the reports carry the numbers — track the JSON,
+# never the wavs. bench/results/pitch_stress alone is 60 MB of them.
+bench/results/**/*.wav
+bench/results/pitch_stress/
