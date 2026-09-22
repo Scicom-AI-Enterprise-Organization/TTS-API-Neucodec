@@ -1,6 +1,29 @@
 # Streamable TTS API
 
-Streaming Text-to-Speech and Voice Conversion API with dynamic batching, CUDA Graphs, and torch.compile support.
+Streaming text-to-speech and voice conversion. Text in, 24 kHz audio out, first byte in ~100 ms.
+
+```mermaid
+flowchart LR
+  T["text"] --> N["normalize"] --> LM["vLLM<br/>Qwen3-1.7B"]
+  LM -->|"&lt;|s_NNNN|&gt; speech tokens"| D["NeuCodec decode<br/>batched · CUDA graphs"]
+  D --> S["stitch<br/>crossfade + loudness"] --> A["PCM / WAV / SSE"]
+```
+
+Two services, one GPU each:
+
+| service | port | does |
+|---|---|---|
+| **vLLM** | `:9093` | text → speech tokens. Not the bottleneck. |
+| **this app** | `:9091` | speech tokens → audio. Is the bottleneck. |
+
+| | |
+|---|---|
+| TTFB | ~100 ms on-box, ~230 ms through a LiveKit agent |
+| Throughput | ~200 audio-s/s at concurrency 32 |
+| RTF | 0.10 single-stream, 0.15 at concurrency 32 |
+
+Full measurements: [bench/TTFB.md](bench/TTFB.md). How it was all found:
+[bench/INVESTIGATION.md](bench/INVESTIGATION.md).
 
 ## Setup
 
@@ -78,14 +101,20 @@ docker compose -f docker-compose-cpu.yaml up --build
 
 ## Tracing (Loki + Tempo)
 
-The app calls [`wan.patch()`](https://github.com/Scicom-AI-Enterprise-Organization/wan)
-at startup, which always gives it JSON logs carrying the active trace id, a request log
-line per request, Prometheus metrics at `/metrics`, health probes and Scalar docs at
-`/scalar`. That library owns `SERVICE_NAME`, `OTLP_ENDPOINT`, `TRACING_SAMPLE` and the
-rest of the OTLP/log config.
+The app calls [`wan.patch()`](https://github.com/Scicom-AI-Enterprise-Organization/wan) at
+startup. That gives you, always:
 
-`ENABLE_TRACING_SPANS` (on by default) adds this repo's own spans on the serving hot path
-([app/tracing.py](app/tracing.py)), which answer where a request's time actually went:
+| | |
+|---|---|
+| JSON logs | one line per request, carrying the trace id |
+| `/metrics` | Prometheus |
+| `/scalar` | API docs |
+| health probes | — |
+
+`wan` owns `SERVICE_NAME`, `OTLP_ENDPOINT`, `TRACING_SAMPLE` and the rest of the OTLP config.
+
+`ENABLE_TRACING_SPANS` (default on) adds this repo's own hot-path spans
+([app/tracing.py](app/tracing.py)). They show where a request's time went:
 
 ```
 POST /v1/audio/speech                 (fastapi instrumentation)
@@ -268,7 +297,24 @@ curl -X POST 'http://localhost:9091/v1/audio/normalize' -H 'Content-Type: applic
 
 ### `POST /v1/audio/speech` — Text-to-Speech
 
-Accepts JSON body.
+What one request does:
+
+```mermaid
+flowchart TD
+  R["POST /v1/audio/speech"] --> N["normalize<br/>rule | llm | spoken"]
+  N --> P["build prompt<br/>+ interleave history"]
+  P --> V["vLLM stream"]
+  V --> W["accumulate tokens<br/>growing windows"]
+  W --> Q["batch queue<br/>grouped by exact length"]
+  Q --> G["decode<br/>CUDA graph or eager"]
+  G --> X["crossfade + loudness<br/>+ speaking rate"]
+  X --> O["pcm | wav | SSE"]
+```
+
+First audio leaves as soon as the first window decodes — `playback_speed × 50` tokens. That
+gate is the TTFB.
+
+Accepts a JSON body.
 
 **Parameters:**
 
@@ -335,25 +381,41 @@ curl -X POST 'http://localhost:9091/v1/audio/speech' -H 'Content-Type: applicati
 
 #### Interleaved generation
 
-An agent that streams (LiveKit's `StreamAdapter`, for one) does not send a reply as one
-request: it cuts the text into sentence-sized chunks and synthesizes each with its own
-`/v1/audio/speech` call. The request at T+1 knows nothing about T, so the LM starts cold —
-pitch register, pace and energy reset at every join and the reply sounds stitched.
+A streaming agent does not send a reply as one request. LiveKit's `StreamAdapter` cuts it into
+sentence-sized chunks. Each chunk becomes its own `/v1/audio/speech` call.
 
-Pass the same `interleave_id` on the chunks of one reply and each request is prompted with
-the previous turns' text **and the speech tokens the LM generated for them**, in the
-interleaved document format the model was trained on:
+```mermaid
+flowchart LR
+  subgraph OFF["without interleave_id"]
+    A1["chunk 1"] --> A2["chunk 2 · cold"] --> A3["chunk 3 · cold"]
+  end
+  subgraph ON["with interleave_id"]
+    B1["chunk 1"] --> B2["chunk 2<br/>sees 1"] --> B3["chunk 3<br/>sees 1+2"]
+  end
+```
+
+Cold means the LM picks a fresh pitch register, pace and energy at every join. Measured: it
+steps **up** at two-thirds of joins. The reply sounds stitched.
+
+Pass the same `interleave_id` on every chunk of one reply. Each request is then prompted with
+the previous turns' text **and the speech tokens the LM produced for them**, in the interleaved
+format the model was trained on:
 
 ```
 <|im_start|>husein: hello my name is husein,<|speech_start|><|s_1834|>…<|s_77|><|im_end|>
 <|im_start|>husein: i like to eat chicken rice.<|speech_start|>      ← the LM continues here
 ```
 
-The history is prefill only — nothing extra is decoded or streamed, and the codec path (the
-bottleneck) is untouched. The last **5** turns are retained per id (`MAX_RETAIN_INTERLEAVE`,
-per-request `max_retain_interleave`), also bounded by `INTERLEAVE_MAX_S` seconds of speech
-and by the LM window. Turns live in `/dev/shm`, shared by every uvicorn worker on the host,
-and expire after `INTERLEAVE_TTL_S` idle seconds. A voice switch on the same id starts cold.
+History is prefill only. Nothing extra is decoded or streamed, so the codec path is untouched.
+
+| bound | default | knob |
+|---|---|---|
+| turns retained per id | 5 | `MAX_RETAIN_INTERLEAVE`, per-request `max_retain_interleave` |
+| seconds of speech | 20 | `INTERLEAVE_MAX_S` |
+| idle expiry | — | `INTERLEAVE_TTL_S` |
+| storage | `/dev/shm` | shared by every uvicorn worker on the host |
+
+A voice switch on the same id starts cold.
 Design and configuration: [INTERLEAVE.md](INTERLEAVE.md).
 
 > **This requires an LM trained on interleaved documents, and no open-source TTS model is.**
@@ -525,17 +587,25 @@ python -m pytest tests/test_normalize_api.py -v
 
 ## Benchmark — H100 SXM vs H200 SXM
 
-End-to-end throughput/latency of the **optimized stack** on a single GPU, measured on RunPod secure cloud
-(June 2026). Both pods run the same colocated layout — vLLM `0.16.0` serving the Qwen3-1.7B TTS LM plus the
-vendored NeuCodec decoder on one GPU — with the optimized configuration: **dynamic batching + CUDA graphs +
-4 `uvicorn` workers under NVIDIA MPS**, bf16 throughout (no quantization), torch `2.9.1` / CUDA `12.8`.
-vLLM `--gpu-memory-utilization 0.4 --max-num-seqs 64`. Driver 580.126.09 (H100) / 550.127.05 (H200).
+One GPU, both services colocated. RunPod secure cloud, June 2026.
 
-Load generator: [`bench/bench.py`](bench/bench.py), **non-streaming**, concurrency 1/4/16/50, `per-conc-mult 5`,
-`temperature 0.6`, `max_tokens 1024`, over the fixed 16-sentence eval set (~4.5–4.9 s audio/request; English,
-Malay, code-switch). **Median of 5 runs per level; 0 request errors at every level.** Throughput is the
-meaningful TTS metric: **audio-seconds produced per wall-second** (values > the eval clip length mean the
-server emits audio faster than real time in aggregate).
+| | |
+|---|---|
+| Layout | vLLM `0.16.0` + vendored NeuCodec on one GPU |
+| Config | dynamic batching + CUDA graphs + 4 uvicorn workers under MPS |
+| Precision | bf16 throughout, no quantization |
+| Stack | torch `2.9.1` / CUDA `12.8`, `--gpu-memory-utilization 0.4 --max-num-seqs 64` |
+| Driver | 580.126.09 (H100) / 550.127.05 (H200) |
+| Load | [`bench/bench.py`](bench/bench.py), non-streaming, concurrency 1/4/16/50 |
+| Corpus | fixed 16 sentences, ~4.5–4.9 s audio each. English, Malay, code-switch |
+| Runs | median of 5 per level. 0 errors at every level |
+
+The metric is **audio-seconds produced per wall-second**. Above the clip length means the server
+emits audio faster than real time.
+
+⚠ These numbers predate the 2026-09-22 decode-batcher fix. For current latency use
+[bench/TTFB.md](bench/TTFB.md); for the "~1.7× CUDA graph win" see
+[bench/PADDING_BUG.md](bench/PADDING_BUG.md), which measures it at 1.44–1.54× and only under load.
 
 ### Throughput (audio-seconds produced per wall-second)
 
