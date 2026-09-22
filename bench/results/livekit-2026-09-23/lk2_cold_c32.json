@@ -1,0 +1,434 @@
+{
+ "summary": {
+  "concurrency": 32,
+  "utterances": 53,
+  "ok": 24,
+  "errors": 29,
+  "wall_s": 125.3,
+  "ttfb_p50": 0.243,
+  "ttfb_p95": 0.554,
+  "ttfb_max": 0.579,
+  "audio_s_total": 210.0,
+  "rms_db_mean": -17.09,
+  "rms_db_spread": 4.81,
+  "rms_db_std": 1.07,
+  "peak_max": 1.0,
+  "error_samples": [
+   "agent audio track never arrived",
+   "agent audio track never arrived",
+   "agent audio track never arrived"
+  ],
+  "client_procs": 4
+ },
+ "rows": [
+  {
+   "room": 8,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "room": 20,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "room": 24,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "room": 16,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "room": 0,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "room": 4,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "room": 12,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.492,
+   "audio_s": 6.66,
+   "wall_s": 7.14,
+   "rms_db": -16.57,
+   "peak": 0.966,
+   "room": 28,
+   "utt": 0,
+   "text": "Selamat pagi, saya Maya, pembantu AI"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.182,
+   "audio_s": 7.65,
+   "wall_s": 7.82,
+   "rms_db": -18.21,
+   "peak": 0.959,
+   "room": 28,
+   "utt": 1,
+   "text": "Hi, I'm Maya, TM's AI assistant for "
+  },
+  {
+   "ok": true,
+   "ttfb": 0.226,
+   "audio_s": 5.06,
+   "wall_s": 5.28,
+   "rms_db": -17.15,
+   "peak": 0.978,
+   "room": 28,
+   "utt": 2,
+   "text": "Untuk pengesahan, boleh saya dapatka"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.275,
+   "audio_s": 9.15,
+   "wall_s": 9.42,
+   "rms_db": -16.16,
+   "peak": 1.0,
+   "room": 28,
+   "utt": 3,
+   "text": "Saya sahkan nombor kad pengenalan pu"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.232,
+   "audio_s": 9.69,
+   "wall_s": 9.91,
+   "rms_db": -18.89,
+   "peak": 1.0,
+   "room": 28,
+   "utt": 4,
+   "text": "Maaf, nombor kad pengenalan 750322-0"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.247,
+   "audio_s": 9.76,
+   "wall_s": 10.0,
+   "rms_db": -16.68,
+   "peak": 1.0,
+   "room": 28,
+   "utt": 5,
+   "text": "Your account is registered to IC num"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.234,
+   "audio_s": 9.61,
+   "wall_s": 9.83,
+   "rms_db": -17.71,
+   "peak": 0.988,
+   "room": 28,
+   "utt": 6,
+   "text": "Alamat pemasangan yang berdaftar ial"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.204,
+   "audio_s": 11.73,
+   "wall_s": 11.92,
+   "rms_db": -15.84,
+   "peak": 1.0,
+   "room": 28,
+   "utt": 7,
+   "text": "Boleh saya sahkan alamat encik: Blok"
+  },
+  {
+   "room": 25,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "room": 13,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "room": 17,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "room": 29,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "room": 9,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "room": 21,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "room": 1,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.579,
+   "audio_s": 6.27,
+   "wall_s": 6.84,
+   "rms_db": -17.08,
+   "peak": 0.981,
+   "room": 5,
+   "utt": 0,
+   "text": "Selamat pagi, saya Maya, pembantu AI"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.199,
+   "audio_s": 9.3,
+   "wall_s": 9.49,
+   "rms_db": -17.51,
+   "peak": 1.0,
+   "room": 5,
+   "utt": 1,
+   "text": "Hi, I'm Maya, TM's AI assistant for "
+  },
+  {
+   "ok": true,
+   "ttfb": 0.219,
+   "audio_s": 5.14,
+   "wall_s": 5.35,
+   "rms_db": -16.28,
+   "peak": 1.0,
+   "room": 5,
+   "utt": 2,
+   "text": "Untuk pengesahan, boleh saya dapatka"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.213,
+   "audio_s": 8.81,
+   "wall_s": 9.01,
+   "rms_db": -14.73,
+   "peak": 1.0,
+   "room": 5,
+   "utt": 3,
+   "text": "Saya sahkan nombor kad pengenalan pu"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.244,
+   "audio_s": 9.04,
+   "wall_s": 9.27,
+   "rms_db": -19.07,
+   "peak": 0.838,
+   "room": 5,
+   "utt": 4,
+   "text": "Maaf, nombor kad pengenalan 750322-0"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.272,
+   "audio_s": 8.72,
+   "wall_s": 8.98,
+   "rms_db": -16.23,
+   "peak": 1.0,
+   "room": 5,
+   "utt": 5,
+   "text": "Your account is registered to IC num"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.237,
+   "audio_s": 10.01,
+   "wall_s": 10.24,
+   "rms_db": -17.26,
+   "peak": 0.999,
+   "room": 5,
+   "utt": 6,
+   "text": "Alamat pemasangan yang berdaftar ial"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.261,
+   "audio_s": 11.42,
+   "wall_s": 11.67,
+   "rms_db": -17.26,
+   "peak": 1.0,
+   "room": 5,
+   "utt": 7,
+   "text": "Boleh saya sahkan alamat encik: Blok"
+  },
+  {
+   "room": 18,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "room": 2,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "room": 26,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "room": 14,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "room": 10,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "room": 6,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "room": 22,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.554,
+   "audio_s": 7.15,
+   "wall_s": 7.69,
+   "rms_db": -16.23,
+   "peak": 1.0,
+   "room": 30,
+   "utt": 0,
+   "text": "Selamat pagi, saya Maya, pembantu AI"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.229,
+   "audio_s": 8.93,
+   "wall_s": 9.15,
+   "rms_db": -19.54,
+   "peak": 0.995,
+   "room": 30,
+   "utt": 1,
+   "text": "Hi, I'm Maya, TM's AI assistant for "
+  },
+  {
+   "ok": true,
+   "ttfb": 0.243,
+   "audio_s": 5.11,
+   "wall_s": 5.34,
+   "rms_db": -17.26,
+   "peak": 0.983,
+   "room": 30,
+   "utt": 2,
+   "text": "Untuk pengesahan, boleh saya dapatka"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.231,
+   "audio_s": 8.63,
+   "wall_s": 8.85,
+   "rms_db": -16.38,
+   "peak": 1.0,
+   "room": 30,
+   "utt": 3,
+   "text": "Saya sahkan nombor kad pengenalan pu"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.257,
+   "audio_s": 11.1,
+   "wall_s": 11.35,
+   "rms_db": -17.92,
+   "peak": 0.844,
+   "room": 30,
+   "utt": 4,
+   "text": "Maaf, nombor kad pengenalan 750322-0"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.272,
+   "audio_s": 9.26,
+   "wall_s": 9.52,
+   "rms_db": -16.68,
+   "peak": 0.999,
+   "room": 30,
+   "utt": 5,
+   "text": "Your account is registered to IC num"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.223,
+   "audio_s": 10.28,
+   "wall_s": 10.49,
+   "rms_db": -17.12,
+   "peak": 1.0,
+   "room": 30,
+   "utt": 6,
+   "text": "Alamat pemasangan yang berdaftar ial"
+  },
+  {
+   "ok": true,
+   "ttfb": 0.274,
+   "audio_s": 11.52,
+   "wall_s": 11.78,
+   "rms_db": -16.49,
+   "peak": 0.994,
+   "room": 30,
+   "utt": 7,
+   "text": "Boleh saya sahkan alamat encik: Blok"
+  },
+  {
+   "room": 7,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "room": 3,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "room": 15,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "room": 19,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "room": 27,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "room": 23,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "room": 11,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  },
+  {
+   "room": 31,
+   "ok": false,
+   "error": "agent audio track never arrived"
+  }
+ ]
+}

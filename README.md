@@ -18,7 +18,7 @@ Two services, one GPU each:
 
 | | |
 |---|---|
-| TTFB | ~100 ms on-box, ~230 ms through a LiveKit agent |
+| TTFB | ~100 ms on-box, ~230 ms through a LiveKit agent (the agent costs a flat +130 ms) |
 | Throughput | ~200 audio-s/s at concurrency 32 |
 | RTF | 0.10 single-stream, 0.15 at concurrency 32 |
 
@@ -32,6 +32,7 @@ Every number in this README comes from one of these. Each is self-contained.
 | [PLAYBACK_SPEED.md](bench/PLAYBACK_SPEED.md) | `playback_speed` 0.1→2.0. **Use 0.4**: 32% faster TTFB, smoother chunks |
 | [PADDING_BUG.md](bench/PADDING_BUG.md) | The batcher padded windows and corrupted audio. Fixed. Why fp16/int8/bf16 all fail |
 | [TTFB.md](bench/TTFB.md) | TTFB, end-to-end, RTF percentiles. The TP=1/2/4 sweep |
+| [LIVEKIT.md](bench/LIVEKIT.md) | Through a real agent: +130 ms flat, 0 errors to 16 rooms, and two rig traps |
 | [PITCH_TONE_AB.md](bench/PITCH_TONE_AB.md) | "Loud and excited mid-sentence": which half is LiveKit, which is the model |
 | [INTERLEAVE_AB.md](bench/INTERLEAVE_AB.md) | `interleave_id` cuts the chunk-join jump ~25% |
 | [NORMALIZER.md](bench/NORMALIZER.md) | Rule vs LLM text normalization, 497 sentences |
@@ -72,6 +73,21 @@ it keeps. Fixed 2026-09-22. Details: [PADDING_BUG.md](bench/PADDING_BUG.md).
 ![precision matrix](docs/img/precision_matrix.png)
 
 fp16 cannot run — cuFFT rejects the ISTFT dims in half precision. Nothing else beats fp32.
+
+### LiveKit
+
+![livekit bench](docs/img/livekit_bench.png)
+
+TTFB is flat from 1 to 16 rooms (0.232 → 0.258 s) and the agent + WebRTC tax is a constant
+**+111 to +136 ms**, not a slope — so a LiveKit TTFB regression is almost never LiveKit.
+0 errors in 688 utterances; loudness sd stays 0.92–1.26 dB. `interleave_id` costs ~64 ms
+and shrinks under load. Full report: [LIVEKIT.md](bench/LIVEKIT.md).
+
+![livekit client trap](docs/img/livekit_client_trap.png)
+
+The first 16-room run reported an 8.4 s TTFB cliff. It was the load client: one python
+process cannot drive more than ~8 rooms, and its own scheduling delay is charged to the
+server. Split over two processes, the same 16 rooms returned **0.307 s**.
 
 ### Pitch and tone
 
@@ -676,15 +692,22 @@ the ready scripts in [`bench/deploy/`](bench/deploy) (`setup_pod.sh`, `start_vll
 ## LiveKit agent stress test & loudness consistency
 
 [`bench/livekit/`](bench/livekit) drives the API through a **real LiveKit agent** (text in → agent
-`session.say()` → TTS → WebRTC audio out) at concurrency 1/4/8: 0 errors, TTFB p50 ≈ 1.2 s with the
-LLM normalizer in the path. It also quantified utterance-to-utterance loudness variance — the LM's
-sampled speech tokens carry loudness, so identical text at temperature 0.6–0.7 spans **3–10 dB**
-active-RMS (and different voices sit ~5 dB apart in natural level), and roughly half
-of hot utterances clip at full scale. `STREAM_NORMALIZE=true` (default; per-request
-`stream_normalize`) collapses the spread to **< 2 dB** with no added latency: one static gain per
-utterance (locked after the first ~1 s of voiced audio — no mid-utterance drift), boost capped by
-running-peak headroom, and a tanh soft-knee limiter instead of a hard clip. Details and
-before/after numbers in [`bench/livekit/README.md`](bench/livekit/README.md).
+`session.say()` → TTS → WebRTC audio out). Full write-up: [`bench/LIVEKIT.md`](bench/LIVEKIT.md).
+
+| rooms | LiveKit TTFB p50 | HTTP direct p50 | agent tax | errors |
+|---|---|---|---|---|
+| 1 | 0.232 | 0.102 | +130 ms | 0 |
+| 8 | 0.256 | 0.120 | +136 ms | 0 |
+| 16 | 0.258 | 0.147 | +111 ms | 0 |
+
+The rig also quantified utterance-to-utterance loudness variance — the LM's sampled speech tokens
+carry loudness, so identical text at temperature 0.6–0.7 spans **3–10 dB** active-RMS (and different
+voices sit ~5 dB apart in natural level), and roughly half of hot utterances clip at full scale.
+`STREAM_NORMALIZE=true` (default; per-request `stream_normalize`) collapses the spread to **< 2 dB**
+with no added latency: one static gain per utterance (locked after the first ~1 s of voiced audio —
+no mid-utterance drift), boost capped by running-peak headroom, and a tanh soft-knee limiter instead
+of a hard clip. It holds through the whole transport — per-utterance sd stayed **0.92–1.26 dB** at
+every concurrency measured.
 
 Streaming decode quality itself is near one-shot: the stitcher decodes **growing windows** (first =
 `playback_speed`×50 tokens, ×`STREAM_CHUNK_GROWTH` per step up to `STREAM_MAX_CHUNK_S`) with

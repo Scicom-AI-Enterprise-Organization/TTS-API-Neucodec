@@ -34,6 +34,13 @@ TTS_BASE_URL = os.environ.get("TTS_BASE_URL", "http://127.0.0.1:9099/v1")
 TTS_VOICE = os.environ.get("TTS_VOICE", "husein")
 TTS_MODEL = os.environ.get("TTS_MODEL", "TTS-model")
 TTS_INTERLEAVE = os.environ.get("TTS_INTERLEAVE", "true").lower() == "true"
+# Size of the pool of pre-warmed job processes. livekit-agents runs each room in its own
+# subprocess and only keeps a few spare; a burst of joins larger than the pool has to boot
+# new interpreters, and a room whose process is not ready inside 10 s is dropped with
+# "The room connection was not established within 10 seconds after calling job_entry".
+# 32 simultaneous rooms failed 32/32 that way on the default pool -- an admission limit of
+# the agent, nothing to do with the TTS API, which was ~19% busy throughout.
+NUM_IDLE = int(os.environ.get("AGENT_IDLE_PROCESSES", "4"))
 
 
 def _tts(room_name: str):
@@ -82,6 +89,12 @@ async def entrypoint(ctx: JobContext):
 
     ctx.room.register_text_stream_handler("tts-input", on_text)
 
+    # connect FIRST, then start the session. The other order works at low concurrency and
+    # fails under a burst: livekit-server drops a job whose room connection is not up
+    # within 10 s of job_entry, and session.start() is slow enough that 32 simultaneous
+    # rooms all missed the window ("The room connection was not established within 10
+    # seconds after calling job_entry", 32/32 rooms, TTS API idle throughout).
+    await ctx.connect()
     await session.start(
         agent=Agent(instructions="tts stress test - speaks received text verbatim"),
         room=ctx.room,
@@ -91,7 +104,6 @@ async def entrypoint(ctx: JobContext):
             text_enabled=False,
         ),
     )
-    await ctx.connect()
 
 
 if __name__ == "__main__":
@@ -104,5 +116,6 @@ if __name__ == "__main__":
             entrypoint_fnc=entrypoint,
             load_fnc=lambda *_: 0.0,
             load_threshold=math.inf,
+            num_idle_processes=NUM_IDLE,
         )
     )

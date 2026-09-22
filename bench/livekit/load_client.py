@@ -5,6 +5,13 @@ text lines on the "tts-input" topic, captures the agent's published audio and
 measures per utterance: TTFB (text sent -> first audible frame), audio duration,
 wall time, active-speech RMS. Writes JSONL rows + a summary.
 
+Shard across processes with --procs (default: one process per 8 rooms). ONE python
+process cannot drive many rooms: each room's coroutine scans its frame buffer and runs
+numpy RMS on the shared event loop, so past ~8 rooms the CLIENT becomes the bottleneck
+and its own scheduling delay is charged to the server as TTFB. Measured: 16 rooms from
+one process reported ttfb p50 14.08 s; the same 16 rooms split over two processes
+reported 0.307 s, with nothing server-side changed.
+
 With --wav-dir it also writes one wav per utterance plus a records.jsonl in the
 shape bench/pitch_stress_score.py reads, so the audio a caller actually hears can be
 scored for pitch/tone/volume steps with the same metric as the API-direct run.
@@ -16,6 +23,11 @@ scored for pitch/tone/volume steps with the same metric as the API-direct run.
 import argparse
 import asyncio
 import json
+import math
+import multiprocessing
+import os
+import shutil
+import tempfile
 import time
 
 import numpy as np
@@ -152,38 +164,11 @@ async def run_room(i, args, rows):
     await room.disconnect()
 
 
-async def main():
-    p = argparse.ArgumentParser()
-    p.add_argument("--url", default="ws://127.0.0.1:7880")
-    p.add_argument("--api-key", default="devkey")
-    p.add_argument("--api-secret", default="secret")
-    p.add_argument("--concurrency", type=int, default=1)
-    p.add_argument("--utterances", type=int, default=3)
-    p.add_argument("--timeout", type=float, default=90)
-    p.add_argument("--silence-end", type=float, default=1.5)
-    p.add_argument("--prefix", default=f"stress-{int(time.time())}")
-    p.add_argument("--save-wav", default="")
-    p.add_argument("--out", default="")
-    p.add_argument("--texts", default="", help="one utterance per line; default: SENTENCES")
-    p.add_argument("--wav-dir", default="", help="save one wav per utterance + records.jsonl")
-    p.add_argument("--arm", default="livekit", help="label for the scorer records")
-    args = p.parse_args()
-    args.text_list = SENTENCES
-    if args.texts:
-        args.text_list = [l.strip() for l in open(args.texts, encoding="utf-8") if l.strip()]
-    if args.wav_dir:
-        import os
-
-        os.makedirs(args.wav_dir, exist_ok=True)
-
-    rows = []
-    t0 = time.monotonic()
-    await asyncio.gather(*(run_room(i, args, rows) for i in range(args.concurrency)))
-    wall = time.monotonic() - t0
-
+def summarize(rows, conc, wall):
     ok = [r for r in rows if r.get("ok")]
     bad = [r for r in rows if not r.get("ok")]
-    summary = {"concurrency": args.concurrency, "utterances": len(rows), "ok": len(ok), "errors": len(bad), "wall_s": round(wall, 1)}
+    summary = {"concurrency": conc, "utterances": len(rows), "ok": len(ok),
+               "errors": len(bad), "wall_s": round(wall, 1)}
     if ok:
         ttfb = sorted(r["ttfb"] for r in ok)
         rms = [r["rms_db"] for r in ok]
@@ -199,6 +184,84 @@ async def main():
         })
     if bad:
         summary["error_samples"] = [r.get("error") for r in bad[:3]]
+    return summary
+
+
+async def run_shard(args, room_ids):
+    rows = []
+    await asyncio.gather(*(run_room(i, args, rows) for i in room_ids))
+    return rows
+
+
+def shard_entry(args, room_ids, out_path):
+    """Child process: drive `room_ids`, dump raw rows for the parent to merge."""
+    rows = asyncio.run(run_shard(args, room_ids))
+    with open(out_path, "w") as f:
+        json.dump(rows, f, ensure_ascii=False)
+
+
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument("--url", default="ws://127.0.0.1:7880")
+    p.add_argument("--api-key", default="devkey")
+    p.add_argument("--api-secret", default="secret")
+    p.add_argument("--concurrency", type=int, default=1)
+    p.add_argument("--utterances", type=int, default=3)
+    p.add_argument("--timeout", type=float, default=90)
+    p.add_argument("--silence-end", type=float, default=1.5)
+    p.add_argument("--prefix", default=f"stress-{int(time.time())}")
+    p.add_argument("--save-wav", default="")
+    p.add_argument("--out", default="")
+    p.add_argument("--texts", default="", help="one utterance per line; default: SENTENCES")
+    p.add_argument("--wav-dir", default="", help="save one wav per utterance + records.jsonl")
+    p.add_argument("--arm", default="livekit", help="label for the scorer records")
+    p.add_argument("--procs", type=int, default=0,
+                   help="client processes to shard rooms over (0 = auto, see --rooms-per-proc)")
+    p.add_argument("--rooms-per-proc", type=int, default=8,
+                   help="rooms one process can drive before it becomes the bottleneck")
+    args = p.parse_args()
+    args.text_list = SENTENCES
+    if args.texts:
+        args.text_list = [l.strip() for l in open(args.texts, encoding="utf-8") if l.strip()]
+    if args.wav_dir:
+        os.makedirs(args.wav_dir, exist_ok=True)
+
+    nproc = args.procs or max(1, math.ceil(args.concurrency / args.rooms_per_proc))
+    nproc = min(nproc, args.concurrency)
+    shards = [list(range(k, args.concurrency, nproc)) for k in range(nproc)]
+
+    t0 = time.monotonic()
+    if nproc == 1:
+        rows = asyncio.run(run_shard(args, shards[0]))
+    else:
+        # fds: each room opens several WebRTC sockets, and the default 1024 makes the
+        # client -- not the server -- fail at c>=16 with "Too many open files".
+        try:
+            import resource
+            soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+            resource.setrlimit(resource.RLIMIT_NOFILE, (min(65536, hard), hard))
+        except Exception:                                   # noqa: BLE001 — best effort
+            pass
+        ctx = multiprocessing.get_context("spawn")
+        tmp = tempfile.mkdtemp(prefix="lkload-")
+        procs = []
+        for k, ids in enumerate(shards):
+            out = os.path.join(tmp, f"shard{k}.json")
+            pr = ctx.Process(target=shard_entry, args=(args, ids, out))
+            pr.start()
+            procs.append((pr, out))
+        rows = []
+        for pr, out in procs:
+            pr.join()
+            if os.path.exists(out):
+                rows.extend(json.load(open(out)))
+            else:
+                rows.append({"ok": False, "error": f"shard died rc={pr.exitcode}"})
+        shutil.rmtree(tmp, ignore_errors=True)
+    wall = time.monotonic() - t0
+
+    summary = summarize(rows, args.concurrency, wall)
+    summary["client_procs"] = nproc
     print("SUMMARY " + json.dumps(summary))
     if args.wav_dir:
         with open(f"{args.wav_dir}/records.jsonl", "a") as f:
@@ -213,4 +276,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

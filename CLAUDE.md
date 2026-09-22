@@ -200,8 +200,25 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
 - `bench/livekit/` — LiveKit agent stress rig (no-STT/no-LLM agent + load client): measures TTFB and
   per-utterance loudness through a real agent + WebRTC path, and with `--wav-dir` saves one wav per
   utterance for `bench/pitch_stress_score.py`. `TTS_INTERLEAVE=true` (default) makes the agent send
-  `X-Interleave-Id: <room>` so the chunks of one reply share prosody (`INTERLEAVE.md` §6).
-  See its README for setup and results.
+  `X-Interleave-Id: <room>` so the chunks of one reply share prosody (`INTERLEAVE.md` §6);
+  `AGENT_IDLE_PROCESSES` sizes the warm job-process pool, which is an admission limit under bursts.
+  **Measured 2026-09-23 (`bench/LIVEKIT.md`): the agent + WebRTC cost a flat +111 to +136 ms over raw
+  HTTP at every load** — TTFB p50 0.232 s at 1 room, 0.258 s at 16, against the API's own 0.102 /
+  0.147 s; 0 errors in 688 utterances; loudness sd 0.92–1.26 dB throughout, so `STREAM_NORMALIZE`
+  survives the transport. `interleave_id` costs ~64 ms of prefill (shrinking under load: 78 ms at
+  1 room, 49 at 16) and at 16 rooms tightens sd 1.05 → 0.92 dB and TTFB p95 0.736 → 0.594 s. 32 rooms
+  is a ceiling of the single-node rig (ICE for 64 peers through one dev-config server), **not** the
+  API, which is clean to concurrency 64 (TTFB p50 0.920 s, 179 audio-s/s, 0 errors).
+  **Two rig traps, both first recorded as server results:** (1) one python process cannot drive more
+  than ~8 rooms — each room's coroutine scans its frame buffer and runs numpy RMS on the shared event
+  loop, so 16 rooms from one process reported TTFB p50 14.08 s while the same 16 over two processes
+  reported 0.307 s and the app sat at 19% of one core (`load_client.py --procs` now shards, default
+  one process per 8 rooms); (2) each room opens several WebRTC sockets, so the default 1024-fd limit
+  makes the *client* fail at 16 rooms with `Too many open files` and inflates TTFB on the survivors.
+  Before believing a latency cliff, check what the service under test was doing — if it is idle, the
+  cliff is yours. Agent-side, `await ctx.connect()` must come **before** `session.start()`: the wrong
+  order works at low concurrency and drops jobs under a burst, because livekit-server kills a job
+  whose room is not connected within 10 s of `job_entry`.
 
 ## Decode pipeline internals (`app/main.py`)
 

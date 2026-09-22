@@ -157,7 +157,9 @@ PREC = [('bf16', [0.92, 0.99, 1.31], 35.0), ('TF32', [1.00, 0.97, 1.25], 64.0),
         ('fold weight_norm', [0.97, 0.99, 1.00], 224.0),
         ('cudnn.benchmark', [0.99, 0.99, 1.00], 224.0),
         ('int8 weight-only', [0.76, 0.76, 1.09], 34.0),
-        ('int8 dyn act+w', [0.06, 0.05, 0.07], 28.0)]
+        ('int8 dyn act+w', [0.06, 0.05, 0.07], 28.0),
+        ('torch.compile', [1.92, 1.49, 1.16], 80.0),
+        ('torch.compile\n+ reduce-overhead', [2.26, 1.58, 1.19], 80.0)]
 def fig_precision():
     """Horizontal bars: speedup, coloured by how faithful the output stayed.
 
@@ -177,27 +179,30 @@ def fig_precision():
     ax.barh(y, vals, color=cols, zorder=3, height=0.58)
     ax.set_yticks(y); ax.set_yticklabels(names, fontsize=9.5, color=S['label'])
     ax.axvline(1.0, color=S['title'], lw=1.6, zorder=4)
-    ax.annotate('fp32 baseline', xy=(1.0, len(rows)-0.4), xytext=(1.0, len(rows)-0.05),
-                ha='center', fontsize=9, color=S['title'], fontweight='bold')
+    # sits just above the x-axis, well clear of the subplot title
+    ax.text(1.0, -0.52, 'fp32 baseline', ha='center', va='center', fontsize=9,
+            color=S['title'], fontweight='bold',
+            bbox=dict(boxstyle='round,pad=0.3', facecolor=S['bg'],
+                      edgecolor=S['spine'], lw=0.8))
     for i, (v, q) in enumerate(zip(vals, snrs)):
         tag = 'exact' if q > 200 else f'{q:.0f} dB'
         ax.text(v + 0.03, i, f'{v:.2f}x   ({tag})', va='center', fontsize=9,
                 color=S['title'], fontfamily='monospace')
-    ax.set_xlim(0, 1.62); ax.set_ylim(-0.7, len(rows) - 0.15)
-    ax.text(1.31, 3.55, 'fp16: will not run\n(cuFFT rejects the ISTFT\ndims in half precision)',
+    ax.set_xlim(0, 2.35); ax.set_ylim(-1.0, len(rows) - 0.35)
+    ax.text(1.92, 2.6, 'fp16: will not run\n(cuFFT rejects the ISTFT\ndims in half precision)',
             fontsize=9.5, color=S['warn'], fontweight='bold', ha='center', va='center',
             bbox=dict(boxstyle='round,pad=0.5', facecolor='#fdf0ee', edgecolor=S['warn'], lw=1.0))
     handles = [plt.Rectangle((0,0),1,1, color=S['accent']),
                plt.Rectangle((0,0),1,1, color=S['primary']),
                plt.Rectangle((0,0),1,1, color=S['warn'])]
-    ax.legend(handles, ['bit-exact output', '60-70 dB SNR', 'under 40 dB SNR'],
-              frameon=False, fontsize=8.8, labelcolor=S['label'],
-              loc='lower right', bbox_to_anchor=(1.0, 0.02))
-    fig.suptitle('Nothing beats fp32 eager, and the two exact arms gain nothing',
+    ax.legend(handles, ['bit-exact', '64-80 dB SNR (inaudible)', 'under 40 dB SNR (audible)'],
+              frameon=False, fontsize=8.5, labelcolor=S['label'],
+              loc='lower right', bbox_to_anchor=(1.0, 0.03))
+    fig.suptitle('Only FUSION beats fp32 eager — no precision or quantization arm does',
                  fontsize=13.5, color=S['title'], fontweight='bold', y=0.98)
     save(fig, 'precision_matrix.png',
-         'Decode is launch-bound, not compute-bound: cheaper arithmetic cannot help when the '
-         'time goes to reaching ~500 kernels.')
+         'One 121-token decode issues 609 CUDA kernel launches across 51 distinct ops. That is '
+         'the cost, so fusing the graph pays and cheaper arithmetic does not.')
 
 # ─────────────────────────────────────────────── 6. pitch/tone: direct vs LiveKit
 TONE = [('one request\nnormalizer off', 30.8, S['primary']),
@@ -285,7 +290,137 @@ def fig_widecodec():
          'WideCodec loses 0.212 MOS on our TTS tokens but ties on real audio — the LM was '
          'trained against NeuCodec. Verdict: keep NeuCodec. reps=16, scoring is stochastic.')
 
+# ─────────────────────────────────────────────── 10. LiveKit: the agent + WebRTC path
+LKD = f'{RES}/livekit-2026-09-23'
+
+def _lk(arm):
+    """{concurrency: {'summary':…, 'rows':[…]}} for one arm."""
+    out = {}
+    for f in os.listdir(LKD):
+        if f.startswith(f'lk2_{arm}_c') and f.endswith('.json'):
+            d = json.load(open(f'{LKD}/{f}'))
+            out[d['summary']['concurrency']] = d
+    return dict(sorted(out.items()))
+
+def _direct():
+    d = json.load(open(f'{LKD}/direct_9095.json'))
+    return {lv['concurrency']: lv for lv in d['levels']}
+
+def _p(xs, q):
+    xs = sorted(xs)
+    return xs[max(0, min(len(xs)-1, int(round(q*len(xs)+0.5))-1))]
+
+def fig_livekit():
+    cold, ilv, dir_ = _lk('cold'), _lk('interleave'), _direct()
+    # c=32 is a rig ceiling (partial connects), not a serving number — plot the clean levels
+    cs = [c for c in cold if cold[c]['summary'].get('errors', 0) == 0]
+    rms = lambda d, c: [r['rms_db'] for r in d[c]['rows'] if r.get('ok')]
+    fig, axs = plt.subplots(1, 3, figsize=(15.8, 4.5), dpi=S['dpi'])
+    fig.patch.set_facecolor(S['bg'])
+
+    # (a) TTFB: what the agent + WebRTC add on top of the API
+    a = axs[0]; axis(a, 'TTFB — text sent → first audible frame', 'seconds', 'concurrent rooms')
+    for data, col, lab in ((cold, S['primary'], 'LiveKit'),
+                           (ilv, S['accent'], 'LiveKit + interleave_id')):
+        xs = [c for c in cs if c in data]
+        a.plot(xs, [data[c]['summary']['ttfb_p50'] for c in xs], color=col, lw=2.2,
+               marker='o', ms=5, label=f'{lab} p50', zorder=3)
+        a.plot(xs, [data[c]['summary']['ttfb_p95'] for c in xs], color=col, lw=1.3,
+               ls='--', marker='s', ms=3.5, alpha=0.7, label=f'{lab} p95', zorder=3)
+    a.plot(cs, [dir_[c]['ttfb_s']['p50'] for c in cs], color=S['neutral'], lw=1.8,
+           ls=':', marker='^', ms=4.5, label='HTTP direct p50', zorder=3)
+    a.fill_between(cs, [dir_[c]['ttfb_s']['p50'] for c in cs],
+                   [cold[c]['summary']['ttfb_p50'] for c in cs],
+                   color=S['primary'], alpha=0.08, zorder=2)
+    a.annotate('agent + WebRTC ≈ +130 ms, flat', xy=(4, 0.155), fontsize=8.4,
+               color=S['primary'], style='italic', ha='center')
+    a.set_xscale('log', base=2); a.set_xticks(cs); a.set_xticklabels(cs)
+    a.set_ylim(0, 1.35)
+    a.legend(frameon=False, fontsize=7.8, labelcolor=S['label'], loc='upper left', ncol=1)
+
+    # (b) loudness. sd and p95-p5 — NOT max-min, which is an extreme-value statistic and
+    # grows with sample count alone (n=8 at c=1 vs n=128 at c=16).
+    b = axs[1]; axis(b, 'Per-utterance loudness consistency', 'dB', 'concurrent rooms')
+    x = np.arange(len(cs)); w = 0.35
+    b.bar(x - w/2, [np.std(rms(cold, c)) for c in cs], w, color=S['primary'],
+          label='LiveKit — sd', zorder=3)
+    b.bar(x + w/2, [np.std(rms(ilv, c)) if c in ilv else 0 for c in cs], w,
+          color=S['accent'], label='+ interleave_id — sd', zorder=3)
+    b.plot(x, [_p(rms(cold, c), .95) - _p(rms(cold, c), .05) for c in cs], color=S['warn'],
+           lw=1.5, ls='--', marker='o', ms=4, label='LiveKit — p95 − p5', zorder=4)
+    b.set_xticks(x); b.set_xticklabels(cs)
+    b.axhline(2.0, color=S['neutral'], lw=1.0, ls=':')
+    b.text(-0.42, 2.1, 'STREAM_NORMALIZE holds sd under 2 dB', fontsize=8,
+           color=S['neutral'], style='italic')
+    b.set_ylim(0, 8.2)
+    b.legend(frameon=False, fontsize=8, labelcolor=S['label'], loc='upper left', ncol=3)
+
+    # (c) the tail, per utterance, at the top clean level
+    c_ = axs[2]; axis(c_, 'Every utterance at 16 rooms (n=128 each)', 'TTFB, seconds')
+    data = [[r['ttfb'] for r in cold[16]['rows'] if r.get('ok')],
+            [r['ttfb'] for r in ilv[16]['rows'] if r.get('ok')]]
+    bp = c_.boxplot(data, vert=True, widths=0.42, patch_artist=True, whis=(5, 95),
+                    tick_labels=['LiveKit', '+ interleave_id'], showfliers=True,
+                    flierprops=dict(marker='o', ms=2.6, mfc=S['neutral'],
+                                    mec='none', alpha=0.55))
+    for patch, col in zip(bp['boxes'], [S['primary'], S['accent']]):
+        patch.set_facecolor(col); patch.set_alpha(0.75); patch.set_edgecolor(col)
+    for el in ('whiskers', 'caps', 'medians'):
+        for ln in bp[el]:
+            ln.set_color(S['title']); ln.set_linewidth(1.2)
+    c_.axhline(dir_[16]['ttfb_s']['p50'], color=S['neutral'], lw=1.3, ls=':')
+    c_.text(2.44, dir_[16]['ttfb_s']['p50'] + 0.012, 'HTTP direct p50', fontsize=8,
+            color=S['neutral'], ha='right', style='italic')
+    c_.set_ylim(0, 0.95)
+
+    fig.suptitle('Through a real LiveKit agent: TTFB flat to 16 rooms, loudness held, 0 errors',
+                 fontsize=13.5, color=S['title'], fontweight='bold', y=0.99)
+    save(fig, 'livekit_bench.png',
+         '8 utterances per room, TM_English_Normal, patched app on one H20 + TP=4 LM. '
+         'Boxes are p25–p75, whiskers p5–p95. bench/livekit/ · bench/LIVEKIT.md')
+
+# ─────────────────────────────────────────────── 11. the load client was the bottleneck
+def fig_livekit_client():
+    fig, axs = plt.subplots(1, 2, figsize=(12.6, 4.4), dpi=S['dpi'])
+    fig.patch.set_facecolor(S['bg'])
+
+    a = axs[0]; axis(a, '16 rooms, one client process vs two', 'TTFB p50, seconds')
+    names = ['1 client process\n(16 rooms)', '2 client processes\n(8 rooms each)']
+    vals = [14.08, 0.307]
+    bars = a.bar(names, vals, color=[S['warn'], S['accent']], width=0.5, zorder=3)
+    for r, v in zip(bars, vals):
+        a.text(r.get_x()+r.get_width()/2, v*1.35, f'{v:.3f} s', ha='center', fontsize=11,
+               fontweight='bold', color=S['title'], fontfamily='monospace')
+    a.set_yscale('log'); a.set_ylim(0.1, 60)
+    a.text(0.5, 0.155, '45× — and nothing server-side changed', fontsize=9,
+           color=S['title'], ha='center', style='italic',
+           bbox=dict(boxstyle='round,pad=0.35', facecolor='#ffffff',
+                     edgecolor=S['spine'], linewidth=0.8))
+
+    b = axs[1]; axis(b, 'Who was actually busy during the 16-room run', '')
+    who = ['load_client.py\n(1 process)', 'agent\n(20 processes)', 'TTS app :9095']
+    cpu = [267, 275, 19]
+    cols = [S['warn'], S['neutral'], S['accent']]
+    bars = b.barh(who, cpu, color=cols, height=0.5, zorder=3)
+    for r, v in zip(bars, cpu):
+        b.text(v + 8, r.get_y()+r.get_height()/2, f'{v}%', va='center', fontsize=10.5,
+               fontweight='bold', color=S['title'], fontfamily='monospace')
+    b.set_xlim(0, 330)
+    b.invert_yaxis()
+    b.set_ylabel('')
+    b.set_xlabel('mean %CPU over the run (ps pcpu) — 100% = one core',
+                 fontsize=9, color=S['label'])
+    b.text(120, 2.36, 'the service under test was idle', fontsize=8.6,
+           color=S['accent'], style='italic')
+
+    fig.suptitle('The "LiveKit collapses at 16 rooms" result was the measuring rig',
+                 fontsize=13.5, color=S['title'], fontweight='bold', y=0.99)
+    save(fig, 'livekit_client_trap.png',
+         'Each room coroutine scans its frame buffer and runs numpy RMS on the shared event '
+         'loop. load_client.py now shards across processes (--procs, default 1 per 8 rooms).')
+
 if __name__ == '__main__':
     fig_latency(); fig_saturation(); fig_padding()
     fig_graphs(); fig_precision(); fig_tone()
     fig_interleave(); fig_normalizer(); fig_widecodec()
+    fig_livekit(); fig_livekit_client()
