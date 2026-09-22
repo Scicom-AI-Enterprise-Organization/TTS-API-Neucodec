@@ -24,63 +24,51 @@ Two services, one GPU each:
 
 ## Reports
 
-Every number in this README comes from one of these. Each is self-contained.
+Every number in this README comes from one of these. Each is self-contained. The figures
+below follow the same order.
+
+| # | report | one line |
+|---|---|---|
+| — | [INVESTIGATION.md](bench/INVESTIGATION.md) | **Start here.** A demo complaint → six measurements → three fixes, in diagrams |
+| 1 | [TTFB.md](bench/TTFB.md) | TTFB, end-to-end, RTF percentiles. The TP=1/2/4 sweep |
+| 2 | [PLAYBACK_SPEED.md](bench/PLAYBACK_SPEED.md) | `playback_speed` 0.1→2.0. **0.4** at low concurrency: 32% faster TTFB, no measurable cost |
+| 3 | [LIVEKIT.md](bench/LIVEKIT.md) | Through a real agent: +130 ms flat, 0 errors to 16 rooms, and two rig traps |
+| 4 | [PADDING_BUG.md](bench/PADDING_BUG.md) | The batcher padded windows and corrupted audio. Fixed. Graphs vs eager by load |
+| 5 | [MEGAKERNEL.md](bench/MEGAKERNEL.md) | Precision/int8 do nothing; `torch.compile` fusion up to 2.27×, not enabled |
+| 6 | [PITCH_TONE_AB.md](bench/PITCH_TONE_AB.md) | "Loud and excited mid-sentence": which half is chunking, which is the model |
+| 6 | [INTERLEAVE_AB.md](bench/INTERLEAVE_AB.md) | `interleave_id` cuts the chunk-join jump ~25% |
+| 7 | [NORMALIZER.md](bench/NORMALIZER.md) | Rule vs LLM text normalization, 497 sentences |
+| 8 | [WIDECODEC_AB.md](bench/WIDECODEC_AB.md) | NeuCodec vs WideCodec. Verdict: keep NeuCodec |
+
+Older / reference:
 
 | report | one line |
 |---|---|
-| [INVESTIGATION.md](bench/INVESTIGATION.md) | **Start here.** A demo complaint → six measurements → three fixes, in diagrams |
-| [PLAYBACK_SPEED.md](bench/PLAYBACK_SPEED.md) | `playback_speed` 0.1→2.0. **Use 0.4**: 32% faster TTFB, smoother chunks |
-| [PADDING_BUG.md](bench/PADDING_BUG.md) | The batcher padded windows and corrupted audio. Fixed. Why fp16/int8/bf16 all fail |
-| [TTFB.md](bench/TTFB.md) | TTFB, end-to-end, RTF percentiles. The TP=1/2/4 sweep |
-| [MEGAKERNEL.md](bench/MEGAKERNEL.md) | `torch.compile` fusion: up to 2.27× per decode, but ~10 s per new shape. Not enabled |
-| [LIVEKIT.md](bench/LIVEKIT.md) | Through a real agent: +130 ms flat, 0 errors to 16 rooms, and two rig traps |
-| [PITCH_TONE_AB.md](bench/PITCH_TONE_AB.md) | "Loud and excited mid-sentence": which half is LiveKit, which is the model |
-| [INTERLEAVE_AB.md](bench/INTERLEAVE_AB.md) | `interleave_id` cuts the chunk-join jump ~25% |
-| [NORMALIZER.md](bench/NORMALIZER.md) | Rule vs LLM text normalization, 497 sentences |
-| [WIDECODEC_AB.md](bench/WIDECODEC_AB.md) | NeuCodec vs WideCodec. Verdict: keep NeuCodec |
-| [OPTIMIZATION.md](bench/OPTIMIZATION.md) | Where the time goes, and which knobs move it |
+| [OPTIMIZATION.md](bench/OPTIMIZATION.md) | H100-era throughput work: CUDA graphs, MPS, multi-worker |
 | [WEDGE_TEST.md](bench/WEDGE_TEST.md) | Wedge/disconnect handling under a stalled client |
-| [bench/livekit/](bench/livekit/) | LiveKit agent stress rig — TTFB and loudness through real WebRTC |
+| [bench/livekit/](bench/livekit/) | LiveKit agent stress rig — setup and gotchas |
 | [bench/interleave_ab/](bench/interleave_ab/) | The interleave A/B harness (corpus, generate, score) |
 | [bench/widecodec_ab/](bench/widecodec_ab/) | Codec A/B harness — one token stream, two decoders |
 | [bench/multilingual_normalizer/](bench/multilingual_normalizer/) | 16-locale written→spoken dataset generator |
 | [bench/synth/](bench/synth/) | Render a sentence file through N checkpoints |
 
-### Latency
+### 1. Latency
 
 ![latency percentiles](docs/img/latency_percentiles.png)
 
 TTFB p50 **102 ms** single-stream, **195 ms** at concurrency 32. RTF p50 0.096 → 0.152.
 Details: [TTFB.md](bench/TTFB.md).
 
-### Where it saturates
+### 2. First decode window
 
-![saturation](docs/img/saturation.png)
+![playback_speed sweep](docs/img/playback_speed_sweep.png)
 
-The codec GPU is the only resource that climbs with load. It reaches 96% at 6% memory
-bandwidth — launch-bound, not bandwidth-bound.
+`0.4` gives TTFB 70 ms against 0.75's 103 ms, with loudness, pitch and MOS unchanged within noise.
+⚠ Client buffer falls to **30 ms at concurrency 32** (0.75 keeps 390 ms) while the TTFB win shrinks
+to 11%. Use 0.4 at low concurrency; keep 0.75 near 32.
+Details: [PLAYBACK_SPEED.md](bench/PLAYBACK_SPEED.md).
 
-### Decode correctness
-
-![padding bug](docs/img/padding_bug.png)
-
-The batcher padded windows with token id 0. A non-causal decoder mixes that into the audio
-it keeps. Fixed 2026-09-22. Details: [PADDING_BUG.md](bench/PADDING_BUG.md).
-
-![cuda graphs](docs/img/cuda_graphs.png)
-
-### Precision and quantization
-
-![precision matrix](docs/img/precision_matrix.png)
-
-![megakernel](docs/img/megakernel.png)
-
-Fusion is the only lever that beats fp32 eager — the decoder is launch-bound (609 kernels per
-decode). Blocked by a ~10 s compile per new window length. Full report: [MEGAKERNEL.md](bench/MEGAKERNEL.md).
-
-fp16 cannot run — cuFFT rejects the ISTFT dims in half precision. Nothing else beats fp32.
-
-### LiveKit
+### 3. Through a LiveKit agent
 
 ![livekit bench](docs/img/livekit_bench.png)
 
@@ -95,28 +83,54 @@ The first 16-room run reported an 8.4 s TTFB cliff. It was the load client: one 
 process cannot drive more than ~8 rooms, and its own scheduling delay is charged to the
 server. Split over two processes, the same 16 rooms returned **0.307 s**.
 
-### Pitch and tone
+### 4. Saturation and decode correctness
+
+![saturation](docs/img/saturation.png)
+
+The codec GPU is the only resource that climbs with load. It reaches 96% at 6% memory
+bandwidth — launch-bound, not bandwidth-bound.
+
+![padding bug](docs/img/padding_bug.png)
+
+The batcher padded windows with token id 0. A non-causal decoder mixes that into the audio
+it keeps. Fixed 2026-09-22. Details: [PADDING_BUG.md](bench/PADDING_BUG.md).
+
+![cuda graphs](docs/img/cuda_graphs.png)
+
+With the fix, graphs are bit-exact and worth 1.0× at c=8, 1.44× at c=32, 1.54× at c=64.
+
+### 5. Making the codec faster
+
+![precision matrix](docs/img/precision_matrix.png)
+
+fp16 cannot run — cuFFT rejects the ISTFT dims in half precision. bf16, TF32 and int8 do not
+beat fp32: the decoder is launch-bound (609 kernels per decode), not arithmetic-bound.
+
+![megakernel](docs/img/megakernel.png)
+
+Fusion is the only lever that works — up to 2.27× per decode. Blocked by a ~10 s compile per
+new window length, so not enabled. Details: [MEGAKERNEL.md](bench/MEGAKERNEL.md).
+
+### 6. Pitch, tone and chunk joins
 
 ![pitch and tone](docs/img/pitch_tone.png)
 
 ![interleave A/B](docs/img/interleave_ab.png)
 
-### Text normalization
+Half of the audible tone jumps come from chunking, half from the model. `interleave_id` cuts
+the chunk-join jump ~25%. Details: [PITCH_TONE_AB.md](bench/PITCH_TONE_AB.md), [INTERLEAVE_AB.md](bench/INTERLEAVE_AB.md).
+
+### 7. Text normalization
 
 ![normalizer agreement](docs/img/normalizer.png)
 
-### Codec choice
+Details: [NORMALIZER.md](bench/NORMALIZER.md).
+
+### 8. Codec choice
 
 ![widecodec A/B](docs/img/widecodec_ab.png)
 
-### First decode window
-
-![playback_speed sweep](docs/img/playback_speed_sweep.png)
-
-`0.4` gives TTFB 70 ms against 0.75's 103 ms, with loudness, pitch and MOS unchanged within noise.
-⚠ Client buffer falls to **30 ms at concurrency 32** (0.75 keeps 390 ms) while the TTFB win shrinks
-to 11%. Use 0.4 at low concurrency; keep 0.75 near 32.
-Details: [PLAYBACK_SPEED.md](bench/PLAYBACK_SPEED.md).
+Details: [WIDECODEC_AB.md](bench/WIDECODEC_AB.md).
 
 All figures: `bench/plots/make_figures.py`.
 
