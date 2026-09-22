@@ -171,6 +171,11 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   (scipy's `np.long` kills `import vllm`). Driving it on a shared GPU box: skill `tts-synth-checkpoints`.
   First set: `ucc_ai_research/evaluation/tts/synthetic-audio/2026-09-15/` (20 TM voicebot sentences
   × 3 interleave checkpoints, `TM_English_Normal`, temp 0.6 / rep 1.15).
+- `app/batching.py` — **one decode per distinct token length**, and the reason: NeuCodec's decoder is
+  non-causal, so padding a short window up to a longer one in the same batch feeds it right-context
+  the unpadded decode never had and changes the samples that are kept (−1.3 dB SNR; equal lengths
+  are bit-exact). Imports nothing, so `tests/test_decode_batching.py` runs anywhere. Full story:
+  `bench/PADDING_BUG.md`.
 - `bench/latency_bench.py` — **TTFB + end-to-end + RTF with the full percentile spread**
   (p10/p50/p90/p95/p99) under closed-loop concurrency. Use this and not `bench/bench.py` for
   latency: that one requests `wav`, and a wav response emits its 44-byte header before a single
@@ -245,7 +250,8 @@ for ~4.6 s of audio (RTF ≈0.15).
 | Var | Effect |
 |---|---|
 | `DYNAMIC_BATCHING` (default `true`) | Batch concurrent decode calls. Essential for concurrency, free at concurrency 1. |
-| `CUDA_GRAPH_BATCH=[0.5,1.0,1.5,2.0,3.0,4.0]` | Token-length buckets (×50). **Enabling this is the single biggest codec win (~1.7×).** Empty = eager. With growing windows + past context, decode shapes reach `STREAM_MAX_CHUNK_S + STREAM_PAST_CONTEXT_S` (~13s ⇒ 650 tokens) — include big buckets (e.g. `...,6.0,10.0,13.5]`) or oversize windows silently fall back to eager decode. |
+| `CUDA_GRAPH_LAZY` (default `true`), `CUDA_GRAPH_MAX_SHAPES` (`64`) | Capture one CUDA graph per **exact** decode shape, on first sight, up to the cap. Replaces the fixed buckets below, which only worked by padding a window up to a bucket — and that padding corrupted the audio (`bench/PADDING_BUG.md`). Measured: 0 of 150 real decodes ever landed on a configured bucket (the stitcher produces lengths like 47/121/269), while a lazy cache on the exact shape hits 80–84%. Costs one capture per new shape (~0.06 GB each). |
+| `CUDA_GRAPH_BATCH=[...]` | **Legacy.** Token-length buckets (×50), used only when `CUDA_GRAPH_LAZY=false`. The "~1.7× codec win" recorded below was measured on the padded — i.e. wrong — path; with padding removed the graphs are worth ~6%. Empty = eager. |
 | `MAX_BATCH_SIZE` | Max requests/decode-batch and largest CUDA-graph batch dim. Bigger = more graph memory (~0.06 GB/graph; graphs = `MAX_BATCH_SIZE × len(CUDA_GRAPH_BATCH)`). |
 | `DEFAULT_PLAYBACK_SPEED` (default `2.0`) | Size of the **first** decode window only (×50 tokens ⇒ 2 s); later windows grow via `STREAM_CHUNK_GROWTH`/`STREAM_MAX_CHUNK_S`, with `STREAM_PAST_CONTEXT_S` of past tokens primed into every window. Larger first window ⇒ higher first-chunk latency, better first-window decode. **This gate is the TTFB** (the LM does ~530 tok/s single-stream): 2.0 ⇒ ~220 ms, 1.5 ⇒ ~170 ms, **0.75 ⇒ ~100 ms** (deploy example), 0.5 ⇒ ~80 ms but skews the loudness normalizer +1 dB. See *Time to first byte* below. |
 | `TORCH_COMPILE=true` | Use `torch.compile` instead of CUDA graphs (alternative codepath). |
@@ -316,8 +322,15 @@ normalizer alone.
 | Optimized (run 1) | 1.97% | 0% | 5.07% |
 | Optimized (run 2) | 1.73% | 0% | 3.10% |
 
-All optimizations (CUDA graphs, MPS, multi-worker) are **bit-identical decode operations** — no weight,
-precision, or sampling change (**bf16 throughout, no FP8**) — so accuracy cannot regress by construction.
+~~All optimizations (CUDA graphs, MPS, multi-worker) are **bit-identical decode operations** … so
+accuracy cannot regress by construction.~~ **This was wrong — see `bench/PADDING_BUG.md` (2026-09-22).**
+The graph *replay* is bit-identical, but enabling buckets changed the decoder's *input*: the batcher
+padded every window up to the next bucket with speech token id 0, and NeuCodec's decoder is
+non-causal, so that padding altered the samples that were kept — 4.7 dB SNR against an unpadded
+decode, worst in the MIDDLE of the window. The same bug fired with graphs off whenever dynamic
+batching put different-length windows together (−1.3 dB). Fixed: one decode per distinct length
+(`app/batching.py`), and graphs are now captured lazily on the exact shape. The CER guardrail could
+never have caught it — it runs at concurrency 1, where nothing is padded.
 The run-to-run spread (~0.2–0.8% CER, same config) matches the baseline↔optimized gap, confirming the
 difference is temperature-0.6 sampling noise, not a regression. Median CER is 0% in every config.
 

@@ -10,7 +10,14 @@ class CUDAGraphsWrapper:
     GRAPH_CACHE = {}
     
     @staticmethod
-    def wrap(fn, inputs, kwargs=None, warmup_iters=5, stream=None):
+    def wrap(fn, inputs, kwargs=None, warmup_iters=5, stream=None,
+             capture_error_mode="thread_local"):
+        """`capture_error_mode` defaults to "thread_local" so a graph can be captured
+        while the rest of the app keeps running. Under CUDA's default "global" mode the
+        whole context enters capture, and any CUDA call from another thread -- the batch
+        thread's `pin_memory()`, for one -- dies with "operation not permitted when
+        stream is capturing". That is fine when every graph is captured at startup; it is
+        fatal once capture happens lazily, mid-serving."""
         if kwargs is None:
             kwargs = {}
 
@@ -34,7 +41,7 @@ class CUDAGraphsWrapper:
         
         graph = torch.cuda.CUDAGraph()
         with torch.cuda.stream(capture_stream), torch.no_grad():
-            graph.capture_begin()
+            graph.capture_begin(capture_error_mode=capture_error_mode)
             output = fn(*inputs_static, **kwargs)
             if run_loop:
                 for i in range(len(outputs_static)):

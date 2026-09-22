@@ -61,6 +61,7 @@ except Exception:
         wan = None
 from app.rules import *
 from app.wrapper import CUDAGraphsWrapper
+from app.batching import group_by_length
 from app.timestretch import WSOLA, float_to_pcm16, pcm16_to_float, MIN_RATE, MAX_RATE
 from app.neucodec import NeuCodec
 
@@ -234,9 +235,24 @@ def fn(padded_token):
     return codec.decode_code(padded_token.unsqueeze(1))
 
 buckets = {}
+# Optional instrumentation: which (B,T) decode shapes actually occur, and how many reach a
+# captured graph. Off by default -- it is a dict update on the GIL-bound compute path.
+DECODE_SHAPE_STATS = os.environ.get('DECODE_SHAPE_STATS', 'false').lower() == 'true'
+_shape_stats = __import__('collections').Counter()
 BUCKET_TOKENS = [int(codebook_size * i) for i in CUDA_GRAPH_BATCH]
 BUCKET_TOKENS = sorted(BUCKET_TOKENS)
-if len(BUCKET_TOKENS) and device == "cuda":
+# Graphs are now captured LAZILY, on the exact shape a decode actually asks for.
+# Fixed buckets could only be used by rounding a decode up and padding the difference,
+# and that padding is right-context a non-causal decoder mixes into the audio we keep
+# (see `_batch_one`). Measured: with buckets configured, ZERO of 150 real decodes landed
+# on one, because the stitcher's window schedule produces lengths like 47/121/269, not
+# multiples of 50 -- so the pre-captured graphs cost memory and bought nothing while the
+# padding they required corrupted the output. The real shapes are few and repeat (3 of
+# them were 65% of decodes), which is exactly what a lazy cache is good at.
+CUDA_GRAPH_LAZY = os.environ.get('CUDA_GRAPH_LAZY', 'true').lower() == 'true'
+CUDA_GRAPH_MAX_SHAPES = int(os.environ.get('CUDA_GRAPH_MAX_SHAPES', '64'))
+
+if len(BUCKET_TOKENS) and device == "cuda" and not CUDA_GRAPH_LAZY:
     if TORCH_COMPILE:
         logging.info("warming up with torch compile")
     else:
@@ -289,6 +305,12 @@ def make_pinned_batch(tokens, target_T, dtype=torch.long):
     return pinned
 
 def choose_bucket_len(max_len):
+    """DEPRECATED -- kept only so an old config/import does not break.
+
+    Rounding a decode up to a CUDA-graph bucket and padding the difference is what made
+    the codec produce different audio with graphs on than with them off; see
+    `_batch_one`. Nothing on the decode path calls this any more.
+    """
     idx = bisect.bisect_left(BUCKET_TOKENS, max_len)
     if idx < len(BUCKET_TOKENS):
         return BUCKET_TOKENS[idx]
@@ -368,6 +390,36 @@ def _compute_one(loop, item):
             return
 
         cuda_graph = shapes in buckets
+        if (not cuda_graph and CUDA_GRAPH_LAZY and dev is not None
+                and not TORCH_COMPILE and len(buckets) < CUDA_GRAPH_MAX_SHAPES):
+            # First time we see this exact shape: capture a graph for it and keep it.
+            # `wrap` synchronizes before capturing, and this thread is the only one
+            # touching the compute stream, so nothing else can be mid-replay. A failure
+            # here must fall back to eager, never fail the request.
+            try:
+                probe = torch.zeros(tuple(shapes), dtype=padded_token.dtype, device=device)
+                buckets[tuple(shapes)] = CUDAGraphsWrapper.wrap(
+                    fn, [probe], stream=compute_stream)
+                cuda_graph = True
+                logging.info('captured a CUDA graph for shape %s (%d cached)',
+                             tuple(shapes), len(buckets))
+            except Exception as e:  # noqa: BLE001
+                logging.warning('CUDA graph capture failed for %s, using eager: %s',
+                                tuple(shapes), e)
+        if DECODE_SHAPE_STATS:
+            _shape_stats[(shapes[0], shapes[1], cuda_graph)] += 1
+            _shape_stats['n'] += 1
+            if _shape_stats['n'] % 50 == 0:
+                keys = [k for k in _shape_stats if isinstance(k, tuple)]
+                tot = sum(_shape_stats[k] for k in keys)
+                hit = sum(_shape_stats[k] for k in keys if k[2])
+                top = sorted(((_shape_stats[k], k[0], k[1]) for k in keys), reverse=True)[:6]
+                pct = 100.0 * hit / max(1, tot)
+                # warning, not info: this is opt-in instrumentation and the app's root
+                # logger is above INFO under uvicorn, so info would go nowhere.
+                logging.warning(
+                    'decode shapes: %d decodes, %d distinct (B,T), %d (%.0f%%) hit a '
+                    'captured graph; top(count,B,T)=%s', tot, len(keys), hit, pct, top)
         with torch.no_grad():
             if dev is not None:
                 with dev.stream(compute_stream):
@@ -403,23 +455,38 @@ def batch_thread_fn(loop):
 
 def _batch_one(uuid_str, batch):
         logging.debug(f'{uuid_str}, enter batch_thread_fn')
-        futures, tokens, metas = zip(*[(b[0], b[1], b[2]) for b in batch])
 
-        padded_token_len = [len(t) for t in tokens]
-        max_len = max(padded_token_len)
-        target_T = choose_bucket_len(max_len)
-        padded_token = make_pinned_batch(tokens, target_T)
-        shapes = padded_token.shape
-        logging.debug(f'{uuid_str}, batch shape {shapes} cpu')
+        # ONE DECODE PER DISTINCT TOKEN LENGTH -- never pad a shorter item up to a longer
+        # one. The NeuCodec decoder is non-causal (global attention over the window, conv
+        # receptive field, ISTFT 'same' padding), so trailing pad tokens are right-context
+        # the unpadded decode never had, and their influence reaches the samples we keep:
+        # slicing off the padding's own output does not undo it. Measured on real LM
+        # tokens (2026-09-22): a 180-token request batched with a 470-token one came back
+        # at -1.3 dB SNR against decoding it alone -- the error louder than the speech,
+        # and worst in the MIDDLE of the window, not at the seam. Padding to a CUDA-graph
+        # bucket is the same bug with a bigger pad (4.7 dB SNR at bucket 500).
+        # Two items of the SAME length are bit-identical batched or not (-90 dB, max|d|
+        # 0.000), which is why grouping is the fix rather than a mitigation.
+        # Cost: a batch of mixed lengths becomes several GPU calls. Correctness first --
+        # this is the difference between "faster" and "faster at producing wrong audio".
+        by_len = group_by_length(batch)
 
-        if dev is not None:
-            with dev.stream(h2d_stream):
-                padded_token_gpu = padded_token.to(device, non_blocking=True)
-        else:
-            padded_token_gpu = padded_token
-        if tracing.enabled:
-            _trace_batch_stage(metas, tracing.now_ns(), len(batch), shapes)
-        compute_queue.put((uuid_str, padded_token_gpu, padded_token_len, futures, metas))
+        for n, group in by_len.items():
+            futures, tokens, metas = zip(*[(g[0], g[1], g[2]) for g in group])
+            token_len = [len(t) for t in tokens]
+            # every row is exactly n long, so this copies and never pads
+            padded_token = make_pinned_batch(tokens, n)
+            shapes = padded_token.shape
+            logging.debug(f'{uuid_str}, batch shape {shapes} cpu ({len(by_len)} len-group(s))')
+
+            if dev is not None:
+                with dev.stream(h2d_stream):
+                    padded_token_gpu = padded_token.to(device, non_blocking=True)
+            else:
+                padded_token_gpu = padded_token
+            if tracing.enabled:
+                _trace_batch_stage(metas, tracing.now_ns(), len(group), shapes)
+            compute_queue.put((uuid_str, padded_token_gpu, token_len, futures, metas))
 
 async def dynamic_batching():
     need_sleep = True
