@@ -15,11 +15,27 @@ windowing alone. 6 texts, 20 settings, reference = `playback_speed=50` (one wind
 | TTFB | 103 ms | **70 ms** | **−32%** |
 | Loudness | −17.2 dBFS | −17.3 dBFS | none |
 | Pitch | 195.1 Hz | 195.1 Hz | none |
-| Chunk-to-chunk step | 1.40 dB | **1.22 dB** | better |
-| Seams over 3 dB | 8% | **6%** | better |
+| Chunk-to-chunk step | 1.40 dB | 1.22 dB | within noise |
+| Seams over 3 dB | 8% | 6% | within noise |
 | UTMOSv2 | 3.251 | 3.219 | within noise |
 
-0.4 is faster **and** slightly smoother. It is not a trade.
+**0.4 buys 33 ms of TTFB at no measurable cost.** Loudness, pitch, chunk consistency and MOS are
+all unchanged *within noise* — the chunk-step and MOS differences above are smaller than the
+measurement spread, so read them as "not worse", not "better".
+
+### ⚠ The catch: client buffer under load
+
+| concurrency | `0.4` buffer | `0.75` buffer | TTFB advantage of 0.4 |
+|---|---|---|---|
+| 1 | 0.322 s | 0.600 s | −30% |
+| 8 | 0.283 s | 0.573 s | −29% |
+| **32** | **0.030 s** | 0.390 s | **−11%** |
+
+At concurrency 32 the margin collapses to **30 ms** while the TTFB win shrinks to 11%. Zero stalls
+in 20 runs at every point, but 30 ms is one scheduling hiccup from starving a caller.
+
+**So: 0.4 if concurrency stays low. Keep 0.75 if you run near 32.** 0.5 is the hedge — 0.409 s of
+buffer single-stream and still 25% faster than 0.75.
 
 ## The numbers
 

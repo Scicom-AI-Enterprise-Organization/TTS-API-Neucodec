@@ -41,7 +41,10 @@ audio is captured off the agent's published track. Two arms, 4 concurrent rooms:
 see below).
 
 Scoring (`bench/pitch_stress_score.py`) is frame-level f0 + level at 10 ms, and the headline is not
-a mean — a mean is exactly what hides a one-off jump. It is a **rate of audible events**: two
+a mean — a mean is exactly what hides a one-off jump.
+
+![pitch and tone](../docs/img/pitch_tone.png)
+ It is a **rate of audible events**: two
 adjacent 0.5 s windows of voiced speech where the level rises ≥3 dB **and** the register rises
 ≥1.5 st *at the same time*. Either alone moves constantly in normal speech; the conjunction is what
 a listener calls a change of tone.

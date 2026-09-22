@@ -1,5 +1,8 @@
 # NeuCodec vs WideCodec — codec A/B on TTS speech tokens (H20)
 
+![widecodec A/B](../docs/img/widecodec_ab.png)
+
+
 Does swapping the vocoder for **[`Scicom-intl/WideCodec`](https://huggingface.co/Scicom-intl/WideCodec)**
 (44.1 kHz, 0.8 kbps, single codebook) improve the audio the TTS API serves, versus the
 **[`neuphonic/neucodec`](https://github.com/neuphonic/neucodec)** decoder the app ships today

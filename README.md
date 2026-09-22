@@ -37,8 +37,66 @@ Every number in this README comes from one of these. Each is self-contained.
 | [NORMALIZER.md](bench/NORMALIZER.md) | Rule vs LLM text normalization, 497 sentences |
 | [WIDECODEC_AB.md](bench/WIDECODEC_AB.md) | NeuCodec vs WideCodec. Verdict: keep NeuCodec |
 | [OPTIMIZATION.md](bench/OPTIMIZATION.md) | Where the time goes, and which knobs move it |
+| [WEDGE_TEST.md](bench/WEDGE_TEST.md) | Wedge/disconnect handling under a stalled client |
+| [bench/livekit/](bench/livekit/) | LiveKit agent stress rig — TTFB and loudness through real WebRTC |
+| [bench/interleave_ab/](bench/interleave_ab/) | The interleave A/B harness (corpus, generate, score) |
+| [bench/widecodec_ab/](bench/widecodec_ab/) | Codec A/B harness — one token stream, two decoders |
+| [bench/multilingual_normalizer/](bench/multilingual_normalizer/) | 16-locale written→spoken dataset generator |
+| [bench/synth/](bench/synth/) | Render a sentence file through N checkpoints |
+
+### Latency
+
+![latency percentiles](docs/img/latency_percentiles.png)
+
+TTFB p50 **102 ms** single-stream, **195 ms** at concurrency 32. RTF p50 0.096 → 0.152.
+Details: [TTFB.md](bench/TTFB.md).
+
+### Where it saturates
+
+![saturation](docs/img/saturation.png)
+
+The codec GPU is the only resource that climbs with load. It reaches 96% at 6% memory
+bandwidth — launch-bound, not bandwidth-bound.
+
+### Decode correctness
+
+![padding bug](docs/img/padding_bug.png)
+
+The batcher padded windows with token id 0. A non-causal decoder mixes that into the audio
+it keeps. Fixed 2026-09-22. Details: [PADDING_BUG.md](bench/PADDING_BUG.md).
+
+![cuda graphs](docs/img/cuda_graphs.png)
+
+### Precision and quantization
+
+![precision matrix](docs/img/precision_matrix.png)
+
+fp16 cannot run — cuFFT rejects the ISTFT dims in half precision. Nothing else beats fp32.
+
+### Pitch and tone
+
+![pitch and tone](docs/img/pitch_tone.png)
+
+![interleave A/B](docs/img/interleave_ab.png)
+
+### Text normalization
+
+![normalizer agreement](docs/img/normalizer.png)
+
+### Codec choice
+
+![widecodec A/B](docs/img/widecodec_ab.png)
+
+### First decode window
 
 ![playback_speed sweep](docs/img/playback_speed_sweep.png)
+
+`0.4` gives TTFB 70 ms against 0.75's 103 ms, with loudness, pitch and MOS unchanged within noise.
+⚠ Client buffer falls to **30 ms at concurrency 32** (0.75 keeps 390 ms) while the TTFB win shrinks
+to 11%. Use 0.4 at low concurrency; keep 0.75 near 32.
+Details: [PLAYBACK_SPEED.md](bench/PLAYBACK_SPEED.md).
+
+All figures: `bench/plots/make_figures.py`.
 
 ## Setup
 

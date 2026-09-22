@@ -4,6 +4,11 @@ Measured **2026-09-05** against the staging deployment of this app, from a lapto
 internet. Every wall-clock number below therefore contains one client round trip; the
 decomposition in *Where the time goes* separates that out.
 
+![latency percentiles](../docs/img/latency_percentiles.png)
+
+![saturation](../docs/img/saturation.png)
+
+
 ## What was measured
 
 **Hardware and topology.** Both services run on **NVIDIA H20-3e** GPUs in the `H20` cluster

@@ -1,5 +1,8 @@
 # Spoken normalizer: rule-based replica of the LLM normalizer
 
+![normalizer agreement](../docs/img/normalizer.png)
+
+
 `app/spoken_normalizer/` — `mode: "spoken"` on `/v1/audio/normalize` and TTS requests. Rewrites
 everything that is not speakable as written into words, in the language of the surrounding text,
 for **English, Malay, Mandarin and Tamil**, exactly as the LLM normalizer (`app/prompt.py`) is asked

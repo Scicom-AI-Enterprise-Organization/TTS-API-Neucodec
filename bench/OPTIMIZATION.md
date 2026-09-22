@@ -1,5 +1,10 @@
 # Inference optimization — H100 SXM, colocated vLLM + NeuCodec
 
+![saturation](../docs/img/saturation.png)
+
+![cuda graphs](../docs/img/cuda_graphs.png)
+
+
 End-to-end optimization of the TTS pipeline on **1× H100 SXM (80 GB)**, with vLLM (Qwen3-1.7B TTS LM)
 and the NeuCodec decoder **colocated on the same GPU**. Goal: maximize throughput/latency **without
 dropping audio accuracy** (verified with Whisper CER).

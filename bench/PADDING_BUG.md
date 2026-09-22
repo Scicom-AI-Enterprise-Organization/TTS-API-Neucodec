@@ -3,6 +3,13 @@
 **Found 2026-09-22**, from a report that enabling `CUDA_GRAPH_BATCH` made the voice sound worse.
 It does, the effect is large, and the repo's standing claim that it cannot was wrong.
 
+![padding bug](../docs/img/padding_bug.png)
+
+![cuda graphs](../docs/img/cuda_graphs.png)
+
+![precision matrix](../docs/img/precision_matrix.png)
+
+
 ## The claim that was wrong
 
 CLAUDE.md said, of CUDA graphs, MPS and multi-worker:
