@@ -79,16 +79,41 @@ The guardrail was structurally incapable of seeing this.
 
 ## After
 
-| | before (eager reference) | after (lazy graphs on) |
-|---|---|---|
-| audio vs the eager reference | — | **223 dB SNR — identical** |
-| errors | 0 | **0** |
-| throughput, 1 worker, c=8 | ~63 audio-s/s | **63–67 audio-s/s** |
-| graph hit rate | 0% | **80–84%** |
+| | value |
+|---|---|
+| audio vs the eager reference | **223 dB SNR — identical** |
+| errors | **0** |
+| graph hit rate | **80–84%** |
 
 Enabling graphs now changes nothing audible, which is what the old claim promised and did not
-deliver. Note the throughput gain is ~6%, not the ~1.7× the CLAUDE.md table records — that figure
-was measured with the padding in place, i.e. on the faster-but-wrong path.
+deliver.
+
+### What graphs are worth, and what correctness cost
+
+Three builds on one GPU, one worker each, benchmark passes **interleaved** so drift on the shared
+card hits every arm equally (audio-s/s):
+
+| concurrency | eager (prod default) | patched + lazy graphs | **graphs vs eager** | pre-fix graphs (wrong audio) | **cost of correctness** |
+|---|---|---|---|---|---|
+| 8 | 66.7 | 65.8 | **1.0×** | 67.6 | −3% |
+| 32 | 132.2 | 190.6 | **1.44×** | 209.4 | −9% |
+| 64 | 138.8 | 213.4 | **1.54×** | 296.2 | −28% |
+
+Two things to read off this:
+
+- **CUDA graphs only pay when the codec GPU is the constraint.** At c=8 they are worth nothing —
+  the GPU sits around 37% and there is no launch overhead worth removing. At c=32–64 they are
+  worth **1.44–1.54×**, which broadly confirms the ~1.7× in the CLAUDE.md table rather than
+  refuting it. Benchmarking this at low concurrency measures the wrong thing.
+- **Correctness costs throughput, and the cost grows with load** — 3% at c=8, 28% at c=64. Grouping
+  by exact length splits what used to be one padded batch into several smaller ones, so the more
+  concurrent requests there are at differing window sizes, the more the batching is fragmented.
+  That is the real price of the fix, and it is worth paying: the alternative is 2.1× the throughput
+  at 10.6 dB SNR.
+
+If that 28% matters, the lever is making window lengths *collide* rather than padding them apart —
+e.g. quantising the stitcher's schedule so concurrent requests land on the same few lengths. That
+keeps batches whole without ever padding, and is the only way to get both.
 
 ⚠ Two measurement traps met on the way:
 
