@@ -101,6 +101,35 @@ was measured with the padding in place, i.e. on the faster-but-wrong path.
   concurrent measured 58–69 dB on the *unfixed* code for exactly this reason. Staggered arrivals
   and differing final-flush windows are what trigger it in production.
 
+## A/B on identical hardware, and what UTMOSv2 says
+
+Three builds, same GPU, same single worker, same texts, temperature 0, **serial** — so
+batching is not a variable and the only difference is the code. Buckets pad every window
+even at concurrency 1, which is why the reported defect shows up without any load at all:
+
+| build | SNR vs the eager reference |
+|---|---|
+| pre-fix, graphs ON | **median 10.6 dB** (range 6.8–14.2) |
+| patched, graphs ON | **median 222.7 dB** — identical |
+
+**UTMOSv2 cannot see this defect.** Scored through `tm-h20-utmosv2`, 6 reps per file:
+
+| build | mean MOS | within-file sd (the noise floor) |
+|---|---|---|
+| eager reference | 3.313 | 0.170 |
+| pre-fix + graphs (10.6 dB SNR) | **3.367** | 0.116 |
+| patched + graphs (bit-identical) | 3.283 | 0.129 |
+
+The corrupted build scored **higher** than the reference, and the bit-identical build
+scored lower — both deltas inside the scorer's own noise. Since the patched build is
+bit-identical to the reference, its −0.030 is a direct read of that noise floor, and the
+corrupted build's +0.054 is smaller still.
+
+⚠ **Do not use UTMOSv2 to validate this class of change.** It scores random crops for
+naturalness and is blind to broadband additive corruption, the same way it was flat
+against the continuity change in `bench/INTERLEAVE_AB.md`. A sample-wise diff against a
+known-good reference is the test that works; UTMOSv2 will happily certify corrupted audio.
+
 ## Reproducing
 
 ```bash
