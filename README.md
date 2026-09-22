@@ -32,6 +32,7 @@ Every number in this README comes from one of these. Each is self-contained.
 | [PLAYBACK_SPEED.md](bench/PLAYBACK_SPEED.md) | `playback_speed` 0.1→2.0. **Use 0.4**: 32% faster TTFB, smoother chunks |
 | [PADDING_BUG.md](bench/PADDING_BUG.md) | The batcher padded windows and corrupted audio. Fixed. Why fp16/int8/bf16 all fail |
 | [TTFB.md](bench/TTFB.md) | TTFB, end-to-end, RTF percentiles. The TP=1/2/4 sweep |
+| [MEGAKERNEL.md](bench/MEGAKERNEL.md) | `torch.compile` fusion: up to 2.27× per decode, but ~10 s per new shape. Not enabled |
 | [LIVEKIT.md](bench/LIVEKIT.md) | Through a real agent: +130 ms flat, 0 errors to 16 rooms, and two rig traps |
 | [PITCH_TONE_AB.md](bench/PITCH_TONE_AB.md) | "Loud and excited mid-sentence": which half is LiveKit, which is the model |
 | [INTERLEAVE_AB.md](bench/INTERLEAVE_AB.md) | `interleave_id` cuts the chunk-join jump ~25% |
@@ -71,6 +72,11 @@ it keeps. Fixed 2026-09-22. Details: [PADDING_BUG.md](bench/PADDING_BUG.md).
 ### Precision and quantization
 
 ![precision matrix](docs/img/precision_matrix.png)
+
+![megakernel](docs/img/megakernel.png)
+
+Fusion is the only lever that beats fp32 eager — the decoder is launch-bound (609 kernels per
+decode). Blocked by a ~10 s compile per new window length. Full report: [MEGAKERNEL.md](bench/MEGAKERNEL.md).
 
 fp16 cannot run — cuFFT rejects the ISTFT dims in half precision. Nothing else beats fp32.
 

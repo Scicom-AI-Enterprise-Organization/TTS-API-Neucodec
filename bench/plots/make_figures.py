@@ -419,8 +419,47 @@ def fig_livekit_client():
          'Each room coroutine scans its frame buffer and runs numpy RMS on the shared event '
          'loop. load_client.py now shards across processes (--procs, default 1 per 8 rooms).')
 
+# ─────────────────────────────────────────────── 12. torch.compile / megakernel decode
+MK = dict(win=['w47', 'w121', 'w269'],
+          eager=[6.24, 6.29, 9.39],
+          arms=[('compile default', [3.24, 4.22, 8.07], S['neutral']),
+                ('compile reduce-overhead', [2.75, 3.98, 7.88], S['accent']),
+                ('compile max-autotune', [2.77, 3.95, 7.85], S['primary'])],
+          shapes=[47, 121, 269, 187, 95],
+          cost_static=[11.24, 9.49, 10.38, 11.51, 11.74],
+          cost_dynamic=[12.66, 9.17, 10.02, 9.38, 9.46])
+def fig_megakernel():
+    fig, axs = plt.subplots(1, 2, figsize=(13.4, 4.5), dpi=S['dpi'])
+    fig.patch.set_facecolor(S['bg'])
+    a = axs[0]; axis(a, 'Per-decode speedup over fp32 eager (batch 1)', '× faster', 'decode window (tokens)')
+    x = np.arange(len(MK['win'])); w = 0.26
+    for k, (lab, ms, col) in enumerate(MK['arms']):
+        sp = [e / m for e, m in zip(MK['eager'], ms)]
+        b = a.bar(x + (k-1)*w, sp, w, color=col, label=lab, zorder=3)
+        for r, v in zip(b, sp):
+            a.text(r.get_x()+r.get_width()/2, v+0.03, f'{v:.2f}', ha='center', fontsize=7.8,
+                   color=S['title'], fontfamily='monospace')
+    a.axhline(1.0, color=S['warn'], lw=1.1)
+    a.text(-0.45, 1.03, 'fp32 eager', fontsize=8, color=S['warn'], ha='left')
+    a.set_xticks(x); a.set_xticklabels(MK['win']); a.set_ylim(0, 2.65)
+    a.legend(frameon=False, fontsize=8.2, labelcolor=S['label'], loc='upper right')
+
+    b = axs[1]; axis(b, 'Compile cost, paid once per NEW shape', 'seconds', 'decode length (tokens)')
+    x = np.arange(len(MK['shapes'])); w = 0.36
+    b.bar(x - w/2, MK['cost_static'], w, color=S['primary'], label='dynamic=False', zorder=3)
+    b.bar(x + w/2, MK['cost_dynamic'], w, color=S['neutral'], label='dynamic=True', zorder=3)
+    b.set_xticks(x); b.set_xticklabels(MK['shapes']); b.set_ylim(0, 17.5)
+    b.legend(frameon=False, fontsize=8.2, labelcolor=S['label'], loc='upper left', ncol=2, bbox_to_anchor=(0, 0.9))
+    b.text(2, 15.6, 'dynamic=True does not amortise — it still recompiles per shape',
+           fontsize=8.4, color=S['caption'], style='italic', ha='center')
+    fig.suptitle('Fusion is the one lever that works: up to 2.27× — but ~10 s per new shape',
+                 fontsize=13.5, color=S['title'], fontweight='bold', y=0.99)
+    save(fig, 'megakernel.png',
+         'One w121 eager decode = 609 kernel launches, 51 distinct ops. Output ~80 dB SNR vs eager '
+         '(not bit-exact). bench/MEGAKERNEL.md')
+
 if __name__ == '__main__':
     fig_latency(); fig_saturation(); fig_padding()
     fig_graphs(); fig_precision(); fig_tone()
     fig_interleave(); fig_normalizer(); fig_widecodec()
-    fig_livekit(); fig_livekit_client()
+    fig_livekit(); fig_livekit_client(); fig_megakernel()
