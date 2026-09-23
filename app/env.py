@@ -41,6 +41,10 @@ CROSSFADE_MS = float(os.environ.get('CROSSFADE_MS', '12.0'))
 # (first chunk jumps straight to the estimate) and clamped to +/-MAX_GAIN_DB.
 # Set STREAM_NORMALIZE=false for the raw decoder level.
 STREAM_NORMALIZE = os.environ.get('STREAM_NORMALIZE', 'true').lower() == 'true'
+# Raised-cosine fade-in over the first FADE_IN_MS of every response (app/fade.py). ~5-7% of
+# requests start mid-waveform because the LM's first tokens are already voiced; without
+# this, playback opens on a click and a clipped first phoneme. 0 disables.
+FADE_IN_MS = float(os.environ.get('FADE_IN_MS', '10'))
 # Growing decode windows for the crossfade stitcher: the first chunk stays at
 # chunk_size (TTFB unchanged), each next window is chunk_size * GROWTH^k, capped at
 # STREAM_MAX_CHUNK_S seconds. Bigger windows decode closer to the one-shot result
