@@ -458,8 +458,62 @@ def fig_megakernel():
          'One w121 eager decode = 609 kernel launches, 51 distinct ops. Output ~80 dB SNR vs eager '
          '(not bit-exact). bench/MEGAKERNEL.md')
 
+# ─────────────────────────────────────────────── 13. first-samples fade-in
+FD = f'{RES}/fade-2026-09-23'
+def _fade_rows(arm, c):
+    return [json.loads(l) for l in open(f'{FD}/{arm}_c{c}.jsonl') if l.strip()]
+def fig_fade():
+    cs = [1, 8, 16]
+    fig, axs = plt.subplots(1, 3, figsize=(16.0, 4.5), dpi=S['dpi'])
+    fig.patch.set_facecolor(S['bg'])
+
+    a = axs[0]; axis(a, 'Responses that start with a click', '% of responses', 'concurrency')
+    x = np.arange(len(cs)); w = 0.36
+    def rate(arm, c, k):
+        rs = [r for r in _fade_rows(arm, c) if r.get('onset_db') is not None]
+        return 100 * sum(r[k] for r in rs) / len(rs)
+    nf = [rate('nofade', c, 'click') for c in cs]; fd = [rate('fade', c, 'click') for c in cs]
+    b1 = a.bar(x - w/2, nf, w, color=S['warn'], label='FADE_IN_MS=0', zorder=3)
+    b2 = a.bar(x + w/2, fd, w, color=S['accent'], label='FADE_IN_MS=10', zorder=3)
+    for r, v in list(zip(b1, nf)) + list(zip(b2, fd)):
+        a.text(r.get_x()+r.get_width()/2, v + 0.15, f'{v:.1f}%', ha='center', fontsize=8.6,
+               fontweight='bold', color=S['title'], fontfamily='monospace')
+    hn = [rate('nofade', c, 'hot') for c in cs]; hf = [rate('fade', c, 'hot') for c in cs]
+    a.plot(x, [(p + q) / 2 for p, q in zip(hn, hf)], color=S['neutral'], lw=1.4, ls='--',
+           marker='o', ms=4, label='model started voiced (both arms)', zorder=4)
+    a.set_xticks(x); a.set_xticklabels(cs); a.set_ylim(0, 9)
+    a.legend(frameon=False, fontsize=8, labelcolor=S['label'], loc='upper left')
+
+    b = axs[1]; axis(b, 'Loudest sample in the first millisecond', 'share of responses at or above', 'peak |x| (full scale)')
+    for arm, col, lab in (('nofade', S['warn'], 'FADE_IN_MS=0'), ('fade', S['accent'], 'FADE_IN_MS=10')):
+        v = np.sort([r['first1ms'] for c in cs for r in _fade_rows(arm, c) if r.get('first1ms') is not None])
+        v = np.maximum(v, 1e-5)
+        b.plot(v, 1 - np.arange(len(v)) / len(v), color=col, lw=2, label=f'{lab} (n={len(v)})', zorder=3)
+    b.axvline(0.05, color=S['title'], lw=1, ls=':')
+    b.text(0.058, 0.2, 'click\nthreshold\n0.05', fontsize=8, color=S['title'])
+    b.set_xscale('log'); b.set_yscale('log'); b.set_xlim(1e-5, 1); b.set_ylim(1e-3, 1.05)
+    b.legend(frameon=False, fontsize=8, labelcolor=S['label'], loc='lower left')
+
+    c_ = axs[2]; axis(c_, 'One response that started voiced', 'amplitude', 'ms')
+    ex = json.load(open(f'{FD}/example_onset.json'))
+    n = int(0.030 * ex['sr']); t = np.arange(n) / ex['sr'] * 1000
+    c_.plot(t, np.array(ex['raw'][:n]) / 32768, color=S['warn'], lw=1.1, label='as generated', zorder=3)
+    c_.plot(t, np.array(ex['faded'][:n]) / 32768, color=S['accent'], lw=1.3, label='with the 10 ms fade', zorder=4)
+    c_.axvspan(0, 10, color=S['accent'], alpha=0.07, zorder=1)
+    c_.text(0.4, -0.93, 'ramp', fontsize=8, color=S['accent'])
+    c_.text(11, -0.93, 'identical after 10 ms', fontsize=8, color=S['caption'], style='italic')
+    c_.set_ylim(-1.0, 1.0)
+    c_.legend(frameon=False, fontsize=8, labelcolor=S['label'], loc='upper right')
+
+    fig.suptitle('A 10 ms fade-in removes the start click: 3.3–3.8% of responses → 0.0%',
+                 fontsize=13.5, color=S['title'], fontweight='bold', y=0.99)
+    save(fig, 'fade_in.png',
+         'Same build, FADE_IN_MS=0 vs 10, 240 requests per level, TM_English_Normal, SSE like the '
+         'livekit openai plugin. bench/fade_bench.py · bench/FADE_IN.md')
+
 if __name__ == '__main__':
     fig_latency(); fig_saturation(); fig_padding()
     fig_graphs(); fig_precision(); fig_tone()
     fig_interleave(); fig_normalizer(); fig_widecodec()
     fig_livekit(); fig_livekit_client(); fig_megakernel()
+    fig_fade()

@@ -34,6 +34,7 @@ below follow the same order.
 | 2 | [PLAYBACK_SPEED.md](bench/PLAYBACK_SPEED.md) | `playback_speed` 0.1→2.0. **0.4** at low concurrency: 32% faster TTFB, no measurable cost |
 | 3 | [LIVEKIT.md](bench/LIVEKIT.md) | Through a real agent: +130 ms flat, 0 errors to 16 rooms, and two rig traps |
 | 4 | [PADDING_BUG.md](bench/PADDING_BUG.md) | The batcher padded windows and corrupted audio. Fixed. Graphs vs eager by load |
+| 4 | [FADE_IN.md](bench/FADE_IN.md) | ~1 response in 20 started mid-waveform with a click. 10 ms fade-in: clicks 3.3–3.8% → 0.0% |
 | 5 | [MEGAKERNEL.md](bench/MEGAKERNEL.md) | Precision/int8 do nothing; `torch.compile` fusion up to 2.27×, not enabled |
 | 6 | [PITCH_TONE_AB.md](bench/PITCH_TONE_AB.md) | "Loud and excited mid-sentence": which half is chunking, which is the model |
 | 6 | [INTERLEAVE_AB.md](bench/INTERLEAVE_AB.md) | `interleave_id` cuts the chunk-join jump ~25% |
@@ -98,6 +99,12 @@ it keeps. Fixed 2026-09-22. Details: [PADDING_BUG.md](bench/PADDING_BUG.md).
 ![cuda graphs](docs/img/cuda_graphs.png)
 
 With the fix, graphs are bit-exact and worth 1.0× at c=8, 1.44× at c=32, 1.54× at c=64.
+
+![fade in](docs/img/fade_in.png)
+
+About 1 response in 20 opened at full level on its first sample — a click — because the LM
+started voiced. A 10 ms fade-in (`FADE_IN_MS`) takes clicks from 3.3–3.8% to 0.0% at every
+load. It treats the symptom; the voiced start itself is the model. Details: [FADE_IN.md](bench/FADE_IN.md).
 
 ### 5. Making the codec faster
 

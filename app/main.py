@@ -26,6 +26,7 @@ from app.normalizer.chinese import normalize_chinese, is_chinese_dominant, CJK_R
 from app.llm_normalizer import llm_normalize, needs_normalization, has_unspoken, LLMNormalizerError, NormalizerMode
 from app.spoken_normalizer import normalize as spoken_normalize
 from app import tracing
+from app.fade import fade_in_pcm16
 from app.interleave import (
     make_store, RequestInterleave, build_prompt, fit_interleave, select_voice,
     seconds_to_tokens, total_tokens,
@@ -1283,6 +1284,10 @@ async def stream_speech(
         # layers, so every response mode (pcm/wav, raw/SSE, buffered) gets it and the
         # token/decode pipeline is untouched. Stateful across chunks, ~55 ms lookahead.
         stitched = time_stretch_pcm16(stitched, speaking_rate, sr)
+    if FADE_IN_MS > 0:
+        # Last stage before transport, so it shapes exactly the first samples a caller hears
+        # whatever came before (crossfade, loudness gain, time stretch). See app/fade.py.
+        stitched = fade_in_pcm16(stitched, int(round(FADE_IN_MS * sr / 1000)))
     func = with_producer_cleanup(stitched)
     stream_headers = {
         'Cache-Control': 'no-cache, no-store',

@@ -1,0 +1,240 @@
+{"i": 0, "text": "I can help you with that today.", "onset_db": -6.698125839233398, "first5ms": 0.140594482421875, "first1ms": 0.00115966796875, "first_sample": 0.0, "hot": true, "click": false}
+{"i": 6, "text": "How can I help you today?", "onset_db": -9.773606300354004, "first5ms": 0.095001220703125, "first1ms": 0.003692626953125, "first_sample": 0.0, "hot": true, "click": false}
+{"i": 15, "text": "Are you still there?", "onset_db": -167.7669219970703, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 13, "text": "Your payment has been received, thank you.", "onset_db": -167.655029296875, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 1, "text": "I'm sorry, I didn't quite catch that.", "onset_db": -78.57207489013672, "first5ms": 3.0517578125e-05, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 4, "text": "We can certainly help you with that.", "onset_db": -26.073753356933594, "first5ms": 0.02130126953125, "first1ms": 0.000152587890625, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 14, "text": "Is there anything else I can help you with?", "onset_db": -169.87954711914062, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 7, "text": "How would you like to receive your bill?", "onset_db": -168.67605590820312, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 8, "text": "Hi, thank you for calling, my name is Maya.", "onset_db": -67.93656158447266, "first5ms": 9.1552734375e-05, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 2, "text": "I understand, let me check your account for you.", "onset_db": -168.4036865234375, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 11, "text": "This will only take a moment, please stay on the line.", "onset_db": -44.82416534423828, "first5ms": 0.00177001953125, "first1ms": 9.1552734375e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 10, "text": "This call may be recorded for quality purposes.", "onset_db": -43.7109489440918, "first5ms": 0.001495361328125, "first1ms": 3.0517578125e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 9, "text": "Hi there, I'm your virtual assistant for billing.", "onset_db": -37.53254318237305, "first5ms": 0.005218505859375, "first1ms": 0.000274658203125, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 16, "text": "Please hold for a moment.", "onset_db": -167.724609375, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 3, "text": "We're sorry, we couldn't verify your identity on this call.", "onset_db": -167.39598083496094, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 17, "text": "Could you say that again?", "onset_db": -167.39019775390625, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 18, "text": "Thank you for your patience.", "onset_db": -167.60037231445312, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 5, "text": "We have updated your billing address in our system.", "onset_db": -57.505027770996094, "first5ms": 0.00042724609375, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 12, "text": "You can pay your bill online or at any of our centres.", "onset_db": -23.816619873046875, "first5ms": 0.012298583984375, "first1ms": 0.001251220703125, "first_sample": 0.0, "hot": true, "click": false}
+{"i": 23, "text": "May I have your full name, please?", "onset_db": -168.30348205566406, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 20, "text": "One moment while I pull up your details.", "onset_db": -165.80528259277344, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 19, "text": "Let me transfer you to the right department.", "onset_db": -86.58039093017578, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 21, "text": "All right, your request has been submitted.", "onset_db": -89.44529724121094, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 30, "text": "I can help you with that today.", "onset_db": -30.607406616210938, "first5ms": 0.005340576171875, "first1ms": 0.000457763671875, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 27, "text": "Would you like me to send the details by email?", "onset_db": -93.96583557128906, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 26, "text": "Good morning, how may I assist you?", "onset_db": -166.87925720214844, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 31, "text": "I'm sorry, I didn't quite catch that.", "onset_db": -168.3315887451172, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 36, "text": "How can I help you today?", "onset_db": -25.691102981567383, "first5ms": 0.019500732421875, "first1ms": 0.00048828125, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 29, "text": "No problem, I have noted that down for you.", "onset_db": -85.9212875366211, "first5ms": 3.0517578125e-05, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 32, "text": "I understand, let me check your account for you.", "onset_db": -167.5979766845703, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 24, "text": "Our technician will contact you within two working days.", "onset_db": -56.6391716003418, "first5ms": 0.000274658203125, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 34, "text": "We can certainly help you with that.", "onset_db": -13.563794136047363, "first5ms": 0.04156494140625, "first1ms": 0.0006103515625, "first_sample": 0.0, "hot": true, "click": false}
+{"i": 22, "text": "Unfortunately, we are unable to process that request right now.", "onset_db": -167.8725128173828, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 25, "text": "Your service will be restored within the next few hours.", "onset_db": -166.8064727783203, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 28, "text": "Just to confirm, you would like to change your plan?", "onset_db": -167.71621704101562, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 37, "text": "How would you like to receive your bill?", "onset_db": -25.71700668334961, "first5ms": 0.01397705078125, "first1ms": 0.000640869140625, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 38, "text": "Hi, thank you for calling, my name is Maya.", "onset_db": -82.91500091552734, "first5ms": 3.0517578125e-05, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 45, "text": "Are you still there?", "onset_db": -167.19146728515625, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 46, "text": "Please hold for a moment.", "onset_db": -167.38461303710938, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 47, "text": "Could you say that again?", "onset_db": -168.34674072265625, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 33, "text": "We're sorry, we couldn't verify your identity on this call.", "onset_db": -168.00807189941406, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 44, "text": "Is there anything else I can help you with?", "onset_db": -38.41474151611328, "first5ms": 0.00341796875, "first1ms": 0.0001220703125, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 43, "text": "Your payment has been received, thank you.", "onset_db": -85.87803649902344, "first5ms": 3.0517578125e-05, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 49, "text": "Let me transfer you to the right department.", "onset_db": -37.04783630371094, "first5ms": 0.007568359375, "first1ms": 0.000152587890625, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 48, "text": "Thank you for your patience.", "onset_db": -167.320556640625, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 35, "text": "We have updated your billing address in our system.", "onset_db": -168.8485565185547, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 51, "text": "All right, your request has been submitted.", "onset_db": -73.87006378173828, "first5ms": 6.103515625e-05, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 53, "text": "May I have your full name, please?", "onset_db": -168.3268585205078, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 50, "text": "One moment while I pull up your details.", "onset_db": -168.2647247314453, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 42, "text": "You can pay your bill online or at any of our centres.", "onset_db": -17.36001968383789, "first5ms": 0.025482177734375, "first1ms": 0.001434326171875, "first_sample": 0.0, "hot": true, "click": false}
+{"i": 39, "text": "Hi there, I'm your virtual assistant for billing.", "onset_db": -31.555721282958984, "first5ms": 0.010467529296875, "first1ms": 0.00042724609375, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 40, "text": "This call may be recorded for quality purposes.", "onset_db": -63.94303512573242, "first5ms": 0.00018310546875, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 41, "text": "This will only take a moment, please stay on the line.", "onset_db": -79.59317016601562, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 52, "text": "Unfortunately, we are unable to process that request right now.", "onset_db": -168.1814727783203, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 54, "text": "Our technician will contact you within two working days.", "onset_db": -13.461896896362305, "first5ms": 0.05181884765625, "first1ms": 0.000457763671875, "first_sample": 0.0, "hot": true, "click": false}
+{"i": 60, "text": "I can help you with that today.", "onset_db": -167.96502685546875, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 57, "text": "Would you like me to send the details by email?", "onset_db": -45.421688079833984, "first5ms": 0.00323486328125, "first1ms": 0.00018310546875, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 56, "text": "Good morning, how may I assist you?", "onset_db": -168.08270263671875, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 61, "text": "I'm sorry, I didn't quite catch that.", "onset_db": -167.88375854492188, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 59, "text": "No problem, I have noted that down for you.", "onset_db": -169.1248779296875, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 58, "text": "Just to confirm, you would like to change your plan?", "onset_db": -35.61486053466797, "first5ms": 0.00677490234375, "first1ms": 9.1552734375e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 66, "text": "How can I help you today?", "onset_db": -169.21023559570312, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 62, "text": "I understand, let me check your account for you.", "onset_db": -87.14643096923828, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 67, "text": "How would you like to receive your bill?", "onset_db": -168.89691162109375, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 55, "text": "Your service will be restored within the next few hours.", "onset_db": -168.16085815429688, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 64, "text": "We can certainly help you with that.", "onset_db": -34.9163818359375, "first5ms": 0.0052490234375, "first1ms": 0.00042724609375, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 68, "text": "Hi, thank you for calling, my name is Maya.", "onset_db": -98.79205322265625, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 75, "text": "Are you still there?", "onset_db": -168.03855895996094, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 65, "text": "We have updated your billing address in our system.", "onset_db": -166.89883422851562, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 77, "text": "Could you say that again?", "onset_db": -61.2153434753418, "first5ms": 0.000518798828125, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 70, "text": "This call may be recorded for quality purposes.", "onset_db": -78.05663299560547, "first5ms": 3.0517578125e-05, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 73, "text": "Your payment has been received, thank you.", "onset_db": -167.1514434814453, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 78, "text": "Thank you for your patience.", "onset_db": -166.9935302734375, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 74, "text": "Is there anything else I can help you with?", "onset_db": -167.43865966796875, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 76, "text": "Please hold for a moment.", "onset_db": -167.96673583984375, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 71, "text": "This will only take a moment, please stay on the line.", "onset_db": -165.93357849121094, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 63, "text": "We're sorry, we couldn't verify your identity on this call.", "onset_db": -167.6630859375, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 69, "text": "Hi there, I'm your virtual assistant for billing.", "onset_db": -95.23979187011719, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 79, "text": "Let me transfer you to the right department.", "onset_db": -71.88661193847656, "first5ms": 9.1552734375e-05, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 80, "text": "One moment while I pull up your details.", "onset_db": -167.15106201171875, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 72, "text": "You can pay your bill online or at any of our centres.", "onset_db": -166.50270080566406, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 83, "text": "May I have your full name, please?", "onset_db": -168.03933715820312, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 81, "text": "All right, your request has been submitted.", "onset_db": -168.2212371826172, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 90, "text": "I can help you with that today.", "onset_db": -40.49791717529297, "first5ms": 0.00482177734375, "first1ms": 0.000213623046875, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 91, "text": "I'm sorry, I didn't quite catch that.", "onset_db": -166.69747924804688, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 87, "text": "Would you like me to send the details by email?", "onset_db": -168.39353942871094, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 86, "text": "Good morning, how may I assist you?", "onset_db": -167.64987182617188, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 84, "text": "Our technician will contact you within two working days.", "onset_db": -46.99321746826172, "first5ms": 0.001434326171875, "first1ms": 6.103515625e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 96, "text": "How can I help you today?", "onset_db": -168.55686950683594, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 88, "text": "Just to confirm, you would like to change your plan?", "onset_db": -167.7658233642578, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 85, "text": "Your service will be restored within the next few hours.", "onset_db": -169.54356384277344, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 89, "text": "No problem, I have noted that down for you.", "onset_db": -167.95013427734375, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 92, "text": "I understand, let me check your account for you.", "onset_db": -45.40272521972656, "first5ms": 0.002899169921875, "first1ms": 0.0001220703125, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 94, "text": "We can certainly help you with that.", "onset_db": -5.590476036071777, "first5ms": 0.1361083984375, "first1ms": 0.001953125, "first_sample": 0.0, "hot": true, "click": false}
+{"i": 106, "text": "Please hold for a moment.", "onset_db": null, "first5ms": 0.004547119140625, "first1ms": 6.103515625e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 93, "text": "We're sorry, we couldn't verify your identity on this call.", "onset_db": -35.323089599609375, "first5ms": 0.002593994140625, "first1ms": 9.1552734375e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 97, "text": "How would you like to receive your bill?", "onset_db": -43.552486419677734, "first5ms": 0.001617431640625, "first1ms": 9.1552734375e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 98, "text": "Hi, thank you for calling, my name is Maya.", "onset_db": -42.59116744995117, "first5ms": 0.002777099609375, "first1ms": 6.103515625e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 82, "text": "Unfortunately, we are unable to process that request right now.", "onset_db": -5.230164527893066, "first5ms": 0.153717041015625, "first1ms": 0.00616455078125, "first_sample": 0.0, "hot": true, "click": false}
+{"i": 105, "text": "Are you still there?", "onset_db": -39.74999237060547, "first5ms": 0.0035400390625, "first1ms": 0.000152587890625, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 107, "text": "Could you say that again?", "onset_db": -167.9000701904297, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 95, "text": "We have updated your billing address in our system.", "onset_db": -56.249183654785156, "first5ms": 0.00030517578125, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 103, "text": "Your payment has been received, thank you.", "onset_db": -165.94277954101562, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 108, "text": "Thank you for your patience.", "onset_db": -44.749473571777344, "first5ms": 0.0018310546875, "first1ms": 6.103515625e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 104, "text": "Is there anything else I can help you with?", "onset_db": -168.1885986328125, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 99, "text": "Hi there, I'm your virtual assistant for billing.", "onset_db": -35.66643142700195, "first5ms": 0.005645751953125, "first1ms": 0.00018310546875, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 100, "text": "This call may be recorded for quality purposes.", "onset_db": -47.53276062011719, "first5ms": 0.001495361328125, "first1ms": 3.0517578125e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 109, "text": "Let me transfer you to the right department.", "onset_db": -169.23858642578125, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 101, "text": "This will only take a moment, please stay on the line.", "onset_db": -93.41243743896484, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 110, "text": "One moment while I pull up your details.", "onset_db": -6.615322113037109, "first5ms": 0.082000732421875, "first1ms": 0.0037841796875, "first_sample": 0.0, "hot": true, "click": false}
+{"i": 113, "text": "May I have your full name, please?", "onset_db": -167.403076171875, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 111, "text": "All right, your request has been submitted.", "onset_db": -97.39775085449219, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 102, "text": "You can pay your bill online or at any of our centres.", "onset_db": -24.720584869384766, "first5ms": 0.018280029296875, "first1ms": 0.000823974609375, "first_sample": 0.0, "hot": true, "click": false}
+{"i": 120, "text": "I can help you with that today.", "onset_db": -42.22884750366211, "first5ms": 0.002410888671875, "first1ms": 0.0001220703125, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 117, "text": "Would you like me to send the details by email?", "onset_db": -168.0432586669922, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 114, "text": "Our technician will contact you within two working days.", "onset_db": -167.32229614257812, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 124, "text": "We can certainly help you with that.", "onset_db": -23.871429443359375, "first5ms": 0.022369384765625, "first1ms": 0.0018310546875, "first_sample": 0.0, "hot": true, "click": false}
+{"i": 116, "text": "Good morning, how may I assist you?", "onset_db": -167.34523010253906, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 121, "text": "I'm sorry, I didn't quite catch that.", "onset_db": -167.51214599609375, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 126, "text": "How can I help you today?", "onset_db": -168.7035675048828, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 119, "text": "No problem, I have noted that down for you.", "onset_db": -168.43243408203125, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 115, "text": "Your service will be restored within the next few hours.", "onset_db": -168.6177215576172, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 112, "text": "Unfortunately, we are unable to process that request right now.", "onset_db": -168.148681640625, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 127, "text": "How would you like to receive your bill?", "onset_db": -166.45236206054688, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 118, "text": "Just to confirm, you would like to change your plan?", "onset_db": -168.28411865234375, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 122, "text": "I understand, let me check your account for you.", "onset_db": -8.192392349243164, "first5ms": 0.08636474609375, "first1ms": 0.000457763671875, "first_sample": 0.0, "hot": true, "click": false}
+{"i": 135, "text": "Are you still there?", "onset_db": -167.9481201171875, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 128, "text": "Hi, thank you for calling, my name is Maya.", "onset_db": -34.78192138671875, "first5ms": 0.005157470703125, "first1ms": 0.0003662109375, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 137, "text": "Could you say that again?", "onset_db": -168.84292602539062, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 123, "text": "We're sorry, we couldn't verify your identity on this call.", "onset_db": -169.62860107421875, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 133, "text": "Your payment has been received, thank you.", "onset_db": -166.9239501953125, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 125, "text": "We have updated your billing address in our system.", "onset_db": -33.302101135253906, "first5ms": 0.004425048828125, "first1ms": 0.00018310546875, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 136, "text": "Please hold for a moment.", "onset_db": -167.83169555664062, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 134, "text": "Is there anything else I can help you with?", "onset_db": -103.40718841552734, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 129, "text": "Hi there, I'm your virtual assistant for billing.", "onset_db": -38.94174575805664, "first5ms": 0.0030517578125, "first1ms": 6.103515625e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 138, "text": "Thank you for your patience.", "onset_db": -167.5658416748047, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 130, "text": "This call may be recorded for quality purposes.", "onset_db": -38.811866760253906, "first5ms": 0.00146484375, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 131, "text": "This will only take a moment, please stay on the line.", "onset_db": -44.187896728515625, "first5ms": 0.00146484375, "first1ms": 6.103515625e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 139, "text": "Let me transfer you to the right department.", "onset_db": -31.28519058227539, "first5ms": 0.014801025390625, "first1ms": 0.000396728515625, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 140, "text": "One moment while I pull up your details.", "onset_db": -49.478485107421875, "first5ms": 0.001312255859375, "first1ms": 6.103515625e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 143, "text": "May I have your full name, please?", "onset_db": -167.78244018554688, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 141, "text": "All right, your request has been submitted.", "onset_db": -11.768601417541504, "first5ms": 0.07708740234375, "first1ms": 0.0054931640625, "first_sample": 0.0, "hot": true, "click": false}
+{"i": 132, "text": "You can pay your bill online or at any of our centres.", "onset_db": -45.112491607666016, "first5ms": 0.001251220703125, "first1ms": 6.103515625e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 146, "text": "Good morning, how may I assist you?", "onset_db": -168.02447509765625, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 150, "text": "I can help you with that today.", "onset_db": -167.216796875, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 151, "text": "I'm sorry, I didn't quite catch that.", "onset_db": -168.5890655517578, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 147, "text": "Would you like me to send the details by email?", "onset_db": -167.23867797851562, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 145, "text": "Your service will be restored within the next few hours.", "onset_db": -14.70579719543457, "first5ms": 0.036407470703125, "first1ms": 0.000274658203125, "first_sample": 0.0, "hot": true, "click": false}
+{"i": 144, "text": "Our technician will contact you within two working days.", "onset_db": -167.8280487060547, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 142, "text": "Unfortunately, we are unable to process that request right now.", "onset_db": -85.07810974121094, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 156, "text": "How can I help you today?", "onset_db": -42.201393127441406, "first5ms": 0.002899169921875, "first1ms": 6.103515625e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 149, "text": "No problem, I have noted that down for you.", "onset_db": -166.82666015625, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 154, "text": "We can certainly help you with that.", "onset_db": -169.68695068359375, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 148, "text": "Just to confirm, you would like to change your plan?", "onset_db": -168.36465454101562, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 157, "text": "How would you like to receive your bill?", "onset_db": -87.48413848876953, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 152, "text": "I understand, let me check your account for you.", "onset_db": -167.28192138671875, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 165, "text": "Are you still there?", "onset_db": -169.3275604248047, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 153, "text": "We're sorry, we couldn't verify your identity on this call.", "onset_db": -82.88258361816406, "first5ms": 3.0517578125e-05, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 167, "text": "Could you say that again?", "onset_db": -74.11613464355469, "first5ms": 3.0517578125e-05, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 155, "text": "We have updated your billing address in our system.", "onset_db": -67.27140045166016, "first5ms": 6.103515625e-05, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 166, "text": "Please hold for a moment.", "onset_db": -167.63021850585938, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 158, "text": "Hi, thank you for calling, my name is Maya.", "onset_db": -167.39300537109375, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 163, "text": "Your payment has been received, thank you.", "onset_db": -27.856521606445312, "first5ms": 0.006011962890625, "first1ms": 3.0517578125e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 168, "text": "Thank you for your patience.", "onset_db": -166.95791625976562, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 164, "text": "Is there anything else I can help you with?", "onset_db": -169.05908203125, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 159, "text": "Hi there, I'm your virtual assistant for billing.", "onset_db": -38.05815124511719, "first5ms": 0.004302978515625, "first1ms": 9.1552734375e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 160, "text": "This call may be recorded for quality purposes.", "onset_db": -34.24387741088867, "first5ms": 0.005279541015625, "first1ms": 0.0001220703125, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 161, "text": "This will only take a moment, please stay on the line.", "onset_db": -166.84725952148438, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 170, "text": "One moment while I pull up your details.", "onset_db": -168.14010620117188, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 169, "text": "Let me transfer you to the right department.", "onset_db": -168.25100708007812, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 171, "text": "All right, your request has been submitted.", "onset_db": -167.79946899414062, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 173, "text": "May I have your full name, please?", "onset_db": -167.5715789794922, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 162, "text": "You can pay your bill online or at any of our centres.", "onset_db": -50.09918975830078, "first5ms": 0.001007080078125, "first1ms": 3.0517578125e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 180, "text": "I can help you with that today.", "onset_db": -4.891045570373535, "first5ms": 0.2216796875, "first1ms": 0.00091552734375, "first_sample": 0.0, "hot": true, "click": false}
+{"i": 181, "text": "I'm sorry, I didn't quite catch that.", "onset_db": -167.17227172851562, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 177, "text": "Would you like me to send the details by email?", "onset_db": -167.9016876220703, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 176, "text": "Good morning, how may I assist you?", "onset_db": -167.80606079101562, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 184, "text": "We can certainly help you with that.", "onset_db": -18.73697853088379, "first5ms": 0.01947021484375, "first1ms": 0.0001220703125, "first_sample": 0.0, "hot": true, "click": false}
+{"i": 186, "text": "How can I help you today?", "onset_db": -168.7353515625, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 179, "text": "No problem, I have noted that down for you.", "onset_db": -84.95501708984375, "first5ms": 3.0517578125e-05, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 175, "text": "Your service will be restored within the next few hours.", "onset_db": -169.46731567382812, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 174, "text": "Our technician will contact you within two working days.", "onset_db": -27.31507110595703, "first5ms": 0.00775146484375, "first1ms": 0.00048828125, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 178, "text": "Just to confirm, you would like to change your plan?", "onset_db": -99.05567169189453, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 172, "text": "Unfortunately, we are unable to process that request right now.", "onset_db": -167.80006408691406, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 187, "text": "How would you like to receive your bill?", "onset_db": -40.80516815185547, "first5ms": 0.00262451171875, "first1ms": 6.103515625e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 182, "text": "I understand, let me check your account for you.", "onset_db": -166.24884033203125, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 183, "text": "We're sorry, we couldn't verify your identity on this call.", "onset_db": -87.38200378417969, "first5ms": 3.0517578125e-05, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 195, "text": "Are you still there?", "onset_db": -88.16365051269531, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 188, "text": "Hi, thank you for calling, my name is Maya.", "onset_db": -90.8156509399414, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 196, "text": "Please hold for a moment.", "onset_db": -43.67204666137695, "first5ms": 0.002349853515625, "first1ms": 6.103515625e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 185, "text": "We have updated your billing address in our system.", "onset_db": -167.9910125732422, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 197, "text": "Could you say that again?", "onset_db": -167.98204040527344, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 193, "text": "Your payment has been received, thank you.", "onset_db": -167.21804809570312, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 198, "text": "Thank you for your patience.", "onset_db": -167.07647705078125, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 189, "text": "Hi there, I'm your virtual assistant for billing.", "onset_db": -45.50072479248047, "first5ms": 0.001312255859375, "first1ms": 6.103515625e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 190, "text": "This call may be recorded for quality purposes.", "onset_db": -49.62710952758789, "first5ms": 0.001251220703125, "first1ms": 3.0517578125e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 194, "text": "Is there anything else I can help you with?", "onset_db": -44.97136688232422, "first5ms": 0.002197265625, "first1ms": 9.1552734375e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 191, "text": "This will only take a moment, please stay on the line.", "onset_db": -66.59709167480469, "first5ms": 0.000244140625, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 200, "text": "One moment while I pull up your details.", "onset_db": -73.35615539550781, "first5ms": 6.103515625e-05, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 199, "text": "Let me transfer you to the right department.", "onset_db": -98.18997955322266, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 192, "text": "You can pay your bill online or at any of our centres.", "onset_db": -167.1361846923828, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 203, "text": "May I have your full name, please?", "onset_db": -168.51268005371094, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 201, "text": "All right, your request has been submitted.", "onset_db": -167.1720733642578, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 210, "text": "I can help you with that today.", "onset_db": -168.17086791992188, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 216, "text": "How can I help you today?", "onset_db": -168.07046508789062, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 211, "text": "I'm sorry, I didn't quite catch that.", "onset_db": -168.7306365966797, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 204, "text": "Our technician will contact you within two working days.", "onset_db": -42.645565032958984, "first5ms": 0.001556396484375, "first1ms": 3.0517578125e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 207, "text": "Would you like me to send the details by email?", "onset_db": -39.12782287597656, "first5ms": 0.0008544921875, "first1ms": 3.0517578125e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 206, "text": "Good morning, how may I assist you?", "onset_db": -86.51907348632812, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 214, "text": "We can certainly help you with that.", "onset_db": -78.73551940917969, "first5ms": 3.0517578125e-05, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 208, "text": "Just to confirm, you would like to change your plan?", "onset_db": -91.52141571044922, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 205, "text": "Your service will be restored within the next few hours.", "onset_db": -31.952342987060547, "first5ms": 0.0146484375, "first1ms": 0.000396728515625, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 202, "text": "Unfortunately, we are unable to process that request right now.", "onset_db": -168.72073364257812, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 209, "text": "No problem, I have noted that down for you.", "onset_db": -83.4115219116211, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 217, "text": "How would you like to receive your bill?", "onset_db": -33.02741241455078, "first5ms": 0.00738525390625, "first1ms": 0.00018310546875, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 212, "text": "I understand, let me check your account for you.", "onset_db": -166.5290985107422, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 225, "text": "Are you still there?", "onset_db": -167.70127868652344, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 213, "text": "We're sorry, we couldn't verify your identity on this call.", "onset_db": -73.97286224365234, "first5ms": 6.103515625e-05, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 227, "text": "Could you say that again?", "onset_db": -67.53648376464844, "first5ms": 6.103515625e-05, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 215, "text": "We have updated your billing address in our system.", "onset_db": -167.49127197265625, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 226, "text": "Please hold for a moment.", "onset_db": -49.471458435058594, "first5ms": 0.00103759765625, "first1ms": 3.0517578125e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 218, "text": "Hi, thank you for calling, my name is Maya.", "onset_db": -101.93359375, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 228, "text": "Thank you for your patience.", "onset_db": -48.67825698852539, "first5ms": 0.00115966796875, "first1ms": 3.0517578125e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 223, "text": "Your payment has been received, thank you.", "onset_db": -60.34089660644531, "first5ms": 0.000152587890625, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 224, "text": "Is there anything else I can help you with?", "onset_db": -81.4878158569336, "first5ms": 3.0517578125e-05, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 219, "text": "Hi there, I'm your virtual assistant for billing.", "onset_db": -38.09663391113281, "first5ms": 0.00396728515625, "first1ms": 0.00018310546875, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 220, "text": "This call may be recorded for quality purposes.", "onset_db": -62.26947784423828, "first5ms": 0.0001220703125, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 221, "text": "This will only take a moment, please stay on the line.", "onset_db": -43.8980598449707, "first5ms": 0.00146484375, "first1ms": 6.103515625e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 229, "text": "Let me transfer you to the right department.", "onset_db": -168.5459442138672, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 231, "text": "All right, your request has been submitted.", "onset_db": -167.64883422851562, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 230, "text": "One moment while I pull up your details.", "onset_db": -47.992828369140625, "first5ms": 0.000274658203125, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 233, "text": "May I have your full name, please?", "onset_db": -167.914306640625, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 222, "text": "You can pay your bill online or at any of our centres.", "onset_db": -46.18585205078125, "first5ms": 0.001373291015625, "first1ms": 6.103515625e-05, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 237, "text": "Would you like me to send the details by email?", "onset_db": -70.88338470458984, "first5ms": 3.0517578125e-05, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 239, "text": "No problem, I have noted that down for you.", "onset_db": -169.1739044189453, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 234, "text": "Our technician will contact you within two working days.", "onset_db": -66.46720886230469, "first5ms": 9.1552734375e-05, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 235, "text": "Your service will be restored within the next few hours.", "onset_db": -58.83190155029297, "first5ms": 0.00042724609375, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 236, "text": "Good morning, how may I assist you?", "onset_db": -168.4679718017578, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 238, "text": "Just to confirm, you would like to change your plan?", "onset_db": -83.14733123779297, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}
+{"i": 232, "text": "Unfortunately, we are unable to process that request right now.", "onset_db": -167.48622131347656, "first5ms": 0.0, "first1ms": 0.0, "first_sample": 0.0, "hot": false, "click": false}

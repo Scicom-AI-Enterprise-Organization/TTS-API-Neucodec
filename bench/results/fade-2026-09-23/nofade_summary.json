@@ -1,0 +1,36 @@
+{
+ "url": "http://127.0.0.1:9098",
+ "label": "nofade",
+ "levels": [
+  {
+   "concurrency": 1,
+   "n": 240,
+   "hot": 13,
+   "rate": 0.05416666666666667,
+   "click": 8,
+   "click_rate": 0.03333333333333333,
+   "first1ms_p99": 0.3171026611328125,
+   "first1ms_max": 0.458221435546875
+  },
+  {
+   "concurrency": 8,
+   "n": 240,
+   "hot": 15,
+   "rate": 0.0625,
+   "click": 9,
+   "click_rate": 0.0375,
+   "first1ms_p99": 0.28760742187499916,
+   "first1ms_max": 0.7469482421875
+  },
+  {
+   "concurrency": 16,
+   "n": 240,
+   "hot": 11,
+   "rate": 0.04583333333333333,
+   "click": 9,
+   "click_rate": 0.0375,
+   "first1ms_p99": 0.23931610107421825,
+   "first1ms_max": 0.305633544921875
+  }
+ ]
+}
