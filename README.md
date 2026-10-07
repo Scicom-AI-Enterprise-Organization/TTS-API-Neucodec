@@ -152,6 +152,8 @@ docker compose -f vllm.yaml up --detach
 
 Set `TTS_API=http://tts-engine:9093` in your [.env](.env) to point to the vLLM backend.
 
+vLLM on another host, or no vLLM server at all (the LM loaded inside the app): [§ 4 LM backend](#4-lm-backend-external-vllm-or-in-process).
+
 ### 2. Configure environment
 
 Copy [.env_example](.env_example) to `.env` and adjust as needed. See [app/env.py](app/env.py) for all available variables:
@@ -160,6 +162,7 @@ Copy [.env_example](.env_example) to `.env` and adjust as needed. See [app/env.p
 |---|---|---|
 | `TTS_API` | `http://tts-engine:9093` | vLLM backend URL |
 | `TTS_API_KEY` | ` ` | Bearer token sent to the vLLM backend when set |
+| `LM_BACKEND` | `http` | Where speech tokens come from: `http` = the vLLM server at `TTS_API`; `inprocess` = load the LM inside this process (evaluation). See [LM backend](#4-lm-backend-external-vllm-or-in-process) |
 | `MODEL_NAME` | `TTS-model` | Model identifier |
 | `DEVICE` | ` ` (auto) | Codec decode device: empty = cuda→npu→cpu autodetect, or force `npu`/`cpu` |
 | `DEFAULT_SPEAKER` | see [app/env.py](app/env.py) | Default voice |
@@ -214,6 +217,92 @@ docker compose up --build
 ```bash
 docker compose -f docker-compose-cpu.yaml up --build
 ```
+
+### 4. LM backend: external vLLM or in-process
+
+The app gets speech tokens from one of two places, set by `LM_BACKEND`. Everything after the LM
+is the same code either way: interleave, stitcher, loudness, fade-in.
+
+```mermaid
+flowchart LR
+  subgraph HTTP["LM_BACKEND=http (default, production)"]
+    A1["this app :9091"] -->|"POST /v1/completions"| V1["vLLM server :9093<br/>TTS_API, any host"]
+  end
+  subgraph INP["LM_BACKEND=inprocess (evaluation)"]
+    A2["this app<br/>+ vLLM async engine<br/>LM_MODEL"]
+  end
+```
+
+| | `http` (default) | `inprocess` |
+|---|---|---|
+| speech tokens from | a vLLM server at `TTS_API`, same box or another host | vLLM's async engine inside this process ([app/lm_inprocess.py](app/lm_inprocess.py)) |
+| processes per model | 2 (vLLM + app), two ports | 1, one port |
+| uvicorn workers | any (several on one GPU need MPS) | **1**: every worker would load its own engine |
+| venv | this repo's requirements; vllm is never imported | + vllm, with four pins changed (below) |
+| use it for | production | putting a checkpoint through the serving path |
+
+#### External vLLM (`LM_BACKEND=http`, the default)
+
+The app streams each prompt to an OpenAI-compatible vLLM server and reads the speech tokens off
+the stream.
+
+```bash
+# 1. a vLLM server: § 1's docker compose, or directly
+vllm serve Scicom-intl/Multilingual-Expressive-TTS-1.7B --dtype bfloat16 --port 9093   --gpu-memory-utilization 0.4 --max-model-len 4096 --max-num-seqs 64 --served-model-name TTS-model
+
+# 2. .env: point the app at it
+LM_BACKEND=http                    # the default, can be left out
+TTS_API=http://<vllm-host>:9093    # /v1/completions is appended if missing
+TTS_API_KEY=                       # set it if the server wants a bearer token
+MODEL_NAME=TTS-model               # must equal --served-model-name
+
+# 3. the app
+uvicorn app.main:app --host 0.0.0.0 --port 9091 --workers 4
+```
+
+#### In-process (`LM_BACKEND=inprocess`, evaluation)
+
+The app loads the LM itself and streams tokens from it, so one process serves one model. Sampling
+is exactly what the HTTP body would send (temperature, repetition_penalty, max_tokens; top-k/top-p
+off, as on the served engine), and the checkpoint is relabelled the way the served engine
+relabels it (`LM_HF_OVERRIDES`). The API answers only once the engine has loaded.
+
+**Launch** with [bench/serve_inprocess.py](bench/serve_inprocess.py), one model per GPU or TP group:
+
+```bash
+# free random port; prints the URL once the API answers
+python bench/serve_inprocess.py --model /path/ckpt --gpus 3 --env-file bench/inprocess.env.example
+python bench/serve_inprocess.py --model /path/ckpt --gpus 4,5 --tp 2 --port 9191   # TP 2
+
+# or by hand: ONE worker
+LM_BACKEND=inprocess LM_MODEL=/path/ckpt uvicorn app.main:app --port 9091 --workers 1
+```
+
+- `--gpus` becomes `CUDA_VISIBLE_DEVICES`. The LM takes the first `--tp` of them; the codec takes
+  the first one too, unless `--codec-device cuda:N`.
+- `--env-file bench/inprocess.env.example` is a snapshot of production's serving settings, minus
+  the LLM normalizer (evaluation text arrives already in spoken form).
+- Each instance gets its own interleave store (`/dev/shm/tts-interleave-inproc-<port>`).
+- Startup: ~7 min the first time (vLLM compiles), ~2 min once the compile cache exists.
+
+| Variable | Default | Description |
+|---|---|---|
+| `LM_BACKEND` | `http` | `http` or `inprocess` |
+| `LM_MODEL` | none | Checkpoint dir or HF repo id. Required for `inprocess` |
+| `LM_TENSOR_PARALLEL_SIZE` | `1` | LM tensor parallel size |
+| `LM_GPU_MEMORY_UTILIZATION` | `0.3` | LM share of the GPU; the codec uses the rest |
+| `LM_DTYPE` | `bfloat16` | LM dtype |
+| `LM_ENFORCE_EAGER` | `false` | Skip vLLM's CUDA graph capture (faster startup, slower decode) |
+| `LM_MAX_NUM_SEQS` | vLLM's default | Cap it (`64`) if sampler warmup OOMs: the speech-token vocab is ~217K |
+| `LM_HF_OVERRIDES` | `{"architectures": ["Qwen3ForCausalLM"]}` | Relabels the checkpoint as the served engine does; empty sends none |
+| `LM_MAX_MODEL_LEN` | `4096` | LM window. Shared with `http` mode, where it sizes the interleave history |
+
+**The venv needs vllm next to this repo's requirements**, and they conflict on four pins. vllm
+0.16.0 (production's engine version, same torch 2.9.1) needs protobuf >= 5.29.6, numpy >= 2 and
+pydantic >= 2.12, against `protobuf==3.20.3`, `numpy==1.26.4` and gradio's pydantic < 2.12. Drop
+those pins, the gradio/notebook/tensorboard/wandb dev packages and the git-only packages (the app
+imports its vendored `app.neucodec`), and add `local-attention==1.11.2`. numpy 2 breaks only
+fasttext, which loads for `normalize_malaysian=true` requests alone. `http` mode never imports vllm.
 
 ## Tracing (Loki + Tempo)
 
@@ -760,6 +849,7 @@ available speakers.
 pytest tests/ -v                                   # everything (needs a live API for some)
 uv run --with pytest -- pytest tests/test_interleave.py -q        # no GPU, no deps
 uv run --with pytest -- pytest tests/test_decode_batching.py -q   # no GPU, no deps
+uv run --with pytest -- pytest tests/test_lm_inprocess.py -q      # no GPU, no vllm (fake engine)
 ```
 
 | suite | count | needs |
