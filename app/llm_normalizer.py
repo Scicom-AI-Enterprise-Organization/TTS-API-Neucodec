@@ -17,7 +17,7 @@ from enum import Enum
 import aiohttp
 
 from app.env import OPENAI_BASE_URL, OPENAI_API_KEY, OPENAI_MODEL_NAME, OPENAI_TIMEOUT
-from app.prompt import SYSTEM_PROMPT, EXAMPLES, JSON_SCHEMA
+from app.prompt import SYSTEM_PROMPT, EXAMPLES, JSON_SCHEMA, CALLER_PROMPT_HEADER
 
 
 class NormalizerMode(str, Enum):
@@ -33,8 +33,14 @@ class LLMNormalizerError(Exception):
 _CODE_FENCE = re.compile(r'^```(?:json)?\s*(.*?)\s*```$', re.DOTALL)
 
 
-def build_messages(text):
-    messages = [{'role': 'system', 'content': SYSTEM_PROMPT}]
+def build_messages(text, prompt=None):
+    """`prompt` is the caller's extra context (the request's `prompt` field), appended to
+    the system prompt; blank or None leaves the messages exactly as without it."""
+    system = SYSTEM_PROMPT
+    prompt = (prompt or '').strip()
+    if prompt:
+        system = f'{SYSTEM_PROMPT}\n\n{CALLER_PROMPT_HEADER}\n{prompt}'
+    messages = [{'role': 'system', 'content': system}]
     for before, after in EXAMPLES:
         messages.append({'role': 'user', 'content': before})
         messages.append({
@@ -122,9 +128,11 @@ def has_unspoken(text):
     return bool(_UNSPOKEN.search(text or ''))
 
 
-async def llm_normalize(text, base_url=None, api_key=None, model=None, timeout=None):
-    """Normalize `text` via the OpenAI-compatible endpoint. Raises LLMNormalizerError
-    on any failure; callers decide whether to fall back to the rule-based path."""
+async def llm_normalize(text, base_url=None, api_key=None, model=None, timeout=None,
+                        prompt=None):
+    """Normalize `text` via the OpenAI-compatible endpoint, with the caller's `prompt`
+    (see build_messages) if given. Raises LLMNormalizerError on any failure; callers
+    decide whether to fall back to the rule-based path."""
     base_url = (OPENAI_BASE_URL if base_url is None else base_url).rstrip('/')
     api_key = OPENAI_API_KEY if api_key is None else api_key
     model = OPENAI_MODEL_NAME if model is None else model
@@ -135,7 +143,7 @@ async def llm_normalize(text, base_url=None, api_key=None, model=None, timeout=N
 
     payload = {
         'model': model,
-        'messages': build_messages(text),
+        'messages': build_messages(text, prompt),
         'temperature': 0,
         # verbalization expands the text (digits -> words); chars overestimate tokens,
         # so this cap is safe.

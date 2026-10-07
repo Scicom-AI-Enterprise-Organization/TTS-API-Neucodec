@@ -166,6 +166,30 @@ class TestNormalizeModeParam:
             # unconfigured llm mode must fail loudly, not silently fall back
             assert r.status_code == 400
 
+    def test_llm_mode_prompt(self):
+        import os
+        r = client.post('/v1/audio/normalize', json={
+            'input': 'RM50', 'mode': 'llm', 'prompt': 'normalize this in English',
+        })
+        if all(os.environ.get(k) for k in ('OPENAI_BASE_URL', 'OPENAI_MODEL_NAME')):
+            assert r.status_code == 200
+            assert 'fifty ringgit' in r.json()['output'].lower()
+        else:
+            assert r.status_code == 400
+
+    def test_prompt_ignored_outside_llm_mode(self):
+        r = client.post('/v1/audio/normalize', json={
+            'input': 'Hello world', 'mode': 'rule', 'prompt': 'normalize this in Malay',
+        })
+        assert r.status_code == 200
+        assert r.json()['output'] == 'Hello world.'
+
+    def test_prompt_too_long_rejected(self):
+        r = client.post('/v1/audio/normalize', json={
+            'input': 'Hello', 'mode': 'llm', 'prompt': 'x' * 2001,
+        })
+        assert r.status_code == 422
+
 
 @skipif_no_app
 class TestNormalizeEndpointMalaysian:

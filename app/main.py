@@ -1381,6 +1381,12 @@ class NormalizeRequest(BaseModel):
     # In llm mode normalize_malaysian is ignored. Defaults come from
     # DEFAULT_NORMALIZER_MODE / DEFAULT_NORMALIZE_MALAYSIAN in the environment.
     mode: NormalizerMode = NormalizerMode(DEFAULT_NORMALIZER_MODE)
+    # Extra instructions for the LLM normalizer (mode=llm only, ignored otherwise), appended
+    # to its system prompt: context the text alone does not carry, e.g. "normalize this in
+    # Malay" -- with no context the LLM read a bare "RM50" as "五十令吉". Bypasses
+    # LLM_NORMALIZER_RULE_FIRST (the rules cannot read it); LLM_NORMALIZER_SKIP_PLAIN still
+    # applies, as text with nothing to normalize stays as written whatever the prompt says.
+    prompt: Optional[str] = Field(None, max_length=2000)
 
 class TTSRequest(NormalizeRequest):
     voice: str = DEFAULT_SPEAKER
@@ -1575,7 +1581,9 @@ async def normalize_request_text(data, fallback_to_rule=False):
                     tracing.set_attributes(sp, {'normalizer.llm_skipped': True,
                                                 'normalizer.chars_out': len(s)})
                     return s
-                if LLM_NORMALIZER_RULE_FIRST:
+                prompt = (data.prompt or '').strip() or None
+                if LLM_NORMALIZER_RULE_FIRST and prompt is None:
+                    # with a prompt the LLM decides: the rules would ignore what it says
                     r = spoken_normalize(s)
                     if not has_unspoken(r):
                         # the rules read every number/symbol; nothing is left for the LLM
@@ -1591,9 +1599,11 @@ async def normalize_request_text(data, fallback_to_rule=False):
                         'llm.model': OPENAI_MODEL_NAME,
                         'llm.url': OPENAI_BASE_URL,
                         'llm.timeout_s': OPENAI_TIMEOUT,
+                        'llm.prompt_chars': len(prompt or ''),
                     }):
-                        s = await llm_normalize(s)
-                    logging.info(f'out from llm normalizer: {s}')
+                        s = await llm_normalize(s, prompt=prompt)
+                    logging.info(f'out from llm normalizer: {s}'
+                                 + (f' (prompt: {prompt!r})' if prompt else ''))
                     s = _post_normalize(s)
                     tracing.set_attributes(sp, {'normalizer.chars_out': len(s)})
                     return s

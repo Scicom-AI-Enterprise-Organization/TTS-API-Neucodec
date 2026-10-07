@@ -364,6 +364,7 @@ selected by `mode`:
 | `input` | string | required | Text to normalize |
 | `normalize_malaysian` | bool | `DEFAULT_NORMALIZE_MALAYSIAN` (`false`) | Apply Malaysian text normalization (`rule` mode only) |
 | `mode` | `rule` \| `llm` \| `spoken` | `DEFAULT_NORMALIZER_MODE` (`rule`) | Normalization engine. `spoken` = rule-based replica of the LLM normalizer (English, Malay, Mandarin, Tamil), no network |
+| `prompt` | string | none | `llm` mode only: extra instructions for the LLM normalizer, appended to its system prompt — context the text does not carry, e.g. `"normalize this in Malay"`. Max 2,000 chars. Ignored by `rule` / `spoken` |
 
 **Example:**
 
@@ -384,7 +385,20 @@ curl -X POST 'http://localhost:9091/v1/audio/normalize' \
   }'
 # {"output":"baki saya tinggal seribu dua ratus lima puluh ringgit lima puluh sen dan IC saya
 #   sembilan enam kosong tiga satu empat lapan tujuh lima kosong tujuh sembilan.","mode":"llm"}
+
+# LLM-based, with context the text does not carry
+curl -X POST 'http://localhost:9091/v1/audio/normalize' \
+  -H 'Content-Type: application/json' \
+  -d '{"input": "RM50", "mode": "llm", "prompt": "normalize this in Malay"}'
+# {"output":"lima puluh ringgit.","mode":"llm"}   (no prompt: "五十令吉.")
 ```
+
+`prompt` is for text too short or too mixed to show its language: a bare amount, a time, an
+id. It goes into the system prompt, not next to the text, so the model does not read it as
+part of the text.
+With a prompt the LLM is always the one that decides, so `LLM_NORMALIZER_RULE_FIRST` is skipped
+for that request. `LLM_NORMALIZER_SKIP_PLAIN` still applies: text with nothing to normalize
+came back unchanged under every language prompt (18/18 live).
 
 In `llm` mode the LLM is only called when the text contains something it could rewrite (a
 digit, a symbol, an ALL-CAPS or dotted token, a known abbreviation). Plain sentences such as
@@ -448,6 +462,7 @@ Accepts a JSON body.
 | `playback_overlap_speed` | float | `0.2` | Overlap for crossfading |
 | `normalize_malaysian` | bool | `DEFAULT_NORMALIZE_MALAYSIAN` (`false`) | Apply Malaysian text normalization |
 | `mode` | `rule` \| `llm` \| `spoken` | `DEFAULT_NORMALIZER_MODE` (`rule`) | Normalization engine (see `/v1/audio/normalize`); `llm` falls back to `spoken` if the LLM call fails or is not configured, so speech is still produced |
+| `prompt` | string | none | `llm` mode only: extra instructions for the LLM normalizer, e.g. `"normalize this in Malay"` (see `/v1/audio/normalize`). Ignored by the `spoken` fallback |
 | `stream_normalize` | bool | `STREAM_NORMALIZE` (`true`) | Per-utterance loudness normalization toward `TARGET_RMS_DB` |
 | `speaking_rate` | float | `DEFAULT_SPEAKING_RATE` (`1.0`) | Speaking rate, `0.5`–`2.0`: `1.3` speaks 30% faster, `0.8` slower, **pitch unchanged**. Also accepted as `speed` (OpenAI-compatible clients). See [Speaking rate](#speaking-rate) |
 | `interleave_id` | string | none | Interleaved generation: requests sharing this id continue each other's prosody. **Needs an interleave-trained LM — no open-source TTS model supports this.** Aliases `request_id` / `context_id`; header `X-Interleave-Id` / `X-Context-Id`. See [Interleaved generation](#interleaved-generation) |

@@ -30,7 +30,7 @@ from app.llm_normalizer import (
     LLMNormalizerError,
     NormalizerMode,
 )
-from app.prompt import SYSTEM_PROMPT, EXAMPLES, JSON_SCHEMA
+from app.prompt import SYSTEM_PROMPT, EXAMPLES, JSON_SCHEMA, CALLER_PROMPT_HEADER
 
 
 class TestBuildMessages:
@@ -60,6 +60,23 @@ class TestBuildMessages:
     def test_chinese_not_ascii_escaped(self):
         blob = json.dumps(build_messages('x'), ensure_ascii=False)
         assert '令吉' in blob  # ensure_ascii=False keeps CJK readable for the model
+
+    def test_prompt_appended_to_system(self):
+        msgs = build_messages('RM50', prompt='normalize this in Malay')
+        assert msgs[0]['content'] == (
+            f'{SYSTEM_PROMPT}\n\n{CALLER_PROMPT_HEADER}\nnormalize this in Malay'
+        )
+        # only the system message changes: few-shots and the user turn are as without it
+        assert msgs[1:] == build_messages('RM50')[1:]
+        assert msgs[-1] == {'role': 'user', 'content': 'RM50'}
+
+    def test_prompt_is_stripped(self):
+        msgs = build_messages('x', prompt='  read numbers in English \n')
+        assert msgs[0]['content'].endswith(f'{CALLER_PROMPT_HEADER}\nread numbers in English')
+
+    @pytest.mark.parametrize('prompt', [None, '', '   ', '\n'])
+    def test_blank_prompt_is_no_prompt(self, prompt):
+        assert build_messages('x', prompt=prompt) == build_messages('x')
 
 
 class TestJsonSchema:
@@ -160,6 +177,21 @@ class TestLLMNormalize:
         assert body['temperature'] == 0
         assert body['response_format'] == {'type': 'json_schema', 'json_schema': JSON_SCHEMA}
         assert body['messages'][-1] == {'role': 'user', 'content': 'RM50'}
+        assert body['messages'][0] == {'role': 'system', 'content': SYSTEM_PROMPT}
+
+    def test_prompt_sent_in_system_message(self, fake_server):
+        run(llm_normalize('RM50', base_url=fake_server, api_key='k', model='m',
+                          prompt='normalize this in English'))
+        msgs = FakeOpenAI.requests[0]['body']['messages']
+        assert msgs[0]['content'].endswith(f'{CALLER_PROMPT_HEADER}\nnormalize this in English')
+        assert msgs[-1] == {'role': 'user', 'content': 'RM50'}
+
+    def test_prompt_kept_on_retry_without_response_format(self, fake_server):
+        FakeOpenAI.reject_response_format = True
+        run(llm_normalize('x', base_url=fake_server, api_key='k', model='m', prompt='in Malay'))
+        first, second = FakeOpenAI.requests
+        assert first['body']['messages'] == second['body']['messages']
+        assert second['body']['messages'][0]['content'].endswith('in Malay')
 
     def test_no_auth_header_when_key_empty(self, fake_server):
         run(llm_normalize('x', base_url=fake_server, api_key='', model='m'))
@@ -288,4 +320,19 @@ class TestLive:
 
     def test_passthrough(self):
         out = run(llm_normalize('apa khabar semua?'))
+        assert out.rstrip('.') == 'apa khabar semua?'
+
+    # A bare amount carries no language, and without context the LLM read "RM50" as
+    # "五十令吉" (2026-10-07, gemma-4-31b). The prompt is what tells it.
+    def test_prompt_sets_language_malay(self):
+        out = run(llm_normalize('RM50', prompt='normalize this in Malay'))
+        assert 'lima puluh ringgit' in out.lower()
+
+    def test_prompt_sets_language_english(self):
+        out = run(llm_normalize('RM50', prompt='normalize this in English'))
+        assert 'fifty ringgit' in out.lower()
+
+    def test_prompt_leaves_plain_text_alone(self):
+        # LLM_NORMALIZER_SKIP_PLAIN still applies with a prompt; this is why that is safe
+        out = run(llm_normalize('apa khabar semua?', prompt='normalize this in English'))
         assert out.rstrip('.') == 'apa khabar semua?'

@@ -83,6 +83,12 @@ EXAMPLES = [
      "折扣百分之二十五"),
 ]
 
+# The request's `prompt` field (caller context the text alone does not carry, e.g.
+# "normalize this in Malay") goes under this heading at the end of SYSTEM_PROMPT. Not in
+# the user turn: that would no longer look like the few-shot inputs, and the instruction
+# could leak into the normalized text. Live LLM, no context: "RM50" -> "五十令吉".
+CALLER_PROMPT_HEADER = "Additional instructions from the caller for this text:"
+
 # Strict schema for OpenAI `response_format`; guided decoding guarantees the reply
 # parses as {"normalized": str}, so the output can be fed directly to the TTS LM.
 JSON_SCHEMA = {
