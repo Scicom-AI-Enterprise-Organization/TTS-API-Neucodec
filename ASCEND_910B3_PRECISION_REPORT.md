@@ -3,7 +3,7 @@
 **Prepared for:** Huawei Ascend / CANN / vllm-ascend engineering
 **Date:** 2026-07-08
 **Reporter:** Scicom AI Enterprise (TTS platform team)
-**Severity:** High — blocks production use of the 910B3 for a high-quality TTS model that otherwise runs end-to-end on the NPU.
+**Severity:** High. It blocks production use of the 910B3 for a high-quality TTS model that otherwise runs end-to-end on the NPU.
 
 ---
 
@@ -20,7 +20,7 @@ else was ruled out with controlled experiments:
 - the neural codec decode is **bit-identical on NPU vs CPU** (MAE = 0.0),
 - the sampler already runs **fp32 softmax**,
 - matmul is at **full precision** (`allow_hf32 == False`),
-- and **fp32 is not available** as a fallback — `--dtype float32` crashes the engine because the paged-KV
+- and **fp32 is not available** as a fallback. `--dtype float32` crashes the engine because the paged-KV
   attention op (`ReshapeCacheOperation`) supports only bf16/fp16.
 
 So the LM's bf16 attention path produces subtly different logits than the H100's bf16 attention, which shifts
@@ -28,7 +28,7 @@ the sampled speech tokens toward less-natural audio, and **there is no configura
 attention precision** on the current stack.
 
 **Primary ask:** provide a higher-precision (fp32-accumulation) execution path for the *standard* (GQA)
-fused-attention kernels — the same `kernel_type_high_precision` option that already exists for MLA — and/or
+fused-attention kernels, the same `kernel_type_high_precision` option that already exists for MLA, and/or
 fp32 support for the paged-KV attention op so a full-precision reference is possible.
 
 ---
@@ -45,7 +45,7 @@ fp32 support for the paged-KV attention op so a full-precision reference is poss
 | Serving | `vllm==0.11.0`, `vllm-ascend==0.11.0` |
 | Precision | bfloat16 (model native) |
 
-**Reference (NVIDIA):** H100 SXM 80 GB, `torch==2.9.1+cu128`, CUDA 12.8, `vllm==0.16.0`, bfloat16 — same
+**Reference (NVIDIA):** H100 SXM 80 GB, `torch==2.9.1+cu128`, CUDA 12.8, `vllm==0.16.0`, bfloat16. Same
 model, same sampling parameters.
 
 ## 3. Workload
@@ -56,7 +56,7 @@ model, same sampling parameters.
 - **Sampling:** temperature 0.6, repetition_penalty 1.15, no top-k / top-p. Identical on both platforms.
 - **Eval set:** fixed 16 sentences (English / Malay / code-switch), ~2–8 s audio each.
 
-## 4. Symptom — quality gap at matched precision
+## 4. Symptom: quality gap at matched precision
 
 Single-stream, 16-sentence eval set, bf16, temperature 0.6, identical decode on both platforms.
 
@@ -64,8 +64,8 @@ Single-stream, 16-sentence eval set, bf16, temperature 0.6, identical decode on 
 |---|---|---|---|
 | LM throughput | ~380 tok/s | ~81 tok/s | ~4.8× slower (secondary; expected from HBM bandwidth) |
 | End-to-end RTF | ~0.13 | ~0.68 | LM-bound |
-| Intelligibility — Whisper large-v3 **CER** | 2.2 % | 3.4 % | comparable; content is **not** garbled |
-| **Naturalness — UTMOSv2 MOS** | **3.21** | **2.60** | **−0.61 MOS — audibly worse** |
+| Intelligibility, Whisper large-v3 **CER** | 2.2 % | 3.4 % | comparable; content is **not** garbled |
+| **Naturalness, UTMOSv2 MOS** | **3.21** | **2.60** | **−0.61 MOS, audibly worse** |
 
 MOS measured with UTMOSv2 (VoiceMOS Challenge 2024 Track-1 top system), `fusion_stage3`, fold 0.
 14 of 16 clips scored lower on Ascend; several by more than 1.0 MOS. The direction is systematic and far
@@ -80,12 +80,12 @@ We eliminated every layer except the bf16 attention kernel. Each row is a contro
 
 | Hypothesis | Experiment | Result | Conclusion |
 |---|---|---|---|
-| Codec decode differs on NPU | Decode the **same** LM tokens on NPU vs CPU, per-sample MAE | **MAE = 0.00000** on all 16 clips | Decode is bit-identical — **ruled out** |
-| Sampler is low-precision | Inspect `vllm_ascend/sample/sampler.py` | softmax uses `dtype=torch.float32` | Sampler is fp32 — **ruled out** |
-| Matmul uses reduced precision (HF32) | Read `torch.npu.matmul.allow_hf32` | `False` | Matmul full precision — **ruled out** |
-| ACL-graph capture introduces error | Serve with `--enforce-eager` (no ACL graph), re-measure MOS | MOS 2.45 (≈ 2.60 baseline, within noise) | Graph capture not the cause — **ruled out** |
+| Codec decode differs on NPU | Decode the **same** LM tokens on NPU vs CPU, per-sample MAE | **MAE = 0.00000** on all 16 clips | Decode is bit-identical. **Ruled out** |
+| Sampler is low-precision | Inspect `vllm_ascend/sample/sampler.py` | softmax uses `dtype=torch.float32` | Sampler is fp32. **Ruled out** |
+| Matmul uses reduced precision (HF32) | Read `torch.npu.matmul.allow_hf32` | `False` | Matmul full precision. **Ruled out** |
+| ACL-graph capture introduces error | Serve with `--enforce-eager` (no ACL graph), re-measure MOS | MOS 2.45 (≈ 2.60 baseline, within noise) | Graph capture not the cause. **Ruled out** |
 | Precision too low → raise it (fp16) | Serve with `--dtype float16` | MOS **1.73** (much worse) | fp16 worse; bf16 is best available |
-| Precision too low → raise it (fp32) | Serve with `--dtype float32` | **Engine crash** (see below) | fp32 **unavailable** — attention/KV op is bf16/fp16 only |
+| Precision too low → raise it (fp32) | Serve with `--dtype float32` | **Engine crash** (see below) | fp32 **unavailable**: attention/KV op is bf16/fp16 only |
 
 ### The fp32 crash (the key limitation)
 
@@ -120,12 +120,12 @@ variant exists in CANN and simply needs to be exposed/used for the non-MLA atten
 **Diagnosis:** with matmul, sampler, and decode all at full precision, the residual −0.6 MOS is attributable
 to the **internal accumulation of the bf16 fused attention kernel** on the 910B3, which diverges from the
 H100's bf16 attention enough to change sampled tokens in an autoregressive, high-entropy (217K-vocab) TTS
-decoder — where small logit errors compound over hundreds of steps.
+decoder, where small logit errors compound over hundreds of steps.
 
 ## 6. What we are asking for
 
 1. **A high-precision / fp32-accumulation option for the standard (GQA) fused-attention kernels**
-   (`_npu_flash_attention`, `npu_fused_infer_attention_score`) — i.e. extend the existing
+   (`_npu_flash_attention`, `npu_fused_infer_attention_score`). That is, extend the existing
    `kernel_type_high_precision` path from MLA to the ordinary attention path, exposed through `vllm-ascend`.
 2. **fp32 support (or at least fp32-capable `ReshapeCacheOperation` / paged-KV)** so full-precision
    inference can be run as a correctness reference and fallback.
@@ -173,5 +173,5 @@ H100/H200. Exposing a high-precision attention kernel (item 1 above) would unblo
 
 ---
 
-*Appendix — full mitigation MOS table:* baseline bf16+ACL-graphs **2.60**; bf16 `--enforce-eager` **2.45**;
+*Appendix, full mitigation MOS table:* baseline bf16+ACL-graphs **2.60**; bf16 `--enforce-eager` **2.45**;
 `--dtype float16` **1.73**; `--dtype float32` **crash**; H100 bf16 **3.21**.

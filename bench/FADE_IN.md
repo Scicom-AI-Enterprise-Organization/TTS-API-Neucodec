@@ -20,8 +20,8 @@ full speech level on its very first sample.
 
 ## The fix
 
-A raised-cosine ramp over the first `FADE_IN_MS` of every response, applied last —
-after crossfade, loudness normalization and time stretch — so it shapes exactly what the
+A raised-cosine ramp over the first `FADE_IN_MS` of every response. It is applied last,
+after crossfade, loudness normalization and time stretch, so it shapes exactly what the
 caller hears first.
 
 - On a normal response the ramp lies over near-silence. Nothing audible changes.
@@ -39,8 +39,8 @@ Two measures per response:
 
 | measure | definition | what it tells |
 |---|---|---|
-| **click** | loudest sample in the first 1 ms > 0.05 full scale | the audible edge — what the fade removes |
-| **hot** | first 10 ms within 25 dB of the response's speech level | the model started voiced — the cause |
+| **click** | loudest sample in the first 1 ms > 0.05 full scale | the audible edge, which the fade removes |
+| **hot** | first 10 ms within 25 dB of the response's speech level | the model started voiced: the cause |
 
 | concurrency | click, fade off | **click, fade on** | hot, fade off | hot, fade on |
 |---|---|---|---|---|
@@ -86,7 +86,7 @@ attack the cause, untested:
 
 ## Side note
 
-One of the 1,440 responses ("Please hold for a moment.") came back under 0.2 s long — the
+One of the 1,440 responses ("Please hold for a moment.") came back under 0.2 s long: the
 LM stopped almost immediately. Unrelated to the fade; reported by the script as `unscored`.
 
 ## Reproducing

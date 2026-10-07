@@ -31,10 +31,10 @@ any decode has happened, so a `wav` TTFB measures nothing. 7 texts × 3 modes ×
 
 Texts are grouped by what the normalizer has to do with them:
 
-- **plain** — no digits or symbols. `LLM_NORMALIZER_SKIP_PLAIN` skips the LLM outright.
-- **covered** — money, dates, times, phone numbers that the rule normalizer reads completely, so
+- **plain**: no digits or symbols. `LLM_NORMALIZER_SKIP_PLAIN` skips the LLM outright.
+- **covered**: money, dates, times, phone numbers that the rule normalizer reads completely, so
   under `LLM_NORMALIZER_RULE_FIRST` nothing is left for the LLM and the call is skipped.
-- **forced** — text that still carries a symbol the rules cannot speak (`@`, `&`, `P&L`, `4.5/5`),
+- **forced**: text that still carries a symbol the rules cannot speak (`@`, `&`, `P&L`, `4.5/5`),
   so the LLM really is called. This is the only case where "rules vs LLM" diverges.
 
 ## Headline
@@ -45,9 +45,9 @@ different things: `mode=llm` *as configured here*, and `mode=llm` with the gates
 
 | | rule-based (`mode=spoken`) | `mode=llm` as deployed (gated) | if the LLM actually runs |
 |---|---|---|---|
-| TTFB, plain text | **234 ms** | 235 ms — LLM skipped by `SKIP_PLAIN` | ~770 ms |
-| TTFB, numbers the rules cover | **237 ms** | 237 ms — LLM skipped by `RULE_FIRST` | ~940 ms |
-| TTFB, symbol the rules cannot speak | **240 ms** | **873 ms** — LLM runs | 873 ms |
+| TTFB, plain text | **234 ms** | 235 ms, LLM skipped by `SKIP_PLAIN` | ~770 ms |
+| TTFB, numbers the rules cover | **237 ms** | 237 ms, LLM skipped by `RULE_FIRST` | ~940 ms |
+| TTFB, symbol the rules cannot speak | **240 ms** | **873 ms**, LLM runs | 873 ms |
 | End-to-end, 9–11 s of audio | 1.7–2.0 s | 1.9–2.4 s | +0.6–1.1 s on top |
 | Real-time factor | 0.16–0.23 | 0.16–0.30 | worse by the same amount |
 
@@ -100,7 +100,7 @@ request takes 0.6–0.7 s longer for the same amount of audio, which is why RTF 
 | LLM actually called | 1 | 0.2% |
 
 So on realistic traffic the deployed `mode=llm` behaves like the rule path **99.8%** of the time.
-The 633 ms is what a request costs when it falls through, not an average — and the average is low
+The 633 ms is what a request costs when it falls through, not an average. The average is low
 only because of the gates, not because the call is fast.
 
 ## What the LLM call itself costs
@@ -186,7 +186,7 @@ Two different rule paths exist and only one is safe to call "the rule-based norm
 | `rule` | the legacy Malaysian pipeline (`app/normalizer`, `app/rules.py`) | "one thousand, two hundred and fifty ringgit**. five zero** as of fifteen March two thousand and twenty four" |
 
 `mode=rule` is as fast as `mode=spoken` (it is also local), but it reads `RM1,250.50` as
-"ringgit. five zero" — it drops the cents and emits a sentence-ending period mid-utterance. It was
+"ringgit. five zero": it drops the cents and emits a sentence-ending period mid-utterance. It was
 measured here only to keep the comparison honest; it is not the path to deploy. In one earlier
 probe it also took 2.3 s on its first call.
 
@@ -223,7 +223,7 @@ print(sum(1 for c in CORPUS if needs_normalization(c[3]) and has_unspoken(sp(c[3
 
 ---
 
-# Update 2026-09-21 — the split-box deployment (app + remote TP=4 engine)
+# Update 2026-09-21: the split-box deployment (app + remote TP=4 engine)
 
 A second deployment measured on-box against `127.0.0.1`, so unlike everything above there is
 **no client round trip in these numbers**. Topology is different too, and that is the point:
@@ -231,12 +231,12 @@ the app runs on one H20 (GPU 7, 4 uvicorn workers, eager decode, `MAX_BATCH_SIZE
 `DEFAULT_PLAYBACK_SPEED=0.75`, normalizer `llm` + `SKIP_PLAIN` + `RULE_FIRST`) while the LM is
 a **TP=4 vLLM on a different host**. The codec GPU therefore contends with nothing.
 
-Tool: `bench/latency_bench.py` — written for this because `bench/bench.py` requests
+Tool: `bench/latency_bench.py`. It was written for this because `bench/bench.py` requests
 `response_format=wav`, and a wav response emits its 44-byte header before a single token is
 decoded, so its "TTFB" measures the header and reads ~0 whatever the stack is doing. This one
 streams `pcm`, where the first byte IS audio, and reports p10/p95/p99.
 
-## TTFB — first audio byte, seconds
+## TTFB: first audio byte, seconds
 
 | conc | mean | p10 | p50 | p90 | p95 | p99 | max |
 |---|---|---|---|---|---|---|---|
@@ -272,7 +272,7 @@ The first window is `playback_speed*50 + overlap*50` = 0.75×50 + 0.2×50 ≈ 47
 `lm_probe` puts token 47 on the wire at 90 ms. **Autoregressive decode is ~88% of TTFB**, which
 is where any further TTFB work has to aim.
 
-### The TP sweep — measured 2026-09-22, and it refuted the guess that prompted it
+### The TP sweep: measured 2026-09-22, and it refuted the guess that prompted it
 
 This section previously carried a warning that 557 tok/s on TP=4 looked "suspicious", reasoning
 that a 3.4 GB model against ~4 TB/s of HBM should decode nearer 1000 tok/s on a single card, and
@@ -288,7 +288,7 @@ actually comparable:
 
 **TP=4 is the fastest of the three and the right setting.** TP=1 is 16% slower, not faster. The
 "5%" figure came from comparing against prod's ~530 tok/s on a *different node with different
-co-tenants* — an invalid comparison; on the same node TP=2 is 498, so TP=4 buys 11.8%. And the
+co-tenants*, which is an invalid comparison. On the same node TP=2 is 498, so TP=4 buys 11.8%. And the
 bandwidth ceiling was the wrong model entirely, as the next paragraph shows. There is no free
 win here: the sweep is done, and re-running it is only worth it if the hardware changes.
 
@@ -304,18 +304,18 @@ Sampling all eight GPUs on the engine node while driving batch-1 decode:
 | 6 | TTS rank 2 | 98.0% | 13.8% |
 | 7 | TTS rank 3 (+ the 1020 API jobs) | 98.3% | 13.8% |
 
-Two hypotheses die here. **It is not rank contention** — rank 3 shares its GPU with `tts-api-1020`
+Two hypotheses die here. **It is not rank contention.** Rank 3 shares its GPU with `tts-api-1020`
 and `stt-api-1020`, and in TP every token ends at a barrier so one slow rank would gate the step,
 but rank 3 reads 98.3% against rank 0's 98.1% and the STT engine is completely idle. **And the
-ranks are not idling on all-reduce** — they are pegged at 98% occupancy.
+ranks are not idling on all-reduce.** They are pegged at 98% occupancy.
 
 What they are *not* doing is moving data: **14% of memory bandwidth**. Busy essentially all the
-time while moving almost nothing is the signature of many tiny kernels per token — launch- and
+time while moving almost nothing is the signature of many tiny kernels per token: launch- and
 sync-bound, not bandwidth-bound. That also explains the shape of the sweep: TP helps because it
 shrinks each rank's slice, and the gains decay because the fixed per-kernel overhead does not
 shrink with it.
 
-This is the regime a **megakernel** targets — fusing the forward pass into one persistent kernel
+This is the regime a **megakernel** targets. Fusing the forward pass into one persistent kernel
 removes exactly the per-launch and inter-op cost that 98%-occupancy-at-14%-bandwidth is made of.
 Note that this contradicts the advice further down about the codec, which is a different claim
 about a different component: for the codec, CUDA graphs are the unpulled lever and capture most
@@ -325,7 +325,7 @@ work is single-GPU; fusing cross-rank collectives is research).
 
 ## Through a real LiveKit agent + WebRTC (same box, `bench/livekit/`)
 
-`TTS_INTERLEAVE=false`, i.e. prod parity — the openai plugin sends no interleave id.
+`TTS_INTERLEAVE=false`, i.e. prod parity: the openai plugin sends no interleave id.
 
 | conc | utterances | mean | p10 | p50 | p90 | p95 | max |
 |---|---|---|---|---|---|---|---|
@@ -341,7 +341,7 @@ work is single-GPU; fusing cross-rank collectives is research).
 | + LiveKit agent + WebRTC | **225–237 ms** (LiveKit adds ~130 ms) |
 | a prod agent trace, 2026-09-21 | **324 ms** (a further ~90 ms: agent not colocated, busier box) |
 
-Two things this says. **The split-box deployment halved the LiveKit-path TTFB** — the same rig on
+Two things this says. **The split-box deployment halved the LiveKit-path TTFB.** The same rig on
 the previous stack (local TP=1 engine) measured p50 462 ms on 2026-09-18, against 225 ms here.
 And **LiveKit fattens the tail far more than the median**: p95/p50 is ~1.15× through the API and
 **2.2–2.5×** through the agent. The median is healthy; the occasional lag a caller hears is the
@@ -354,12 +354,12 @@ agent path, not synthesis.
 | GPU 7 (codec) | mean 61%, median 72%, max 84% |
 | app CPU, 4 uvicorn workers | 185% of 400% available |
 
-The codec GPU is the busier of the two — which **contradicts** the H100 finding above that the
+The codec GPU is the busier of the two. That **contradicts** the H100 finding above that the
 GPU idles while one core pins. That finding was measured with CUDA graphs on; this deployment
 runs `CUDA_GRAPH_BATCH="[]"`, so the GPU is at 72% doing the work the slow way. Enabling CUDA
 graphs (~1.7× on the codec, CLAUDE.md) should take it to ~42% and hand the constraint back to
 the CPU, exactly as the older measurement predicts. A fused/megakernel codec attacks the same
-dominant cost a CUDA graph does — per-launch overhead — for weeks of work instead of an env var,
+dominant cost a CUDA graph does (per-launch overhead), for weeks of work instead of an env var,
 and lands on a resource that would no longer bind. The 4 uvicorn workers are the real ceiling.
 
 ## Reproducing the update

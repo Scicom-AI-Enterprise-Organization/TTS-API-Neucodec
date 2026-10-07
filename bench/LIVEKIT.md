@@ -1,7 +1,7 @@
 # TTS through a real LiveKit agent
 
 **Measured 2026-09-23.** Text in → WebRTC audio out, through `livekit-server` + a real
-`livekit-agents` worker + the `openai.TTS` plugin. No STT, no LLM, no VAD — so what is
+`livekit-agents` worker + the `openai.TTS` plugin. No STT, no LLM, no VAD, so what is
 measured is the TTS path and the transport around it, nothing else.
 
 ![livekit bench](../docs/img/livekit_bench.png)
@@ -22,12 +22,12 @@ load_client.py ──text on "tts-input"──▶ livekit-server ──job──
 
 | | result |
 |---|---|
-| TTFB through LiveKit | **0.23 – 0.26 s**, flat from 1 to 16 rooms |
+| TTFB through LiveKit | **0.23 to 0.26 s**, flat from 1 to 16 rooms |
 | Cost of the agent + WebRTC | **+111 to +136 ms** over raw HTTP, flat |
 | Errors, 1–16 rooms, both arms | **0 / 688 utterances** |
-| Loudness sd per utterance | **0.92 – 1.26 dB** at every level |
+| Loudness sd per utterance | **0.92 to 1.26 dB** at every level |
 | `interleave_id` cost | **+49 to +78 ms** TTFB |
-| Ceiling | the **rig** at 32 rooms — the API is clean to 64 |
+| Ceiling | the **rig** at 32 rooms. The API is clean to 64 |
 
 ## The numbers
 
@@ -76,7 +76,7 @@ Throughput saturates between 32 and 64 (171 → 179 audio-s/s). Even at 64 the s
 
 ### 3. `interleave_id` costs ~64 ms of TTFB and buys loudness consistency
 
-The cost is the extra prefill, exactly as `INTERLEAVE.md` predicts — and it *shrinks* as
+The cost is the extra prefill, exactly as `INTERLEAVE.md` predicts, and it *shrinks* as
 load rises (78 ms at one room, 49 ms at sixteen), because prefill overlaps with other
 work once the LM is busy.
 
@@ -95,12 +95,12 @@ regression risk (`bench/INTERLEAVE_AB.md` §7).
 
 ### 4. `STREAM_NORMALIZE` holds through the whole transport
 
-Per-utterance sd stays in **0.92 – 1.26 dB** at every concurrency, both arms. The 2026-08
-run recorded 2.3 – 10.1 dB with the normalizer off. Opus and the WebRTC hop do not undo it.
+Per-utterance sd stays in **0.92 to 1.26 dB** at every concurrency, both arms. The 2026-08
+run recorded 2.3 to 10.1 dB with the normalizer off. Opus and the WebRTC hop do not undo it.
 
 ⚠ Do not read max−min as the spread. It is an extreme-value statistic and grows with
-sample count alone — n=8 at one room vs n=128 at sixteen. The figure plots **p95−p5**,
-which is stable, and that stays 2.87 – 4.94 dB with no trend.
+sample count alone: n=8 at one room vs n=128 at sixteen. The figure plots **p95−p5**,
+which is stable, and that stays 2.87 to 4.94 dB with no trend.
 
 ## Two traps that produced wrong answers
 
@@ -108,7 +108,7 @@ Both were recorded as server results before being caught. Both were the rig.
 
 ### The load client was the bottleneck at 16 rooms
 
-The first 16-room run reported **TTFB p50 8.4 s**, then 14.1 s on a repeat — a clean
+The first 16-room run reported **TTFB p50 8.4 s**, then 14.1 s on a repeat, a clean
 cliff after 0.25 s at 8 rooms. It looked like saturation.
 
 ![livekit client trap](../docs/img/livekit_client_trap.png)
@@ -126,7 +126,7 @@ across processes and merges the rows.
 ### File descriptors, not latency
 
 Before that, 16 rooms failed with `Too many open files (os error 24)` on the default
-1024-fd limit — each room opens several WebRTC sockets. The surviving rooms reported
+1024-fd limit, because each room opens several WebRTC sockets. The surviving rooms reported
 7.5 s TTFB, which also read as server saturation. `load_client.py` now raises `RLIMIT_NOFILE`
 itself when it shards.
 
@@ -154,7 +154,7 @@ connections through one dev-config `livekit-server` on a shared, busy box.
 with 0 errors, and at 64 it returns 0.920 s with 0 errors. Every room that *did* connect
 at 32 got its audio at a normal **0.243 s**.
 
-The connect ordering fix is kept anyway — `session.start()` before `ctx.connect()` is
+The connect ordering fix is kept anyway. `session.start()` before `ctx.connect()` is
 wrong, it just was not what was failing here.
 
 ## Reproducing
@@ -164,7 +164,7 @@ wrong, it just was not what was failing here.
 livekit-server --config livekit.yaml &
 TTS_INTERLEAVE=false AGENT_IDLE_PROCESSES=8 python bench/livekit/stress_agent.py start &
 
-# sweep — --procs defaults to one client process per 8 rooms
+# sweep: --procs defaults to one client process per 8 rooms
 for c in 1 4 8 16; do
   python bench/livekit/load_client.py --url ws://127.0.0.1:7885 \
     --concurrency $c --utterances 8 --texts bench/pitch_stress_texts.txt \
@@ -181,7 +181,7 @@ Raw data: `bench/results/livekit-2026-09-23/`. Figures: `bench/plots/make_figure
 
 ## Related
 
-- `bench/livekit/README.md` — the rig itself, setup and gotchas
-- `bench/PITCH_TONE_AB.md` — pitch/tone/volume steps, direct vs LiveKit
-- `bench/INTERLEAVE_AB.md` — what `interleave_id` does to chunk joins
-- `bench/TTFB.md` — where the API's own 100 ms goes
+- `bench/livekit/README.md`: the rig itself, setup and gotchas
+- `bench/PITCH_TONE_AB.md`: pitch/tone/volume steps, direct vs LiveKit
+- `bench/INTERLEAVE_AB.md`: what `interleave_id` does to chunk joins
+- `bench/TTFB.md`: where the API's own 100 ms goes

@@ -3,7 +3,7 @@
 ![normalizer agreement](../docs/img/normalizer.png)
 
 
-`app/spoken_normalizer/` — `mode: "spoken"` on `/v1/audio/normalize` and TTS requests. Rewrites
+`app/spoken_normalizer/` is `mode: "spoken"` on `/v1/audio/normalize` and TTS requests. It rewrites
 everything that is not speakable as written into words, in the language of the surrounding text,
 for **English, Malay, Mandarin and Tamil**, exactly as the LLM normalizer (`app/prompt.py`) is asked
 to. Pure Python, no model, no network, **~45 µs** per sentence (1.2 ms through the API, against
@@ -22,22 +22,22 @@ repeatable, and the LLM stays available where rules are not enough.
 The LLM's own behaviour is the specification, so it was captured first and the rules were written
 to reproduce it:
 
-1. `bench/normalizer_corpus.py` — 497 inputs: 152 English, 114 Malay, 107 Mandarin, 102 Tamil, 22
-   Malay/English code-switch; every category the prompt names plus abbreviations, acronyms,
+1. `bench/normalizer_corpus.py` has 497 inputs: 152 English, 114 Malay, 107 Mandarin, 102 Tamil, 22
+   Malay/English code-switch. They cover every category the prompt names plus abbreviations, acronyms,
    ids, years and plain sentences that must come back untouched. The first 300 are the everyday
    call-centre shapes; the 197 added on 2026-09-04 are the *harder cases* below (hyphenated
    compounds, fractions and slashes, versions, decades, negatives, per-units, ranges with a shared
    suffix, scores, verification codes and postcodes, dotted and military times, Tamil case
    suffixes glued to digits).
-2. `bench/normalizer_truth.py` — runs them through the live LLM (temperature 0) and stores the
+2. `bench/normalizer_truth.py` runs them through the live LLM (temperature 0) and stores the
    pairs in `bench/results/normalizer_truth.jsonl`. Incremental: only new ids are queried.
-3. `bench/normalizer_agreement.py` — scores `normalize()` against those pairs: two outputs
+3. `bench/normalizer_agreement.py` scores `normalize()` against those pairs. Two outputs
    *agree* when identical after lower-casing and collapsing hyphens/whitespace/punctuation
    (none of which is audible; the app's own post-processing strips hyphens anyway). Also reports
    CER against the LLM text, per language and per category, and prints every disagreement.
-4. `bench/normalizer_api_agreement.py --url` — the same comparison through a running app, so
+4. `bench/normalizer_api_agreement.py --url` runs the same comparison through a running app, so
    the pre/post cleanup (markdown, replace mappings, trailing period) is included.
-5. `tests/test_spoken_normalizer.py` — 1,726 tests: number words in all four languages, one
+5. `tests/test_spoken_normalizer.py` has 1,726 tests: number words in all four languages, one
    LLM-agreed example per category and language, the deliberate differences, and three
    corpus-wide properties: **no digit survives in any output**, plain text is byte-identical,
    and the output is a fixed point (`normalize(normalize(x)) == normalize(x)`).
@@ -175,10 +175,10 @@ fine and which the LLM also leaves alone.
 |---|---|---|---|
 | Dr. | Doctor | Doktor | unchanged (as the LLM) |
 | Prof. | Professor | unchanged | unchanged |
-| vs. / approx. | versus / approximately | — | — |
+| vs. / approx. | versus / approximately | n/a | n/a |
 | No. (before a number) | Number | Nombor | unchanged |
-| Jln / Tmn / Kg | — | Jalan / Taman / Kampung | — |
-| cth. / dsb. / dll. | — | contohnya / dan sebagainya / dan lain-lain | — |
+| Jln / Tmn / Kg | n/a | Jalan / Taman / Kampung | n/a |
+| cth. / dsb. / dll. | n/a | contohnya / dan sebagainya / dan lain-lain | n/a |
 | Mr. Mrs. Ms. En. Pn. Cik Encik Puan Tan Sri Dato' Datuk Sdn Bhd e.g. etc. | unchanged | unchanged | unchanged |
 | Acronyms (IC, OTP, SMS, TNB, KL, NASA, API) | unchanged | unchanged | unchanged |
 
@@ -208,7 +208,7 @@ rules were written to it; where the four languages' LLM outputs disagree the not
 | slash in an address `Jalan 3/14` | Jalan three slash fourteen | Jalan tiga per empat belas | Jalan 三斜杠十四 (LLM said "slash") | ஸ்லாஷ் |
 | day/month without a year `31/12`, `1/1` | the thirty-first of December, the first of January | tiga puluh satu Disember | 十二月三十一日 | முப்பத்தொன்று டிசம்பர் |
 | version `17.4.1`, `3.12.4` | seventeen point four point one, three point one two point four | tujuh belas perpuluhan empat perpuluhan satu | 十七点四点一 | பதினேழு புள்ளி நான்கு புள்ளி ஒன்று |
-| decade `1980s`, `90s`, `1980-an` | nineteen eighties, nineties, two thousands, twenty tens | seribu sembilan ratus lapan puluh-an | 九十年代 (already a particle) | — |
+| decade `1980s`, `90s`, `1980-an` | nineteen eighties, nineties, two thousands, twenty tens | seribu sembilan ratus lapan puluh-an | 九十年代 (already a particle) | n/a |
 | negative `-5°C`, `-RM250`, `-3.5%` | minus five degrees Celsius | negatif lima darjah Celsius | 负五摄氏度, 负百分之三点五 | மைனஸ் ஐந்து டிகிரி செல்சியஸ் |
 | per-unit `RM5/kg`, `110 km/h`, `8 tablets/day`, `RM38/mth` | five ringgit per kilogram, kilometers per hour, tablets per day, per month | lima ringgit per kilogram, kilometer per jam, per bulan (LLM also said "sebulan") | 五令吉每公斤, 公里每小时 | ஐந்து ரிங்கிட் ஒரு கிலோகிராமுக்கு (LLM: ஒரு கிலோகிராம், no dative) |
 | range with a shared suffix/prefix `10-15%`, `RM50-RM100`, `0-100 km/h` | ten to fifteen percent, fifty ringgit to one hundred ringgit, zero to one hundred kilometers per hour | sepuluh hingga lima belas peratus | 百分之十到百分之十五 (repeated, as the LLM), 五十令吉到一百令吉, 一到两天 | பத்து முதல் பதினைந்து சதவீதம் |
@@ -218,14 +218,14 @@ rules were written to it; where the four languages' LLM outputs disagree the not
 | `1000000` (no commas) | one million (was a "phone number") | satu juta | 一百万 | பத்து லட்சம் |
 | codes: verification code, postcode, serial, plate, `unit 12-3-5`, `Dial 100 / 999` | four eight two nine, five zero four five zero, one two three five, one zero zero / nine nine nine; "the code is 1000" stays one thousand | Kod pengesahan … empat lapan dua …, Poskod lima kosong …, Tekan … atau kosong | 验证码四八二九一三, 邮编五零四五零 | குறியீடு நான்கு எட்டு …; 12-3-5 as digits (LLM: cardinals) |
 | ids `COVID-19`, `Boeing 737`, `gate A12`, `3A-12-3`, `XR-2000` | COVID nineteen, Boeing seven three seven, A twelve, three A twelve three, XR two thousand | same | COVID十九, 三A一二三 | same as English |
-| dotted time with a cue `pukul 3.30 petang`, `at 6.30`, `5.15 மணிக்கு` (no cue ⇒ decimal: "3.25 per annum") | six thirty | tiga tiga puluh petang, dua petang (2.00) | — (Mandarin writes 点) | ஐந்து பதினைந்து |
-| Malay period range `9 pagi - 5 petang` | — | sembilan pagi hingga lima petang | — | — |
+| dotted time with a cue `pukul 3.30 petang`, `at 6.30`, `5.15 மணிக்கு` (no cue ⇒ decimal: "3.25 per annum") | six thirty | tiga tiga puluh petang, dua petang (2.00) | n/a (Mandarin writes 点) | ஐந்து பதினைந்து |
+| Malay period range `9 pagi - 5 petang` | n/a | sembilan pagi hingga lima petang | n/a | n/a |
 | military time `0730 hours`, `pukul 0730`, `1900 hrs` | zero seven thirty hours, nineteen hundred hours | kosong tujuh tiga puluh | 零七三零 | பூஜ்ஜியம் ஏழு முப்பது |
-| `3 to 4pm`, `2.30 to 4.30pm`, `12:00 noon`, `Mon-Fri` | three to four p m (period not copied to the first time), two thirty to four thirty p m, twelve noon, Monday to Friday | — | — | — |
+| `3 to 4pm`, `2.30 to 4.30pm`, `12:00 noon`, `Mon-Fri` | three to four p m (period not copied to the first time), two thirty to four thirty p m, twelve noon, Monday to Friday | n/a | n/a | n/a |
 | units `6 hrs`, `10 min`, `45 sec`, `500W`, `12V`, `1,200 sq ft` | six hours, ten minutes, forty-five seconds, five hundred watts, twelve volts, square feet | jam, minit, saat, watt, volt, kaki persegi | 小时, 分钟, 秒, 瓦, 伏, 平方英尺 | மணி நேரம், நிமிடம், வினாடி, வாட், வோல்ட், சதுர அடி |
-| Malay `kali ke 3` | — | kali ketiga | — | — |
-| Tamil suffix glued to a digit `2024ல்`, `12ஆல்`, `RM1,000ஐ`, `15ஆகும்`, `2030க்குள்` | — | — | — | இரண்டாயிரத்து இருபத்து நான்கில், பன்னிரண்டால், ஆயிரம் ரிங்கிட்டை, பதினைந்தாகும், முப்பதுக்குள் |
-| Tamil `1.5 மணி`, `1/2 மணி`, `1 பேர்`, `100,000` | — | — | — | ஒன்றரை மணி, அரை மணி, ஒருவர், ஒரு லட்சம் (lakhs below 10⁷, மில்லியன் above, as the LLM) |
+| Malay `kali ke 3` | n/a | kali ketiga | n/a | n/a |
+| Tamil suffix glued to a digit `2024ல்`, `12ஆல்`, `RM1,000ஐ`, `15ஆகும்`, `2030க்குள்` | n/a | n/a | n/a | இரண்டாயிரத்து இருபத்து நான்கில், பன்னிரண்டால், ஆயிரம் ரிங்கிட்டை, பதினைந்தாகும், முப்பதுக்குள் |
+| Tamil `1.5 மணி`, `1/2 மணி`, `1 பேர்`, `100,000` | n/a | n/a | n/a | ஒன்றரை மணி, அரை மணி, ஒருவர், ஒரு லட்சம் (lakhs below 10⁷, மில்லியன் above, as the LLM) |
 
 Tamil suffixes work through a marker: a handler whose match is followed directly by a Tamil letter
 appends a private-use character, and a final pass joins the number word and the suffix with sandhi
@@ -236,7 +236,7 @@ appends a private-use character, and a final pass joins the number word and the 
 
 Tamil and Mandarin decide themselves by script (the whole sentence, so "Jalan Tun Razak 12号" is
 十二号, as the LLM does). Latin text is Malay or English by a marker-word majority over the
-sentence — function words plus the call-centre vocabulary these requests are made of, with
+sentence: function words plus the call-centre vocabulary these requests are made of, with
 everyday borrowings such as *order*, *check*, *call*, *total* deliberately in neither list.
 
 When a sentence carries markers of **both** languages, every number picks its own language
@@ -366,7 +366,7 @@ These account for most of the Tamil gap: on Tamil the rules are the more reliabl
   unless it is a round thousand: "the code is 1000"). New kinds of identifiers may need a word
   added there.
 - Acronyms are never spelled out; "OTP" stays "OTP". The LLM spelled "A P I" and "H T T P" but not
-  "OTP", "SMS", "IC" — inconsistent, so the rules keep them and let the TTS LM read them.
+  "OTP", "SMS", "IC". That is inconsistent, so the rules keep them and let the TTS LM read them.
 - Currencies: RM/MYR, $, USD, SGD, AUD, GBP/£, EUR/€. Units: kg g mg km m cm mm ml l GB MB TB KB
   Mbps kWh °C °F. Anything else is left as written (and, in `mode=llm` with
   `LLM_NORMALIZER_RULE_FIRST`, that leftover is exactly what still triggers the LLM call).

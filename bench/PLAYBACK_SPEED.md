@@ -20,7 +20,7 @@ windowing alone. 6 texts, 20 settings, reference = `playback_speed=50` (one wind
 | UTMOSv2 | 3.251 | 3.219 | within noise |
 
 **0.4 buys 33 ms of TTFB at no measurable cost.** Loudness, pitch, chunk consistency and MOS are
-all unchanged *within noise* — the chunk-step and MOS differences above are smaller than the
+all unchanged *within noise*. The chunk-step and MOS differences above are smaller than the
 measurement spread, so read them as "not worse", not "better".
 
 ### ⚠ The catch: client buffer under load
@@ -34,7 +34,7 @@ measurement spread, so read them as "not worse", not "better".
 At concurrency 32 the margin collapses to **30 ms** while the TTFB win shrinks to 11%. Zero stalls
 in 20 runs at every point, but 30 ms is one scheduling hiccup from starving a caller.
 
-**So: 0.4 if concurrency stays low. Keep 0.75 if you run near 32.** 0.5 is the hedge — 0.409 s of
+**So: 0.4 if concurrency stays low. Keep 0.75 if you run near 32.** 0.5 is the hedge: 0.409 s of
 buffer single-stream and still 25% faster than 0.75.
 
 ## The numbers
@@ -69,7 +69,7 @@ buffer single-stream and still 25% faster than 0.75.
 | 0.2 | −15.4 dBFS | +1.6 dB |
 | ≥0.3 | −17.0 to −17.4 | none |
 
-`STREAM_NORMALIZE` estimates its gain from the first window. At 0.1 that window is 5 tokens —
+`STREAM_NORMALIZE` estimates its gain from the first window. At 0.1 that window is 5 tokens,
 0.1 s. Too short to estimate active RMS, so it locks on nonsense and the whole utterance is
 6.3 dB hot.
 
@@ -80,10 +80,10 @@ This is the **hard floor**. Not a quality preference.
 
 ### 3. Pitch does not move at all
 
-194.9 – 195.2 Hz across the whole sweep. A 0.3 Hz spread on a 195 Hz median.
+194.9–195.2 Hz across the whole sweep. A 0.3 Hz spread on a 195 Hz median.
 
 Window size changes *how* the decoder sees the tokens, not *what* they are. Pitch is in the
-tokens. Clean negative result — worth knowing so nobody re-tests it.
+tokens. Clean negative result, worth knowing so nobody re-tests it.
 
 ### 4. Chunk consistency is worst at **both** ends
 
@@ -100,7 +100,7 @@ The middle wins, and the reason differs at each end:
 - **Large windows** → 2 chunks per utterance, each spanning more varied content. A single gain
   per chunk fits that content worse, so the two chunks land further apart.
 
-At 1.5 it is **29% of seams over 3 dB** — worse than 0.2. Bigger windows are not safer.
+At 1.5 it is **29% of seams over 3 dB**, worse than 0.2. Bigger windows are not safer.
 
 ## UTMOSv2
 

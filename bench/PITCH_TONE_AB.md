@@ -1,29 +1,29 @@
 # Pitch, tone and volume: direct API vs through LiveKit
 
 **Measured 2026-09-18** on a shared H20-3e dev box, GPU 6 (vLLM) + GPU 7 (codec), against
-`Scicom-intl/Multilingual-Expressive-TTS-1.7B-interleave-pitchfilter-best` — the checkpoint prod
-serves — with prod's own app settings (`jobs/<cluster>/tts-api.yaml`: `TM_English_Normal`,
+`Scicom-intl/Multilingual-Expressive-TTS-1.7B-interleave-pitchfilter-best` (the checkpoint prod
+serves), with prod's own app settings (`jobs/<cluster>/tts-api.yaml`: `TM_English_Normal`,
 temperature 0.6, repetition penalty 1.15, `DEFAULT_PLAYBACK_SPEED=0.75`, eager decode,
 4 uvicorn workers, `STREAM_NORMALIZE` on).
 
 ## Why this exists
 
 A demo session reported the voice going **"from calm, even tone to loud and excited part-way
-through"**. There is no recording — the finding is second-hand from the room — so this reproduces
+through"**. There is no recording. The finding is second-hand from the room, so this reproduces
 the complaint from its description rather than from the artefact, and the description's load-bearing
 word is *mid-utterance*. Three different mechanisms produce that sound and only an experiment
 separates them:
 
 | | mechanism | where it would show |
 |---|---|---|
-| **M1** | a step at a **chunk join** — LiveKit's `StreamAdapter` cuts a reply into several `/v1/audio/speech` calls and each starts the LM cold, so it picks a fresh register and energy | only at joins |
-| **M2** | the **stitcher's loudness gain** — `STREAM_NORMALIZE` estimates the gain from what it has emitted and slews it until it locks at ~1 s of voiced audio (`app/main.py normalize_chunk`) | a swell inside one request |
-| **M3** | the **LM itself** — sampling at temp 0.6 from an *Expressive* checkpoint can change register part-way through | anywhere, in every condition |
+| **M1** | a step at a **chunk join**: LiveKit's `StreamAdapter` cuts a reply into several `/v1/audio/speech` calls and each starts the LM cold, so it picks a fresh register and energy | only at joins |
+| **M2** | the **stitcher's loudness gain**: `STREAM_NORMALIZE` estimates the gain from what it has emitted and slews it until it locks at ~1 s of voiced audio (`app/main.py normalize_chunk`) | a swell inside one request |
+| **M3** | the **LM itself**: sampling at temp 0.6 from an *Expressive* checkpoint can change register part-way through | anywhere, in every condition |
 
 ## What was run
 
 Two conditions, same 30 sentences (`bench/pitch_stress_texts.txt`, TM voicebot replies, Malay +
-English), same speaker, same server, 120 utterances per arm — **840 utterances, 0 errors**.
+English), same speaker, same server, 120 utterances per arm. **840 utterances, 0 errors**.
 
 **Direct API** (`bench/pitch_stress.py`), five arms at concurrency 1 and 8:
 
@@ -34,14 +34,14 @@ English), same speaker, same server, 120 utterances per arm — **840 utterances
 | `chunked_raw` / `chunked_norm` | ~5-word chunks, one request each, concatenated → + M1 |
 | `chunked_interleave` | same, with `interleave_id` → how much of M1 interleaving takes back |
 
-**Through LiveKit** (`bench/livekit/`), a real agent + WebRTC path, no STT and no LLM — text on the
+**Through LiveKit** (`bench/livekit/`), a real agent + WebRTC path, no STT and no LLM. Text on the
 `tts-input` topic goes straight to `session.say()` → `openai.TTS` plugin → the same API, and the
 audio is captured off the agent's published track. Two arms, 4 concurrent rooms:
-`lk_cold` (today's behaviour) and `lk_interleave` (**new** — the agent now sends `X-Interleave-Id`,
+`lk_cold` (today's behaviour) and `lk_interleave` (**new**: the agent now sends `X-Interleave-Id`,
 see below).
 
 Scoring (`bench/pitch_stress_score.py`) is frame-level f0 + level at 10 ms, and the headline is not
-a mean — a mean is exactly what hides a one-off jump.
+a mean, because a mean is exactly what hides a one-off jump.
 
 ![pitch and tone](../docs/img/pitch_tone.png)
  It is a **rate of audible events**: two
@@ -51,7 +51,7 @@ a listener calls a change of tone.
 
 ## Results
 
-### Tone — mid-utterance jumps (the actual complaint)
+### Tone: mid-utterance jumps (the actual complaint)
 
 | arm | window pairs | events | **per 1k** | utterances hit | worst |
 |---|---|---|---|---|---|
@@ -65,10 +65,10 @@ a listener calls a change of tone.
 
 **The complaint is real and it is not imaginary or rare: 42 of 120 utterances through LiveKit
 carry at least one simultaneous ≥3 dB / ≥1.5 st jump mid-utterance**, and the worst are +12 dB with
-+10 semitones — a whole octave, which is unmistakably "suddenly excited".
++10 semitones. That is a whole octave, and it is unmistakably "suddenly excited".
 
 ⚠ One caveat on the direct comparison: the API arms have their chunk joins *excluded* (±0.6 s
-keep-out at known offsets), while the LiveKit arms cannot — the agent chops the text itself and the
+keep-out at known offsets), while the LiveKit arms cannot: the agent chops the text itself and the
 boundaries are invisible from the audio track. So `lk_cold`'s 55.4 includes its joins and
 `oneshot_*`'s ~27–31 has none to include. Read it as: **a caller hears roughly twice the rate of
 tone jumps that the same text rendered in one request would give**, and the excess is at the joins
@@ -85,10 +85,10 @@ Signed, so + means *louder and higher after the join*:
 | `chunked_interleave` | 460 | +4.15 dB | +1.94 st | 68% | 35% |
 
 Every chunked arm steps **up** at the join, in both loudness and pitch, about two-thirds of the
-time — the register-reset signature from `bench/INTERLEAVE_AB.md`, and a quarter of all joins clear
+time. That is the register-reset signature from `bench/INTERLEAVE_AB.md`, and a quarter of all joins clear
 both audibility thresholds at once. This is M1, and it is the single largest effect measured.
 
-### Volume — per-utterance level
+### Volume: per-utterance level
 
 | arm | mean | sd | spread | opening − rest |
 |---|---|---|---|---|
@@ -104,27 +104,27 @@ is controlled. LiveKit adds nothing here.
 
 ## What this says about the three mechanisms
 
-**M2 — the loudness normalizer — is not the cause, and the hypothesis that it is should be dropped.**
+**M2, the loudness normalizer, is not the cause. Drop that hypothesis.**
 `oneshot_raw` (gain off) has *more* mid-utterance events than `oneshot_norm` (30.8 vs 27.0) and a
 *larger* opening-vs-rest level difference (+2.19 vs +1.90 dB). If the gain's pre-lock slew were
 producing swells, turning it off would remove them; it does not. The opening being louder than the
 body is present with the gain off, so it is ordinary declination, not the AGC.
 
-**M3 — the LM — is the floor, and it is not small.** One request, gain off, no joins at all, still
+**M3, the LM, is the floor, and it is not small.** One request, gain off, no joins at all, still
 produces 30.8 events per 1k and 25 of 120 utterances with an audible jump. Nothing downstream can
 fix that; it is a property of sampling an Expressive checkpoint at temperature 0.6.
 
-**M1 — chunk joins — is the largest single effect and the one LiveKit introduces.** +2.4 dB and
+**M1, chunk joins, is the largest single effect and the one LiveKit introduces.** +2.4 dB and
 +1.6–1.8 st, upward, at two-thirds of joins.
 
 **Where LiveKit actually cuts matters, and it is better than feared.** The interleave store shows
 what the agent sent: `"Your account is registered to IC number nine…"` then `"Could you confirm that
-is correct?."` — `StreamAdapter` split at **sentence** boundaries, not mid-sentence. So on
+is correct?."`. `StreamAdapter` split at **sentence** boundaries, not mid-sentence. So on
 well-punctuated text the joins land where a pause belongs. A genuinely *mid-sentence* jump therefore
 cannot be a join on this corpus, and must be M3. An LLM streaming long unpunctuated sentences could
 still be split mid-clause, which is the case the 5-word `chunked_*` arms bracket.
 
-## `interleave_id` through LiveKit — now wired up
+## `interleave_id` through LiveKit, now wired up
 
 `bench/livekit/stress_agent.py` gained `TTS_INTERLEAVE` (default on). The plugin drives the stock
 `openai` client and cannot add body fields, so the id rides the `X-Interleave-Id` header, one id per
@@ -150,14 +150,14 @@ What it bought, and what it cost:
 | **TTFB p50** | **0.462 s** | **0.603 s** (+141 ms) |
 | TTFB p95 | 0.651 s | 0.821 s |
 
-A real but modest improvement, at **+141 ms of TTFB** — more than `INTERLEAVE.md`'s "tens of ms",
+A real but modest improvement, at **+141 ms of TTFB**. That is more than `INTERLEAVE.md`'s "tens of ms"
 because prod runs `DEFAULT_PLAYBACK_SPEED=0.75` and the history prefill is now a visible share of a
 much shorter first window. That trade is a product call, not a technical one.
 
 On the 5-word API arms interleaving made joins **worse** (+2.36 → +4.15 dB, 26% → 35% over both
 thresholds) while on LiveKit's sentence chunks it helped. The coherent reading is that interleaving
 continues a phrase, which is right when the chunk is a sentence and wrong when the chunk is an
-arbitrary 5-word cut that leaves the model mid-phrase — but that is a hypothesis from two arms, not
+arbitrary 5-word cut that leaves the model mid-phrase. But that is a hypothesis from two arms, not
 a measured mechanism.
 
 ## What to do
@@ -167,13 +167,13 @@ a measured mechanism.
 2. **The biggest available win is not to chunk at all where it is avoidable.** Every join costs
    ~+2.4 dB and ~+1.7 st upward. If the agent can hand the TTS a whole sentence-group instead of a
    sentence, it should.
-3. **Ship `X-Interleave-Id` from the agent** if 140 ms of TTFB is acceptable — it is a small,
+3. **Ship `X-Interleave-Id` from the agent** if 140 ms of TTFB is acceptable. It is a small,
    genuine improvement and it is already written. Gate it on serving an interleave-trained
    checkpoint (prod does).
 4. **The floor is the model.** A third of the remaining events survive every mitigation, in a single
    uninterrupted request with no normalizer. Lowering `DEFAULT_TEMPERATURE` is the lever with a
-   measured precedent — the 2026-09-02 sweep found 0.3 beat 0.6 on all four of probe accuracy, CER,
-   WER and MOS at once — and would be the next experiment, scored with this same rig.
+   measured precedent: the 2026-09-02 sweep found 0.3 beat 0.6 on all four of probe accuracy, CER,
+   WER and MOS at once. It would be the next experiment, scored with this same rig.
 5. **Record the demo sessions.** Every number here rests on a second-hand sentence. A 10-second clip
    would have told us in a minute which of M1/M2/M3 it was.
 
@@ -195,7 +195,7 @@ Worst-case clips and both `scores.json` are in
 
 Two traps if you touch the scorer: a window that is half pause reads as a huge level "jump" against
 one that is not, which is why event windows require 70% voiced frames and the level is taken over
-voiced frames only — before that guard the same run reported 3× the events and +20 dB worst cases,
+voiced frames only. Before that guard the same run reported 3× the events and +20 dB worst cases,
 all artefacts. And **librosa 1.0.0 segfaults in `pyin`** with numba 0.67 / numpy 2.2 (exit 139, no
 traceback); pin `librosa==0.11.0`.
 
@@ -214,7 +214,7 @@ one reply. Measured on 120 chunked replies per arm, 580 chunks:
 **Carrying the loudness estimate across the chunks of one reply makes it worse**, and
 `bench/INTERLEAVE_AB.md`'s "carry the locked gain through the turn store" follow-up should not be
 built. Seeding chunk N+1 from the reply's accumulated level is a shared gain by another name, and
-a shared gain *preserves* each chunk's own deviation rather than correcting it — which is exactly
+a shared gain *preserves* each chunk's own deviation rather than correcting it. That is exactly
 what running with no gain at all does (1.87 dB), only less so. Per-chunk normalisation is the
 right design. The mechanism is implemented and kept (`STREAM_NORMALIZE_CARRY`, `Turn.sq/nsamp/peak`)
 but defaults **off**, so nobody rebuilds it from the doc.
@@ -224,13 +224,13 @@ same 360 utterances. The theory was that locking at 1 s locks on the loudest sec
 opens 1.2–2.2 dB above its own body), biasing short chunks by a length-dependent amount. Whatever
 that costs, it is below the noise. `NORM_LOCK_S` stays at 1.0.
 
-⚠ The `>3 dB` rate is noisy at n=120 — three runs of the identical serving config gave 29%, 38%
+⚠ The `>3 dB` rate is noisy at n=120: three runs of the identical serving config gave 29%, 38%
 and 43%. Only the sd column is stable enough to rank arms on.
 
 **Why neither worked** is settled in the dataset, not here:
 `scicom/dataset/tm-voice/LOUDNESS.md`. `TM_English_Normal`'s own source recordings step >3 dB
-between consecutive chunks in **23%** of recordings — five to ten times every other speaker in
-TM-Voice — and the served model reproduces that at 29%. The serving normalizer already closes
+between consecutive chunks in **23%** of recordings, five to ten times every other speaker in
+TM-Voice, and the served model reproduces that at 29%. The serving normalizer already closes
 most of the gap between the model's raw output (67%) and its training data (23%); it cannot go
 below the data, because each chunk is an independent sample from a distribution the recordings
 taught. The fix is per-recording loudness normalisation before NeuCodec encoding, or serving

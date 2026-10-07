@@ -1,7 +1,7 @@
-# `bench/synth` — render a sentence file through N TTS checkpoints
+# `bench/synth`: render a sentence file through N TTS checkpoints
 
 Offline batch synthesis for **checkpoint comparison**: same text, same speaker, same sampling,
-same decoder, one directory of wavs per model. Not a benchmark and not the serving path — there
+same decoder, one directory of wavs per model. Not a benchmark and not the serving path. There
 is no FastAPI app, no normalizer, no streaming stitcher, nothing to make two models differ except
 the weights.
 
@@ -21,7 +21,7 @@ VENV=/path/to/venv LM_GPU=6 CODEC_GPU=7 \
 ```
 
 `<slug>` names the output directory, `<hf repo>` is the checkpoint. The candidates are usually
-**private** model repos, so they are named in the run record, not here — and `HF_TOKEN` has to be
+**private** model repos, so they are named in the run record, not here. `HF_TOKEN` has to be
 in the environment (from an env file, not inline in the command, where it lands in `ps`).
 `LM_GPU`/`CODEC_GPU` are indices on a shared box: check `nvidia-smi` and pick idle ones.
 
@@ -38,12 +38,12 @@ comparing checkpoints:
    → `-16 dBFS`, ±12 dB clamp, peak-headroom cap, tanh soft-knee limiter) and also keeps the
    untouched decoder output as float32 under `raw/`.
 3. **Tokens are kept.** `tokens/<slug>.json` holds the ids, finish reason and token counts, so a
-   decode change can be re-run — and audited — without paying for generation again.
+   decode change can be re-run and audited without paying for generation again.
 
 `gen_tokens.py` builds the serving app's single-turn prompt,
 `<|im_start|>{speaker}: {text}<|speech_start|>` (`app/interleave.py:build_prompt` with no history),
 and stops on `[151643, 151645]`. Rows whose `finish_reason` is not `stop`, or that came back under
-10 speech tokens, are printed as `suspect rows` — check that line before trusting a set.
+10 speech tokens, are printed as `suspect rows`. Check that line before trusting a set.
 
 Environment on a fresh box (vLLM brings its own torch; the vendored codec needs a few extras):
 

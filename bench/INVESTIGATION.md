@@ -1,7 +1,7 @@
 # Voice quality and latency: what a demo complaint turned into
 
-**2026-09-18 → 2026-09-22.** One report from a demo session — *"the voice goes from calm and even
-to loud and excited part-way through"* — with no recording. This is the chain of measurements that
+**2026-09-18 → 2026-09-22.** One report from a demo session, with no recording: *"the voice goes
+from calm and even to loud and excited part-way through"*. This is the chain of measurements that
 came out of it, what was found, and what was wrong.
 
 ---
@@ -133,8 +133,8 @@ TP=4 is the best of the three. The "~5% over TP=2" figure compared two *differen
 node TP=4 buys 11.8%.
 
 The bandwidth model was wrong too. All four ranks run at **98% occupancy and 14% memory bandwidth**,
-the co-tenant STT engine idle, rank 3 no slower than rank 0. Neither contention nor collective
-stalls — many tiny kernels per token.
+the co-tenant STT engine idle, rank 3 no slower than rank 0. It is neither contention nor
+collective stalls. It is many tiny kernels per token.
 
 ---
 
@@ -155,7 +155,7 @@ flowchart TD
 |---|---|
 | padded to graph bucket 500 | **4.7 dB** |
 | batched with a longer request, **no buckets** | **−1.3 dB** |
-| batched with a **same-length** request | **72.3 dB** — identical |
+| batched with a **same-length** request | **72.3 dB** (identical) |
 
 Not a CUDA-graph bug. A **padding** bug. It also fires with graphs off whenever dynamic batching
 pairs different lengths.
@@ -177,7 +177,7 @@ flowchart TD
   F3 --> R2["223 dB SNR · 0 errors · 80-84% hit"]
 ```
 
-Fixed buckets are useless once you stop padding — **0 of 150** real decodes landed on one. The
+Fixed buckets are useless once you stop padding: **0 of 150** real decodes landed on one. The
 stitcher produces 47 / 121 / 269, not multiples of 50. Those three are 64% of all decodes, so a
 cache on the exact shape hits 80–84%.
 
@@ -196,7 +196,7 @@ Worth paying: the alternative is 2.1× throughput at 10.6 dB SNR.
 
 ## 6. Precision and quantization: nothing helps, and the reason matters
 
-The codec runs **fp32** today — 823M params, 3.29 GB.
+The codec runs **fp32** today: 823M params, 3.29 GB.
 
 ```mermaid
 pie title NeuCodec weights (3.29 GB, fp32)
@@ -211,15 +211,15 @@ carry ~64% of real traffic. Speedup is `x`; SNR is against fp32, so 224 dB means
 
 | arm | w47 ×/SNR | w121 ×/SNR | w269 ×/SNR | verdict |
 |---|---|---|---|---|
-| fp32 eager (baseline) | 1.00 / — | 1.00 / — | 1.00 / — | — |
-| **fp16** | — | — | — | **impossible** |
+| fp32 eager (baseline) | 1.00 / ref | 1.00 / ref | 1.00 / ref | baseline |
+| **fp16** | n/a | n/a | n/a | **impossible** |
 | bf16 | 0.92 / 33 dB | 0.99 / 38 dB | 1.31 / 37 dB | no |
 | TF32 | 1.00 / 63 dB | 0.97 / 65 dB | 1.25 / 65 dB | no |
 | fold `weight_norm` (37) | 0.97 / **224 dB** | 0.99 / **224 dB** | 1.00 / **224 dB** | exact, but free of gain |
 | `cudnn.benchmark` | 0.99 / **224 dB** | 0.99 / **224 dB** | 1.00 / **224 dB** | exact, but free of gain |
 | TF32 + fold + cudnn | 0.99 / 63 dB | 0.96 / 65 dB | 1.24 / 65 dB | no |
-| **int8 weight-only** | 0.76 / 32 dB | 0.76 / 36 dB | 1.09 / 36 dB | **no — slower** |
-| **int8 dyn act + weight** | **0.06** / 26 dB | **0.05** / 29 dB | **0.07** / 29 dB | **no — 16-20× slower** |
+| **int8 weight-only** | 0.76 / 32 dB | 0.76 / 36 dB | 1.09 / 36 dB | **no, slower** |
+| **int8 dyn act + weight** | **0.06** / 26 dB | **0.05** / 29 dB | **0.07** / 29 dB | **no, 16-20× slower** |
 
 **fp16 cannot run at all**: `cuFFT only supports dimensions whose sizes are powers of two`. The
 vocos ISTFT is fp32-or-nothing. Not a tuning problem.
@@ -229,8 +229,8 @@ costs 32–36 dB. Dynamic activations make it 16–20× slower. The quantize/deq
 dwarfs the arithmetic at these shapes, and Conv1d has no fast int8 path here. int8 is not a
 near-miss worth tuning; it is the wrong direction.
 
-**bf16 and TF32 only help the largest window** (1.25–1.31× at w269) and do nothing — or hurt — at
-w47/w121, which are half of all decodes.
+**bf16 and TF32 only help the largest window** (1.25–1.31× at w269). At w47/w121, which are half
+of all decodes, they do nothing or hurt.
 
 **The two exact optimisations buy nothing.** Folding `weight_norm` removes 37 per-forward norm
 recomputations and is bit-identical; `cudnn.benchmark` autotunes the 1-D convs and is bit-identical.
@@ -252,10 +252,10 @@ cheaper cannot help when the time goes to *reaching* the kernels. That is exactl
 delivered 1.44–1.54× under load while every precision and quantization arm delivered ~1.00×.
 
 **So: there is no meaningful win left at the arithmetic level.** The remaining lever is reducing
-the *number of dispatches* — graphs (done) or a fused kernel (§"Open", item 5).
+the *number of dispatches*: graphs (done) or a fused kernel (§"Open", item 5).
 
 **One free win that is not about speed**: 2.5 GB of the 3.29 GB is `semantic_model` + `CodecEnc`,
-used only by `/v1/audio/vc`. A TTS-only worker could skip loading them — about 10 GB back across
+used only by `/v1/audio/vc`. A TTS-only worker could skip loading them, about 10 GB back across
 4 workers.
 
 ## What was wrong, and why
@@ -271,8 +271,8 @@ reasoning instead of measuring.
 
 Two measurement traps cost real time:
 
-- **A hash is the wrong test.** Batch size alone shifts output ~1e-4 (cuBLAS reduction order) —
-  flips a SHA, sits 90 dB down.
+- **A hash is the wrong test.** Batch size alone shifts output ~1e-4 (cuBLAS reduction order).
+  That flips a SHA but sits 90 dB down.
 - **Firing N requests at once does not produce mixed-length batches.** They run in lockstep. The
   bug hides. Staggered arrivals are what trigger it.
 
@@ -286,11 +286,11 @@ And one metric proved unfit:
 
 ## Open, in priority order
 
-1. **Make window lengths collide** instead of padding them apart — quantise the stitcher schedule
+1. **Make window lengths collide** instead of padding them apart: quantise the stitcher schedule
    so concurrent requests share lengths. Recovers the 28%, never pads. The shapes are already
    concentrated, so this looks achievable.
 2. **Land the padding fix on the deployment.** `tts-api-1023` still runs the unpatched code.
-3. **Dataset loudness normalisation** — `neucodec_normalize=fixed_target` on the next pack.
-4. **Skip the encoder on TTS-only workers** — ~10 GB.
+3. **Dataset loudness normalisation**: `neucodec_normalize=fixed_target` on the next pack.
+4. **Skip the encoder on TTS-only workers**: ~10 GB back.
 5. **The LM megakernel.** 98% occupancy at 14% bandwidth is the regime it targets. TP=1 would be
    the build. Bigger project; measure (1)–(4) first.

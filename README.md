@@ -29,7 +29,7 @@ below follow the same order.
 
 | # | report | one line |
 |---|---|---|
-| — | [INVESTIGATION.md](bench/INVESTIGATION.md) | **Start here.** A demo complaint → six measurements → three fixes, in diagrams |
+| | [INVESTIGATION.md](bench/INVESTIGATION.md) | **Start here.** A demo complaint → six measurements → three fixes, in diagrams |
 | 1 | [TTFB.md](bench/TTFB.md) | TTFB, end-to-end, RTF percentiles. The TP=1/2/4 sweep |
 | 2 | [PLAYBACK_SPEED.md](bench/PLAYBACK_SPEED.md) | `playback_speed` 0.1→2.0. **0.4** at low concurrency: 32% faster TTFB, no measurable cost |
 | 3 | [LIVEKIT.md](bench/LIVEKIT.md) | Through a real agent: +130 ms flat, 0 errors to 16 rooms, and two rig traps |
@@ -47,9 +47,9 @@ Older / reference:
 |---|---|
 | [OPTIMIZATION.md](bench/OPTIMIZATION.md) | H100-era throughput work: CUDA graphs, MPS, multi-worker |
 | [WEDGE_TEST.md](bench/WEDGE_TEST.md) | Wedge/disconnect handling under a stalled client |
-| [bench/livekit/](bench/livekit/) | LiveKit agent stress rig — setup and gotchas |
+| [bench/livekit/](bench/livekit/) | LiveKit agent stress rig: setup and gotchas |
 | [bench/interleave_ab/](bench/interleave_ab/) | The interleave A/B harness (corpus, generate, score) |
-| [bench/widecodec_ab/](bench/widecodec_ab/) | Codec A/B harness — one token stream, two decoders |
+| [bench/widecodec_ab/](bench/widecodec_ab/) | Codec A/B harness: one token stream, two decoders |
 | [bench/multilingual_normalizer/](bench/multilingual_normalizer/) | 16-locale written→spoken dataset generator |
 | [bench/synth/](bench/synth/) | Render a sentence file through N checkpoints |
 
@@ -66,16 +66,16 @@ Details: [TTFB.md](bench/TTFB.md).
 
 `0.4` gives TTFB 70 ms against 0.75's 103 ms, with loudness, pitch and MOS unchanged within noise.
 ⚠ Client buffer falls to **30 ms at concurrency 32** (0.75 keeps 390 ms) while the TTFB win shrinks
-to 11%. Use 0.4 at low concurrency; keep 0.75 near 32.
+to 11%. Use 0.4 at low concurrency. Keep 0.75 near 32.
 Details: [PLAYBACK_SPEED.md](bench/PLAYBACK_SPEED.md).
 
 ### 3. Through a LiveKit agent
 
 ![livekit bench](docs/img/livekit_bench.png)
 
-TTFB is flat from 1 to 16 rooms (0.232 → 0.258 s) and the agent + WebRTC tax is a constant
-**+111 to +136 ms**, not a slope — so a LiveKit TTFB regression is almost never LiveKit.
-0 errors in 688 utterances; loudness sd stays 0.92–1.26 dB. `interleave_id` costs ~64 ms
+TTFB is flat from 1 to 16 rooms (0.232 → 0.258 s). The agent + WebRTC tax is a constant
+**+111 to +136 ms**, not a slope, so a LiveKit TTFB regression is almost never LiveKit.
+0 errors in 688 utterances. Loudness sd stays 0.92–1.26 dB. `interleave_id` costs ~64 ms
 and shrinks under load. Full report: [LIVEKIT.md](bench/LIVEKIT.md).
 
 ![livekit client trap](docs/img/livekit_client_trap.png)
@@ -89,7 +89,7 @@ server. Split over two processes, the same 16 rooms returned **0.307 s**.
 ![saturation](docs/img/saturation.png)
 
 The codec GPU is the only resource that climbs with load. It reaches 96% at 6% memory
-bandwidth — launch-bound, not bandwidth-bound.
+bandwidth. Launch-bound, not bandwidth-bound.
 
 ![padding bug](docs/img/padding_bug.png)
 
@@ -102,21 +102,21 @@ With the fix, graphs are bit-exact and worth 1.0× at c=8, 1.44× at c=32, 1.54�
 
 ![fade in](docs/img/fade_in.png)
 
-About 1 response in 20 opened at full level on its first sample — a click — because the LM
+About 1 response in 20 opened at full level on its first sample, a click, because the LM
 started voiced. A 10 ms fade-in (`FADE_IN_MS`) takes clicks from 3.3–3.8% to 0.0% at every
-load. It treats the symptom; the voiced start itself is the model. Details: [FADE_IN.md](bench/FADE_IN.md).
+load. That treats the symptom. The voiced start is the model. Details: [FADE_IN.md](bench/FADE_IN.md).
 
 ### 5. Making the codec faster
 
 ![precision matrix](docs/img/precision_matrix.png)
 
-fp16 cannot run — cuFFT rejects the ISTFT dims in half precision. bf16, TF32 and int8 do not
-beat fp32: the decoder is launch-bound (609 kernels per decode), not arithmetic-bound.
+fp16 cannot run: cuFFT rejects the ISTFT dims in half precision. bf16, TF32 and int8 do not
+beat fp32. The decoder is launch-bound (609 kernels per decode), not arithmetic-bound.
 
 ![megakernel](docs/img/megakernel.png)
 
-Fusion is the only lever that works — up to 2.27× per decode. Blocked by a ~10 s compile per
-new window length, so not enabled. Details: [MEGAKERNEL.md](bench/MEGAKERNEL.md).
+Fusion is the only lever that works, up to 2.27× per decode. A ~10 s compile per new window
+length blocks it, so it is off. Details: [MEGAKERNEL.md](bench/MEGAKERNEL.md).
 
 ### 6. Pitch, tone and chunk joins
 
@@ -307,67 +307,70 @@ fasttext, which loads for `normalize_malaysian=true` requests alone. `http` mode
 ## Tracing (Loki + Tempo)
 
 The app calls [`wan.patch()`](https://github.com/Scicom-AI-Enterprise-Organization/wan) at
-startup. That gives you, always:
+startup. That always gives you:
 
 | | |
 |---|---|
 | JSON logs | one line per request, carrying the trace id |
 | `/metrics` | Prometheus |
 | `/scalar` | API docs |
-| health probes | — |
+| health probes | built in |
 
 `wan` owns `SERVICE_NAME`, `OTLP_ENDPOINT`, `TRACING_SAMPLE` and the rest of the OTLP config.
 
 `ENABLE_TRACING_SPANS` (default on) adds this repo's own hot-path spans
 ([app/tracing.py](app/tracing.py)). They show where a request's time went:
 
-```
-POST /v1/audio/speech                 (fastapi instrumentation)
-├── tts.normalize                     normalizer.mode=rule|llm, chars in/out
-│   ├── normalize.llm                 the LLM normalizer call (mode="llm")
-│   └── normalize.rule                the rule-based pipeline
-└── tts.stream                        tts.ttfb_s, tts.lm_wait_s, tts.decode_wait_s,
-    │                                 tts.decodes, tts.chunks, tts.audio_bytes
-    ├── lm.generate                   the vLLM SSE stream, lm.deltas
-    │   ├── lm.connect                POST → response headers
-    │   └── lm.first_token            headers → first speech token (prefill)
-    ├── tts.chunk (index=0)           one emitted audio chunk
-    │   └── codec.decode              codec.tokens
-    │       ├── codec.batch_wait      queued → picked up by the batch collector
-    │       ├── codec.batch_prep      batch formed → H2D copy issued (batch thread)
-    │       ├── codec.compute_wait    H2D issued → compute thread starts
-    │       └── codec.gpu_decode      graph replay + D2H, batch.size, codec.cuda_graph
-    └── tts.chunk (index=1) ...
+```mermaid
+flowchart TD
+  R["POST /v1/audio/speech<br/>fastapi instrumentation"]
+  R --> NM["tts.normalize<br/>normalizer.mode=rule|llm · chars in/out"]
+  NM --> NL["normalize.llm<br/>the LLM normalizer call, mode=llm"]
+  NM --> NR["normalize.rule<br/>the rule-based pipeline"]
+  R --> ST["tts.stream<br/>ttfb_s · lm_wait_s · decode_wait_s<br/>decodes · chunks · audio_bytes"]
+  ST --> LG["lm.generate<br/>the vLLM SSE stream · lm.deltas"]
+  LG --> LC["lm.connect<br/>POST to response headers"]
+  LG --> LF["lm.first_token<br/>headers to first speech token, prefill"]
+  ST --> C0["tts.chunk index=0<br/>one emitted audio chunk"]
+  C0 --> CD["codec.decode<br/>codec.tokens"]
+  CD --> BW["codec.batch_wait<br/>queued, then picked up by the batch collector"]
+  CD --> BP["codec.batch_prep<br/>batch formed, H2D copy issued, batch thread"]
+  CD --> CW["codec.compute_wait<br/>H2D issued, compute thread starts"]
+  CD --> GD["codec.gpu_decode<br/>graph replay + D2H · batch.size · codec.cuda_graph"]
+  ST --> C1["tts.chunk index=1 …"]
 ```
 
-So: **dynamic batching** = `codec.batch_wait` + `codec.batch_prep` + `codec.compute_wait`,
-**waiting on vLLM** = `lm.connect` + `lm.first_token` and the `tts.lm_wait_s` aggregate
-(how long the stitcher had no tokens left to decode), **decoding speech tokens** =
-`codec.gpu_decode`, or `tts.decode_wait_s` for the whole per-request wait. Voice
-conversion adds `vc.load_audio`, `codec.encode`, `codec.encode_wait` and
+Read the tree like this:
+
+| time went to | spans |
+|---|---|
+| dynamic batching | `codec.batch_wait` + `codec.batch_prep` + `codec.compute_wait` |
+| waiting on vLLM | `lm.connect` + `lm.first_token`, and `tts.lm_wait_s` for how long the stitcher had no tokens left to decode |
+| decoding speech tokens | `codec.gpu_decode`, or `tts.decode_wait_s` for the whole per-request wait |
+
+Voice conversion adds `vc.load_audio`, `codec.encode`, `codec.encode_wait` and
 `codec.encode_gpu`.
 
-Two things make this safe to leave in the code path:
+Two things make it safe to leave in the code path:
 
 - **Removable, not just cheap, and off unless someone is listening.** Spans are built
   only when `ENABLE_TRACING_SPANS` is on *and* an exporter is configured *and*
-  opentelemetry is importable. Fail any of the three and every helper is a shared
-  `contextlib.nullcontext()` or a function returning `None` before doing anything — no
-  tracer lookup, no `time_ns()`, no per-decode dict. The decode loop is GIL-bound, so
-  tracing has to be genuinely absent when off.
+  opentelemetry is importable. Fail any of the three and every helper becomes a shared
+  `contextlib.nullcontext()` or a function that returns `None` immediately. No tracer
+  lookup, no `time_ns()`, no per-decode dict. The decode loop is GIL-bound, so tracing
+  has to be genuinely absent when off.
 - **Explicit parents.** A decode batch is built from N different requests, so the
   batching threads cannot use the ambient span context; each queued item carries its
   request's context plus the timestamp of the previous hop, and each stage is recorded
   after the fact with those timestamps.
 
-Under real load, sample: `TRACING_SAMPLE=0.05` keeps the trace volume (and the ~5 extra
-spans per decode) sane.
+Sample under real load. `TRACING_SAMPLE=0.05` keeps trace volume and the ~5 extra spans
+per decode manageable.
 
 ### `OTLP_ENDPOINT` is part of the switch
 
-`ENABLE_TRACING_SPANS` on its own does nothing: with no exporter configured the hot-path
-spans are **not built at all**, and the app logs why at startup rather than leaving you to
-wonder where the spans went:
+`ENABLE_TRACING_SPANS` on its own does nothing. With no exporter configured the hot-path
+spans are **not built at all**. The app says so at startup:
 
 ```
 hot-path spans requested but no span exporter is configured, so they are disabled rather
@@ -375,15 +378,15 @@ than built and dropped. Set OTLP_ENDPOINT (or ENABLE_CONSOLE_SPAN_EXPORTER=true)
 collect them, or TRACING_SPANS_REQUIRE_EXPORTER=false if a processor is installed in code.
 ```
 
-The reason is that an OpenTelemetry SDK with no span processor attached still *builds*
-every span, stores its attributes, and then drops it. Measured over 3000 iterations of one
-request's worth of spans (24 spans with the real attribute sets, Apple M-series —
-indicative, not H100 numbers):
+An OpenTelemetry SDK with no span processor attached still *builds* every span, stores its
+attributes, then drops it. Measured over 3000 iterations of one request's worth of spans
+(24 spans with the real attribute sets, Apple M-series, so indicative rather than H100
+numbers):
 
 | `ENABLE_TRACING_SPANS` | exporter | per request |
 |---|---|---|
-| `false`, or on with no exporter | — | **2.6 µs** (the nullcontext path) |
-| `true` | none attached — what this gate prevents | 292 µs, all wasted |
+| `false`, or on with no exporter | not used | **2.6 µs** (the nullcontext path) |
+| `true` | none attached (what this gate prevents) | 292 µs, all wasted |
 | `true` | `BatchSpanProcessor` | 685 µs |
 
 Any one of these opens the gate, so a console-exporter debug session or an
@@ -392,22 +395,21 @@ auto-instrumented deployment is not silently un-traced: `OTLP_ENDPOINT`,
 `ENABLE_CONSOLE_SPAN_EXPORTER=true`. If you attach a processor in code instead, set
 `TRACING_SPANS_REQUIRE_EXPORTER=false`.
 
-What you give up when no exporter is configured is the *stage-level* `spanID` on log
-lines: `traceID` and the request's own `spanID` still come from the FastAPI
-instrumentation (as does the `X-Trace-Id` response header), but with no hot-path spans
-every line of a request carries the same span id again.
+With no exporter you lose the *stage-level* `spanID` on log lines. `traceID` and the
+request's own `spanID` still come from the FastAPI instrumentation, as does the
+`X-Trace-Id` response header, but every line of a request then carries the same span id.
 
 One upstream default is turned off here. The OpenTelemetry ASGI instrumentation opens a
 span per ASGI *message*, and a streaming response polls the receive channel as it reads
-the LM stream — measured on an H20, one request produced **505 empty
-`POST /v1/audio/speech http receive` spans** next to 19 real ones, which is both useless
-in the flame graph and a large multiple on Tempo's ingest. Two fixes, and the same shape
-of request now emits 25 spans and **zero** ASGI-message spans:
+the LM stream. Measured on an H20, one request produced **505 empty
+`POST /v1/audio/speech http receive` spans** next to 19 real ones. That is useless in the
+flame graph and a large multiple on Tempo's ingest. Two fixes bring the same request down
+to 25 spans and **zero** ASGI-message spans:
 
 - `DISCONNECT_POLL_S` (0.25 s) bounds how often the LM reader asks whether the client
   disconnected. Each check is a real ASGI receive, and aiohttp yields two lines per SSE
-  event, so the old per-line poll cost ~2 receives per speech token — event-loop time
-  spent whether or not tracing is on. This alone took 505 noise spans to 9.
+  event, so the old per-line poll cost ~2 receives per speech token. That is event-loop
+  time spent whether or not tracing is on. This alone took 505 noise spans to 9.
 - `_suppress_asgi_message_spans()` in [app/main.py](app/main.py) removes the remainder,
   including the per-chunk `http send` spans that scale with utterance length. Set
   `TRACE_ASGI_MESSAGE_SPANS=true` to get the upstream behaviour back.
@@ -424,7 +426,7 @@ OTLP_ENDPOINT=http://localhost:4327
 SERVICE_NAME=tts-api
 ```
 
-`ENABLE_CONSOLE_SPAN_EXPORTER=true` prints spans to stdout instead, which is enough to
+`ENABLE_CONSOLE_SPAN_EXPORTER=true` prints spans to stdout instead. That is enough to
 check the tree without a backend.
 
 ## API Endpoints
@@ -433,14 +435,14 @@ check the tree without a backend.
 
 Returns the list of available speaker voices.
 
-### `POST /v1/audio/normalize` — Text Normalization
+### `POST /v1/audio/normalize`: Text Normalization
 
 Normalizes text for TTS input. Strips markdown/HTML, then normalizes with one of two engines
 selected by `mode`:
 
-- **`rule`** (default) — the built-in rule-based pipeline; optionally applies Malaysian text
+- **`rule`** (default): the built-in rule-based pipeline. It also applies Malaysian text
   normalization (email, URL, phone, IC, money, time, units, etc.) when `normalize_malaysian` is set.
-- **`llm`** — sends the text to an OpenAI-compatible LLM (`OPENAI_BASE_URL` / `OPENAI_MODEL_NAME`)
+- **`llm`**: sends the text to an OpenAI-compatible LLM (`OPENAI_BASE_URL` / `OPENAI_MODEL_NAME`)
   with a multilingual few-shot prompt ([app/prompt.py](app/prompt.py)). The reply is constrained to
   `{"normalized": "..."}` via `response_format` json_schema (vLLM guided decoding), so the model can
   only return the normalized text. Returns `400` if `OPENAI_*` is not configured, `502` if the LLM
@@ -453,7 +455,7 @@ selected by `mode`:
 | `input` | string | required | Text to normalize |
 | `normalize_malaysian` | bool | `DEFAULT_NORMALIZE_MALAYSIAN` (`false`) | Apply Malaysian text normalization (`rule` mode only) |
 | `mode` | `rule` \| `llm` \| `spoken` | `DEFAULT_NORMALIZER_MODE` (`rule`) | Normalization engine. `spoken` = rule-based replica of the LLM normalizer (English, Malay, Mandarin, Tamil), no network |
-| `prompt` | string | none | `llm` mode only: extra instructions for the LLM normalizer, appended to its system prompt — context the text does not carry, e.g. `"normalize this in Malay"`. Max 2,000 chars. Ignored by `rule` / `spoken` |
+| `prompt` | string | none | `llm` mode only: extra instructions for the LLM normalizer, appended to its system prompt. Use it for context the text does not carry, e.g. `"normalize this in Malay"`. Max 2,000 chars. Ignored by `rule` / `spoken` |
 
 **Example:**
 
@@ -584,11 +586,12 @@ curl -X POST 'http://localhost:9091/v1/audio/speech' -H 'Content-Type: applicati
 }' -o address.wav
 ```
 
-In `llm` mode the LLM is only called when the text contains something it could rewrite (a
-digit, a symbol, an ALL-CAPS or dotted token, a known abbreviation). Plain sentences such as
+In `llm` mode the LLM is called only when the text contains something it could rewrite: a
+digit, a symbol, an ALL-CAPS or dotted token, a known abbreviation. Plain sentences such as
 `"Hello there, how can I help you today?"` come back unchanged from the LLM anyway, so they
-skip the ~0.55 s round trip and take the same pre/post cleanup path (`LLM_NORMALIZER_SKIP_PLAIN`,
-default on). On a TTS request that round trip sits entirely in front of the first audio byte.
+skip the ~0.55 s round trip and take the same pre/post cleanup path
+(`LLM_NORMALIZER_SKIP_PLAIN`, default on). On a TTS request that round trip sits entirely in
+front of the first audio byte.
 
 **`mode: "spoken"`** is a rule-based replica of the LLM normalizer (`app/spoken_normalizer/`,
 pure Python, ~25 µs): numbers, money (RM/sen, dollars), IC and phone numbers digit by digit,
@@ -609,7 +612,7 @@ curl -X POST 'http://localhost:9091/v1/audio/normalize' -H 'Content-Type: applic
 #   three p m on the twelfth of September twenty twenty six.","mode":"spoken"}
 ```
 
-### `POST /v1/audio/speech` — Text-to-Speech
+### `POST /v1/audio/speech`: Text-to-Speech
 
 What one request does:
 
@@ -625,7 +628,7 @@ flowchart TD
   X --> O["pcm | wav | SSE"]
 ```
 
-First audio leaves as soon as the first window decodes — `playback_speed × 50` tokens. That
+First audio leaves as soon as the first window decodes, at `playback_speed × 50` tokens. That
 gate is the TTFB.
 
 Accepts a JSON body.
@@ -649,7 +652,7 @@ Accepts a JSON body.
 | `prompt` | string | none | `llm` mode only: extra instructions for the LLM normalizer, e.g. `"normalize this in Malay"` (see `/v1/audio/normalize`). Ignored by the `spoken` fallback |
 | `stream_normalize` | bool | `STREAM_NORMALIZE` (`true`) | Per-utterance loudness normalization toward `TARGET_RMS_DB` |
 | `speaking_rate` | float | `DEFAULT_SPEAKING_RATE` (`1.0`) | Speaking rate, `0.5`–`2.0`: `1.3` speaks 30% faster, `0.8` slower, **pitch unchanged**. Also accepted as `speed` (OpenAI-compatible clients). See [Speaking rate](#speaking-rate) |
-| `interleave_id` | string | none | Interleaved generation: requests sharing this id continue each other's prosody. **Needs an interleave-trained LM — no open-source TTS model supports this.** Aliases `request_id` / `context_id`; header `X-Interleave-Id` / `X-Context-Id`. See [Interleaved generation](#interleaved-generation) |
+| `interleave_id` | string | none | Interleaved generation: requests sharing this id continue each other's prosody. **Needs an interleave-trained LM. No open-source TTS model supports this.** Aliases `request_id` / `context_id`; header `X-Interleave-Id` / `X-Context-Id`. See [Interleaved generation](#interleaved-generation) |
 | `max_retain_interleave` | int | `MAX_RETAIN_INTERLEAVE` (`5`) | How many previous turns of that id go into the prompt (`0` = no turn limit, seconds cap only). Same model requirement as `interleave_id` |
 
 **Example:**
@@ -675,18 +678,21 @@ curl -X POST 'http://localhost:9091/v1/audio/speech' \
 #### Speaking rate
 
 `speaking_rate` (alias `speed`) changes how fast the voice talks **without changing its pitch**.
-The LM has no rate control and speech tokens are a fixed 50 Hz, so this is done after NeuCodec
-decode, on the PCM stream, with WSOLA (waveform-similarity overlap-add — the SoundTouch-style
-tempo change, `app/timestretch.py`): the audio is copied out in ~40 ms blocks whose input hop is
-`rate`× the output hop, so whole pitch periods are dropped (faster) or repeated (slower) while the
-samples inside each block are untouched; each block's start is searched ±7.5 ms for the best
-waveform match to the previous block's tail and the two are crossfaded over 8 ms. Plain
-resampling would shorten every period too (chipmunk effect). It is a stage on the stitched stream
-(after crossfade + loudness normalization, before the pcm/wav/SSE layers), stateful across
-chunks with ~55 ms of lookahead — so it works for streaming, adds no measurable latency to the
-2 s first chunk, and leaves the token/decode/batching pipeline untouched. `1.0` bypasses it
-entirely. Range `0.5`–`2.0` (422 outside): beyond that WSOLA on speech starts to buzz / drop
-consonants.
+The LM has no rate control and speech tokens are a fixed 50 Hz, so the work happens after
+NeuCodec decode, on the PCM stream, with WSOLA (waveform-similarity overlap-add, the
+SoundTouch-style tempo change, `app/timestretch.py`).
+
+The audio is copied out in ~40 ms blocks whose input hop is `rate`× the output hop. Whole pitch
+periods are dropped (faster) or repeated (slower) while the samples inside each block stay
+untouched. Each block's start is searched ±7.5 ms for the best waveform match to the previous
+block's tail, and the two are crossfaded over 8 ms. Plain resampling would shorten every period
+too, which is the chipmunk effect.
+
+It is a stage on the stitched stream, after crossfade and loudness normalization and before the
+pcm/wav/SSE layers. It is stateful across chunks with ~55 ms of lookahead, so it works for
+streaming, adds no measurable latency to the 2 s first chunk, and leaves the
+token/decode/batching pipeline untouched. `1.0` bypasses it entirely. Range `0.5`–`2.0`, 422
+outside that: beyond it WSOLA on speech starts to buzz and drop consonants.
 
 ```bash
 curl -X POST 'http://localhost:9091/v1/audio/speech' -H 'Content-Type: application/json' \
@@ -727,7 +733,7 @@ History is prefill only. Nothing extra is decoded or streamed, so the codec path
 |---|---|---|
 | turns retained per id | 5 | `MAX_RETAIN_INTERLEAVE`, per-request `max_retain_interleave` |
 | seconds of speech | 20 | `INTERLEAVE_MAX_S` |
-| idle expiry | — | `INTERLEAVE_TTL_S` |
+| idle expiry | 600 s | `INTERLEAVE_TTL_S` |
 | storage | `/dev/shm` | shared by every uvicorn worker on the host |
 
 A voice switch on the same id starts cold.
@@ -735,16 +741,16 @@ Design and configuration: [INTERLEAVE.md](INTERLEAVE.md).
 
 > **This requires an LM trained on interleaved documents, and no open-source TTS model is.**
 > The packing (`pack_stage1.py --interleave_style full`) is an in-house recipe and the
-> checkpoints that have it are private model repos — so the benefit comes from the
-> *model*, not from the prompt shape. Measured on a private interleave-trained checkpoint, it cuts
-> the jump in pitch register and loudness between consecutive chunks by ~25% at no latency cost
-> ([bench/INTERLEAVE_AB.md](bench/INTERLEAVE_AB.md)); on a model packed *without* it the same
-> prompt bought nothing and made the LM cut 7.5% of chunks short. **Serving any other model —
-> an open-source TTS LM, or an older in-house one — set `INTERLEAVE_STORE=off`**, and check
-> what your vLLM actually loads before relying on the feature.
+> checkpoints that have it are private model repos. The benefit comes from the *model*, not
+> from the prompt shape. Measured on a private interleave-trained checkpoint, it cuts the jump
+> in pitch register and loudness between consecutive chunks by ~25% at no latency cost
+> ([bench/INTERLEAVE_AB.md](bench/INTERLEAVE_AB.md)). On a model packed *without* it the same
+> prompt bought nothing and made the LM cut 7.5% of chunks short. **Serving any other model,
+> an open-source TTS LM or an older in-house one, set `INTERLEAVE_STORE=off`.** Check what your
+> vLLM actually loads before relying on the feature.
 
 **Measured effect** (80 paragraphs, 40 English + 40 Malay, ~6.5 chunks each; the same text rendered
-one-shot, with an id, and cold — [bench/INTERLEAVE_AB.md](bench/INTERLEAVE_AB.md)):
+one-shot, with an id, and cold. Details in [bench/INTERLEAVE_AB.md](bench/INTERLEAVE_AB.md)):
 
 | Between consecutive chunks | one request for the whole reply | **with `interleave_id`** | cold (today) |
 |---|---|---|---|
@@ -753,11 +759,11 @@ one-shot, with an id, and cold — [bench/INTERLEAVE_AB.md](bench/INTERLEAVE_AB.
 | Signed pitch step at the join, st | +0.43 | **−0.35** | +0.53 ← restarts |
 | Pitch declination over the reply, st/s | −0.161 | **−0.137** | −0.082 |
 | CER % | 0.50 | 0.44 | 0.58 |
-| Median prompt tokens / LM latency s | — | 418 / **0.423** | 19 / 0.427 |
+| Median prompt tokens / LM latency s | n/a | 418 / **0.423** | 19 / 0.427 |
 
 Paired over 438 matched chunk pairs: **−0.41 st [−0.56, −0.26]** of register step and
-**−0.45 dB [−0.59, −0.32]** of loudness step against cold chunking — about a quarter less jump —
-for +399 tokens of prefill that cost no measurable latency. It costs ~30 ms more silence at each
+**−0.45 dB [−0.59, −0.32]** of loudness step against cold chunking. About a quarter less jump,
+for +399 tokens of prefill that cost no measurable latency. It adds ~30 ms more silence at each
 join (+1.7% duration).
 
 ```bash
@@ -774,8 +780,8 @@ curl -s localhost:9091/v1/audio/interleave/room-42            # retained turns
 curl -s -X DELETE localhost:9091/v1/audio/interleave/room-42  # forget now (else TTL)
 ```
 
-For LiveKit, the `openai.TTS` plugin cannot add body fields but accepts a pre-built client,
-so pass the id as a default header — one id per room:
+For LiveKit, the `openai.TTS` plugin cannot add body fields but accepts a pre-built client.
+Pass the id as a default header, one per room:
 
 ```python
 tts_client = openai_sdk.AsyncClient(api_key="unused", base_url=TTS_BASE_URL,
@@ -789,7 +795,7 @@ session = AgentSession(tts=openai.TTS(model=..., voice=..., client=tts_client,
 Inspect (`GET`: retained turns, their text and token counts, the caps and TTL) or forget
 (`DELETE`) one interleave id. Both return `400` when `INTERLEAVE_STORE=off`.
 
-### `POST /v1/audio/vc` — Voice Conversion
+### `POST /v1/audio/vc`: Voice Conversion
 
 Accepts multipart form data. Clones the reference voice and generates speech for new text.
 
@@ -832,15 +838,15 @@ curl -X POST 'http://localhost:9091/v1/audio/vc' \
 
 ## Gradio Demo
 
-`gradio_app.py` is a simple UI for poking at a running API instance (local or remote) without curl —
-tabs for text-to-speech, text normalization, and voice conversion.
+`gradio_app.py` is a UI for poking at a running API instance, local or remote, without curl.
+It has tabs for text-to-speech, text normalization and voice conversion.
 
 ```bash
 pip install gradio requests
 TTS_API_BASE_URL=http://localhost:9091 python gradio_app.py   # defaults to localhost:9091
 ```
 
-Open the printed local URL, set the API base URL if needed, and click **Check connection** to list
+Open the printed local URL, set the API base URL if needed, then click **Check connection** to list
 available speakers.
 
 ## Tests
@@ -861,7 +867,7 @@ uv run --with pytest -- pytest tests/test_lm_inprocess.py -q      # no GPU, no v
 Full list and what each file covers: **[tests/README.md](tests/README.md)**.
 
 
-## Benchmark — H100 SXM vs H200 SXM
+## Benchmark: H100 SXM vs H200 SXM
 
 One GPU, both services colocated. RunPod secure cloud, June 2026.
 
@@ -902,19 +908,20 @@ emits audio faster than real time.
 
 **Takeaways**
 
-- **H200 wins at every concurrency**, with the largest margins under load — **1.86× at C=16** and **1.41×
-  at C=50** — where the bandwidth-bound NeuCodec decode dominates. The H200's higher HBM bandwidth (≈4.8 TB/s
-  vs ≈3.35 TB/s) and 141 GB capacity give the colocated vLLM + 4 codec workers more headroom.
+- **H200 wins at every concurrency.** The largest margins are under load, **1.86× at C=16** and **1.41×
+  at C=50**, where the bandwidth-bound NeuCodec decode dominates. The H200's higher HBM bandwidth
+  (≈4.8 TB/s vs ≈3.35 TB/s) and 141 GB capacity give the colocated vLLM + 4 codec workers more headroom.
 - **Both run faster than real time at all concurrencies** (RTF p50 < 1). Single-request latency is ~0.6 s
   (H100) / ~0.5 s (H200) for ~4.5 s of audio (RTF ≈ 0.15 / 0.12).
-- **H200 is also far more stable.** Across the 5 runs the H200 throughput was tight (C=16: 80.2–83.5; C=50:
-  141–145), while the H100 showed large run-to-run swings at high concurrency (C=16: 32–60; C=50: 95–116) —
-  transient MPS/codec contention stalls that the H200's extra bandwidth and memory absorb. The table reports
-  medians; raw per-run JSON is in [`bench/results/runpod_h100_h200.json`](bench/results/runpod_h100_h200.json).
+- **H200 is also far more stable.** Across the 5 runs H200 throughput was tight (C=16: 80.2–83.5; C=50:
+  141–145). The H100 swung hard at high concurrency (C=16: 32–60; C=50: 95–116), from transient MPS/codec
+  contention stalls that the H200's extra bandwidth and memory absorb. The table reports medians. Raw
+  per-run JSON is in [`bench/results/runpod_h100_h200.json`](bench/results/runpod_h100_h200.json).
 
-The full optimization writeup (baseline → CUDA graphs → multi-worker + MPS, and a documented negative result
-on source-level micro-optimizations) is in [`bench/OPTIMIZATION.md`](bench/OPTIMIZATION.md). To reproduce, see
-the ready scripts in [`bench/deploy/`](bench/deploy) (`setup_pod.sh`, `start_vllm.sh`, `start_app.sh`).
+The full optimization writeup is in [`bench/OPTIMIZATION.md`](bench/OPTIMIZATION.md): baseline → CUDA
+graphs → multi-worker + MPS, plus a documented negative result on source-level micro-optimizations. To
+reproduce, use the scripts in [`bench/deploy/`](bench/deploy) (`setup_pod.sh`, `start_vllm.sh`,
+`start_app.sh`).
 
 ## LiveKit agent stress test & loudness consistency
 
@@ -927,32 +934,32 @@ the ready scripts in [`bench/deploy/`](bench/deploy) (`setup_pod.sh`, `start_vll
 | 8 | 0.256 | 0.120 | +136 ms | 0 |
 | 16 | 0.258 | 0.147 | +111 ms | 0 |
 
-The rig also quantified utterance-to-utterance loudness variance — the LM's sampled speech tokens
-carry loudness, so identical text at temperature 0.6–0.7 spans **3–10 dB** active-RMS (and different
-voices sit ~5 dB apart in natural level), and roughly half of hot utterances clip at full scale.
-`STREAM_NORMALIZE=true` (default; per-request `stream_normalize`) collapses the spread to **< 2 dB**
-with no added latency: one static gain per utterance (locked after the first ~1 s of voiced audio —
-no mid-utterance drift), boost capped by running-peak headroom, and a tanh soft-knee limiter instead
-of a hard clip. It holds through the whole transport — per-utterance sd stayed **0.92–1.26 dB** at
-every concurrency measured.
+The rig also quantified utterance-to-utterance loudness variance. The LM's sampled speech tokens
+carry loudness, so identical text at temperature 0.6–0.7 spans **3–10 dB** active-RMS, different
+voices sit ~5 dB apart in natural level, and roughly half of hot utterances clip at full scale.
+`STREAM_NORMALIZE=true` (default, per-request `stream_normalize`) collapses the spread to **< 2 dB**
+with no added latency. It applies one static gain per utterance, locked after the first ~1 s of voiced
+audio so it cannot drift mid-utterance, caps the boost by running-peak headroom, and uses a tanh
+soft-knee limiter instead of a hard clip. It holds through the whole transport: per-utterance sd stayed
+**0.92–1.26 dB** at every concurrency measured.
 
-Streaming decode quality itself is near one-shot: the stitcher decodes **growing windows** (first =
-`playback_speed`×50 tokens, ×`STREAM_CHUNK_GROWTH` per step up to `STREAM_MAX_CHUNK_S`) with
-`STREAM_PAST_CONTEXT_S` of already-generated past tokens included in every window and sliced off
-after decode (free, unlike future context). Measured streamed-vs-one-shot envelope gap on identical
-tokens: **0.03–0.04 dB median** (worst 0.3–0.5 dB, first window only) vs 0.25–0.55 dB median with
-the old fixed 1.5 s windows. For offline generation (`stream: false`), `"playback_speed": 10`
+Streaming decode quality is near one-shot. The stitcher decodes **growing windows**: the first is
+`playback_speed`×50 tokens, then ×`STREAM_CHUNK_GROWTH` per step up to `STREAM_MAX_CHUNK_S`. Every
+window includes `STREAM_PAST_CONTEXT_S` of already-generated past tokens, sliced off after decode,
+which is free unlike future context. Measured streamed-vs-one-shot envelope gap on identical tokens:
+**0.03–0.04 dB median**, worst 0.3–0.5 dB and only on the first window, against 0.25–0.55 dB median
+with the old fixed 1.5 s windows. For offline generation (`stream: false`), `"playback_speed": 10`
 decodes the whole utterance in one window.
 
-## Huawei Ascend 910B3 NPU — support & the precision quality gap
+## Huawei Ascend 910B3 NPU: support & the precision quality gap
 
 The full stack runs on Huawei Ascend 910B3 (CANN 8.5.2): the **vLLM LM via
 [`vllm-ascend`](https://github.com/vllm-project/vllm-ascend) on NPU 0**, and the **NeuCodec decoder via
-`torch_npu` on NPU 1**. The app is unchanged apart from device selection — set `DEVICE=npu` and it uses a
-`torch.npu` stream shim, skipping CUDA graphs/streams automatically (see [app/main.py](app/main.py)). Pin
-each stage to a chip with `ASCEND_RT_VISIBLE_DEVICES` (0 for vLLM, 1 for the codec).
+`torch_npu` on NPU 1**. The app is unchanged apart from device selection. Set `DEVICE=npu` and it uses a
+`torch.npu` stream shim and skips CUDA graphs and streams automatically (see [app/main.py](app/main.py)).
+Pin each stage to a chip with `ASCEND_RT_VISIBLE_DEVICES`: 0 for vLLM, 1 for the codec.
 
-**Working install** (Python **3.11** — vLLM 0.11 uses py3.10 syntax that breaks on 3.9):
+**Working install** (Python **3.11**, because vLLM 0.11 uses py3.10 syntax that breaks on 3.9):
 
 ```bash
 # codec app venv (py3.9 ok): torch 2.8.0 + torch_npu 2.8.0.post5  → see requirements-npu.txt
@@ -963,47 +970,47 @@ uv pip install vllm-ascend==0.11.0 "setuptools<81"   # torch 2.7.1 + torch-npu 2
 source /usr/local/Ascend/ascend-toolkit/set_env.sh && source /usr/local/Ascend/nnal/atb/set_env.sh
 ```
 
-The NeuCodec **decode runs cleanly on the NPU** (bit-identical to CUDA — the vendored RoPE in
+The NeuCodec **decode runs cleanly on the NPU**, bit-identical to CUDA. The vendored RoPE in
 [`app/neucodec/_rope.py`](app/neucodec/_rope.py) removed the torchtune/torchao dependency, which is what
-made py3.9 + NPU viable). **Encode** currently must run on CPU (the encoder's alias-free resample mis-shapes
-on NPU); this only affects VC/token-extraction, not TTS decode.
+made py3.9 + NPU viable. **Encode** must still run on CPU, because the encoder's alias-free resample
+mis-shapes on NPU. That affects VC and token extraction only, not TTS decode.
 
-### 910B3 vs H100 — measured (single-stream, 16-sentence eval set, bf16, temp 0.6)
+### 910B3 vs H100: measured (single-stream, 16-sentence eval set, bf16, temp 0.6)
 
 | Metric | H100 SXM | Ascend 910B3 | Notes |
 |---|---|---|---|
 | LM rate (vLLM) | ~380 tok/s | ~81 tok/s | **~4.8× slower** |
 | End-to-end RTF | ~0.13 | ~0.68 | LM-bound; codec decode is fast on both |
-| Intelligibility (Whisper large-v3 CER) | 2.2% | 3.4% | comparable — content not garbled |
-| **Naturalness (UTMOSv2 MOS)** | **3.2** | **2.6** | **−0.6 MOS — audibly less natural** |
+| Intelligibility (Whisper large-v3 CER) | 2.2% | 3.4% | comparable, content not garbled |
+| **Naturalness (UTMOSv2 MOS)** | **3.2** | **2.6** | **−0.6 MOS, audibly less natural** |
 
-> ⚠️ **Open issue — the bf16 quality gap.** With identical decode and identical sampling settings, the
+> ⚠️ **Open issue: the bf16 quality gap.** With identical decode and identical sampling settings, the
 > Ascend LM produces **measurably less-natural speech tokens** (−0.6 MOS) than the H100, despite comparable
-> intelligibility. The gap is in the `vllm-ascend` LM path, i.e. the 910B3's bf16 compute kernels — **not**
+> intelligibility. The gap is in the `vllm-ascend` LM path, meaning the 910B3's bf16 compute kernels, **not**
 > the codec. Mitigations tested and their MOS:
 >
 > | Config | MOS | Result |
 > |---|---|---|
 > | Ascend bf16 + ACL graphs (default) | 2.60 | baseline |
-> | Ascend bf16 + `--enforce-eager` | 2.45 | **no help** — ACL graph capture is not the cause |
-> | Ascend `--dtype float16` + eager | 1.73 | **much worse** — keep bf16 |
+> | Ascend bf16 + `--enforce-eager` | 2.45 | **no help**: ACL graph capture is not the cause |
+> | Ascend `--dtype float16` + eager | 1.73 | **much worse**, keep bf16 |
 > | H100 bf16 | 3.21 | target |
 >
-> Neither disabling graph capture nor switching precision closes it, so **for this TTS model the 910B3 is
+> Neither disabling graph capture nor switching precision closes it. **For this TTS model the 910B3 is
 > both slower and less natural than H100 at bf16.** MOS measured with
 > [faster-UTMOSv2](https://github.com/Scicom-AI-Enterprise-Organization/faster-UTMOSv2).
 >
-> **Root cause — isolated (not fixable via config):** the gap is entirely in the **LM tokens the
+> **Root cause, isolated, and not fixable by config.** The gap is entirely in the **LM tokens the
 > `vllm-ascend` bf16 forward produces**, not the codec:
-> - **Codec decode is bit-identical on NPU vs CPU** — decoding the *same* tokens on both gives
+> - **Codec decode is bit-identical on NPU vs CPU.** Decoding the *same* tokens on both gives
 >   `MAE = 0.00000` on all 16 clips. Rules out the decoder.
 > - **Sampling is already fp32** (AscendSampler softmax `dtype=float32`) and matmul HF32 is **off**
->   (`torch.npu.matmul.allow_hf32 == False`) — both full precision. Rules out sampler + matmul.
-> - **fp32 is impossible on this stack**: `--dtype float32` crashes the engine — the Ascend paged-KV
->   attention op (`ReshapeCacheOperation`, `ERR00100`) only supports bf16/fp16. So the fused
+>   (`torch.npu.matmul.allow_hf32 == False`). Both are full precision. Rules out sampler and matmul.
+> - **fp32 is impossible on this stack.** `--dtype float32` crashes the engine: the Ascend paged-KV
+>   attention op (`ReshapeCacheOperation`, `ERR00100`) supports only bf16/fp16. The fused
 >   **attention kernel is locked to bf16**, and its internal accumulation is what diverges from the
 >   H100's bf16 attention, shifting sampled tokens toward less-natural speech.
 >
-> There is **no serving-flag fix** today. Real fixes require a higher-precision (fp32-accumulate)
-> attention kernel from Huawei/`vllm-ascend`, a different attention backend, or fine-tuning the model to
-> the 910B3 bf16 numerics. Tracked for upstream.
+> There is **no serving-flag fix** today. A real fix needs a higher-precision (fp32-accumulate)
+> attention kernel from Huawei or `vllm-ascend`, a different attention backend, or fine-tuning the model
+> to the 910B3 bf16 numerics. Tracked for upstream.

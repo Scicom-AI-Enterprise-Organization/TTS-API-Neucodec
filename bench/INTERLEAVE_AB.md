@@ -1,20 +1,20 @@
 # Interleaved multi-turn generation: does chunk N+1 sound like it continues chunk N?
 
 Measured **2026-09-07** on **H20**, against a **private interleave-trained
-checkpoint**
+checkpoint**.
 
 ![interleave A/B](../docs/img/interleave_ab.png)
- — an in-house 1.7B TTS LM packed with interleaved documents, deliberately not named
+The checkpoint is an in-house 1.7B TTS LM packed with interleaved documents, deliberately not named
 here because this document is public. It is the first checkpoint actually trained that way, and so
 the first one on which `interleave_id` ([`INTERLEAVE.md`](../INTERLEAVE.md),
 [`app/interleave.py`](../app/interleave.py)) can be judged on its merits instead of on a model that
 never saw the shape.
 
-> **The interleave fine-tune exists only on our own private checkpoints — no open-source TTS LM has
+> **The interleave fine-tune exists only on our own private checkpoints. No open-source TTS LM has
 > it.** The interleaved-document packing (`pack_stage1.py --interleave_style full`) is an in-house
 > training recipe, and the checkpoint measured here is a private model repo (the box's `HF_TOKEN` is
 > what can read it; a laptop token gets 401). So **everything in this report is a property of that
-> training, not of the prompt shape on its own** — see §7.2. Dropping an open-source TTS LM behind
+> training, not of the prompt shape on its own** (see §7.2). Dropping an open-source TTS LM behind
 > this API and switching `interleave_id` on buys nothing, and on the evidence of the earlier A/B it
 > costs a 7.5% collapse rate.
 
@@ -27,7 +27,7 @@ Deployed as a **separate** vLLM (GPU 6, port 9086) with the scoring job on GPU 7
 
 **Interleaving works, and it works on exactly the thing it was built for.** Over 438 matched
 consecutive-chunk pairs it cuts the prosodic discontinuity between chunk N and chunk N+1 by about a
-quarter — **−0.41 semitones of register step (−25%)** and **−0.45 dB of level step (−28%)**, both
+quarter: **−0.41 semitones of register step (−25%)** and **−0.45 dB of level step (−28%)**, both
 with a 95% CI well clear of zero. Against the one-shot rendering as the yardstick, cold chunking is
 **significantly worse** on the loudness step between consecutive chunks (+0.26 dB [+0.12, +0.41])
 while interleaving is **significantly better than one-shot** on both (−0.36 st, −0.19 dB). It also
@@ -59,7 +59,7 @@ register, a fresh pace, a fresh energy, sampled independently at temperature 0.6
 on its own and the transition between them sounds awkward.
 
 Interleaved prompting hands the LM the previous chunks' text **and the speech tokens it produced for
-them** — the document shape the model was packed with (`pack_stage1.py --interleave_style full`):
+them**. That is the document shape the model was packed with (`pack_stage1.py --interleave_style full`):
 
 ```
 <|im_start|>TM_English_Normal: Selamat pagi semua orang,<|speech_start|><|s_2551|>…<|s_53404|><|im_end|>
@@ -76,9 +76,9 @@ Three conditions over the **same** 80 paragraphs with the **same** chunking:
 
 | | Condition | Prompt per request |
 |---|---|---|
-| **A** | `single` | the whole paragraph in one request — the reference: what the model does when it gets everything |
-| **B** | `interleave` | one request per chunk, each carrying the previous chunks' text + speech tokens (`build_prompt` / `fit_interleave`, retain 5 turns / 20 s — the API's own defaults) |
-| **C** | `cold` | one request per chunk, each on its own — today's behaviour |
+| **A** | `single` | the whole paragraph in one request. The reference: what the model does when it gets everything |
+| **B** | `interleave` | one request per chunk, each carrying the previous chunks' text + speech tokens (`build_prompt` / `fit_interleave`, retain 5 turns / 20 s, the API's own defaults) |
+| **C** | `cold` | one request per chunk, each on its own (today's behaviour) |
 
 B and C see byte-identical chunk text, so **anything that differs between them is the prompt shape
 alone**. Both are compared against A, which needs no chunking at all.
@@ -87,7 +87,7 @@ alone**. Both are compared against A, which needs no chunking at all.
 `bench/results/interleave_ab/corpus.json`): 40 English + 40 Malaysian-Malay paragraphs written by
 the `OPENAI_*` LLM, 37–55 words each, on everyday assistant topics, with real commas and full stops
 so they chunk where a `StreamAdapter` would chunk them. Digits and abbreviations are deliberately
-excluded — the text goes to the LM verbatim (this A/B bypasses the normalizer), so anything
+excluded. The text goes to the LM verbatim (this A/B bypasses the normalizer), so anything
 unspeakable would be read as garbage in all three conditions and only add noise. `chunk_text()` is a
 copy of what the `StreamAdapter` does: split at sentence ends, then at commas, merging pieces until
 each is ≥20 chars (its `min_sentence_len` default). Result: **6.5 chunks per paragraph**, 518
@@ -121,7 +121,7 @@ milliseconds is needed, so all three conditions are on equal footing, and a ±10
 inferred boundaries barely moves a median taken over a ~2.3 s chunk. **This is the table to trust.**
 
 **A seam probe (the sharp but fragile one).** At each boundary, locate the silent run straddling it
-and read 250 ms of speech outward from each edge of that silence — so what is compared is the speech
+and read 250 ms of speech outward from each edge of that silence. So what is compared is the speech
 *before* the pause against the speech *after* it, with the same geometry whether the pause is 20 ms
 or 300 ms. Reported both as |step| (how far the prosody moved) and **signed** (which way), because
 the sign is the diagnostic: a chunk rendered as if it stood alone ends on a terminal fall and the
@@ -131,13 +131,13 @@ points (0.5 s spaced, kept 0.6 s clear of any boundary) to give the within-utter
 that same clip.
 
 A has no seams, so it is given **virtual** ones: the boundary is estimated by character proportion
-(speech rate inside one utterance is uniform enough — the same assumption `trim_turn_tail` makes)
+(speech rate inside one utterance is uniform enough; `trim_turn_tail` makes the same assumption)
 and snapped to the nearest silent run of ≥40 ms within ±0.5 s, since a chunk boundary is a
 punctuation boundary and those carry a pause. The 40 ms floor matters: without it the snap lands on
 plosive closures and puts the probe inside a word.
 
 **A's seam-probe row is not a trustworthy reference.** Changing the snapping rule moved A's mean
-signed step by 0.4 st — the same order as the B↔C difference being measured. So the seam probe is
+signed step by 0.4 st, the same order as the B↔C difference being measured. So the seam probe is
 used for **B vs C** (both exact, paired 1:1 since they chunk the same text at the same places) and
 the whole-chunk metrics are used whenever A is in the comparison.
 
@@ -147,7 +147,7 @@ common active RMS.
 
 ## 4. Results
 
-### 4a. Chunk N+1 against chunk N — whole-chunk medians, 438 pairs
+### 4a. Chunk N+1 against chunk N: whole-chunk medians, 438 pairs
 
 | Condition | signed register step (st) | **\|register step\| (st)** | signed level step (dB) | **\|level step\| (dB)** | steps up >1 st |
 |---|---|---|---|---|---|
@@ -178,8 +178,8 @@ This is the headline, and it reads cleanly in three parts:
   expressive movement between its phrases, while B pins each new chunk to the register it just left.
 
 What changes is the **size** of the jump, not its direction: every paired *signed* difference is
-non-significant. The absolute signed values are all negative (−0.37 / −0.27 / −0.18 st) — that is
-declination — and their ordering A < B < C tells the same story from another angle: the one-shot
+non-significant. The absolute signed values are all negative (−0.37 / −0.27 / −0.18 st), which is
+declination. Their ordering A < B < C tells the same story from another angle: the one-shot
 rendering descends most across its chunks, cold chunking descends least, interleaving lands in
 between and nearer A.
 
@@ -200,12 +200,12 @@ where §4a's whole-chunk medians average it away. Read together the two are cohe
 contradictory:
 
 - **The upward register reset is real and interleaving removes it.** Cold joins step **up** +0.53 st
-  on average and 56% of them step up by more than a semitone. Interleaved joins step **down** −0.35 st
-  — the same direction the interior of the utterance drifts (−0.67 to −0.91 st). Paired difference
+  on average and 56% of them step up by more than a semitone. Interleaved joins step **down** −0.35 st,
+  the same direction the interior of the utterance drifts (−0.67 to −0.91 st). Paired difference
   −0.92 st, CI clear of zero. This is the local, boundary-adjacent half of the effect; §4a is the
   whole-chunk half.
 - **But B's boundaries are locally *more* dynamic, not less** (|f0 step| 5.25 vs 4.74 st, |level
-  step| 7.56 vs 4.95 dB). Cold chunks are flatter at their seams than *natural speech is* — C's
+  step| 7.56 vs 4.95 dB). Cold chunks are flatter at their seams than *natural speech is*: C's
   level excess over its own interior is 2.12 dB against A's 3.45 dB. That is the tell of uniform
   blandness: every cold chunk is rendered in the same canonical sentence contour, so consecutive
   ones meet smoothly by both being unremarkable. Interleaving produces genuine intonation across the
@@ -227,16 +227,16 @@ contradictory:
   interleaving recovers ~70% (−0.137). Paired: C−A **+0.065 [+0.033, +0.080]** (significantly flatter
   than the reference), B−C **−0.062 [−0.083, −0.011]**, B wins 64% of paragraphs. B−A is not
   significant.
-- **Register.** C sits **7.6 Hz (≈0.7 st) higher** than the one-shot rendering — each chunk opening
+- **Register.** C sits **7.6 Hz (≈0.7 st) higher** than the one-shot rendering, because each chunk opens
   in its own fresh, slightly raised register. B lands within 0.15 st of A.
 - **Chunk-to-chunk loudness consistency** (level SD across a paragraph's chunks): B−C
-  **−0.207 dB [−0.447, −0.065]**, B wins **71%** of paragraphs. C−A is +0.292 [−0.012, 0.348] —
+  **−0.207 dB [−0.447, −0.065]**, B wins **71%** of paragraphs. C−A is +0.292 [−0.012, 0.348]:
   marginal at the paragraph level, but the same effect measured per chunk pair in §4a is clear
   (+0.26 dB [+0.12, +0.41]). Note this is all *before* the API's own `STREAM_NORMALIZE`, which
   applies one gain per request and would partly mask it.
 - **Register wander across the paragraph**: B 3.00 st vs C 3.62 st, paired −0.575 [−0.950, −0.200],
   B wins 65%.
-- **Duration**: both chunked conditions run longer than one-shot — B +1.7%, C +2.8% — and are
+- **Duration**: both chunked conditions run longer than one-shot (B +1.7%, C +2.8%) and are
   indistinguishable from each other (paired ratio +0.005 [−0.016, +0.015]).
 
 ### 4d. Intelligibility, naturalness, and what it costs
@@ -249,7 +249,7 @@ contradictory:
 
 - **No collapses at all.** `INTERLEAVE.md` §2b records 3/40 chunks where the pre-interleave model,
   handed history, decided the utterance was already over and emitted end-of-speech after a handful
-  of tokens. On this checkpoint: **0 of 518**. `INTERLEAVE_FALLBACK` never fires — it is now
+  of tokens. On this checkpoint: **0 of 518**. `INTERLEAVE_FALLBACK` never fires. It is now
   insurance, not a working part.
 - **Prefill is free.** History costs a median of **+399 prompt tokens** (418 vs 19) and the LM
   latency is unchanged: 0.423 s vs 0.427 s. Exactly what `INTERLEAVE.md` predicted, now measured.
@@ -260,25 +260,25 @@ contradictory:
 - **MOS says nothing, and cannot.** B−C level-matched is −0.048 [−0.216, +0.033]: not significant.
   B−A is −0.101 [−0.161, −0.020], a real but tiny deficit against the one-shot rendering. Treat all
   of this as near-uninformative here: **UTMOSv2 scores random crops of a single clip, so it is
-  structurally blind to continuity across a boundary** — the one thing this experiment is about. It
+  structurally blind to continuity across a boundary**, the one thing this experiment is about. It
   also mildly prefers louder audio, which is why the level-matched column exists.
 
 ### 4e. Per language
 
 | | A single | B interleave | C cold |
 |---|---|---|---|
-| en — chunk level SD dB | 0.955 | **0.973** | 1.331 |
-| ms — chunk level SD dB | 1.066 | **0.954** | 1.136 |
-| en — seam f0 excess st | 1.550 | 3.149 | 2.924 |
-| ms — seam f0 excess st | 2.827 | 3.048 | 2.238 |
-| en — silence at join, excess s | 0.040 | 0.080 | 0.030 |
-| ms — silence at join, excess s | 0.033 | 0.058 | 0.035 |
-| en — CER % | 0.25 | 0.00 | 0.00 |
-| ms — CER % | 0.68 | 0.79 | 0.70 |
+| en: chunk level SD dB | 0.955 | **0.973** | 1.331 |
+| ms: chunk level SD dB | 1.066 | **0.954** | 1.136 |
+| en: seam f0 excess st | 1.550 | 3.149 | 2.924 |
+| ms: seam f0 excess st | 2.827 | 3.048 | 2.238 |
+| en: silence at join, excess s | 0.040 | 0.080 | 0.030 |
+| ms: silence at join, excess s | 0.033 | 0.058 | 0.035 |
+| en: CER % | 0.25 | 0.00 | 0.00 |
+| ms: CER % | 0.68 | 0.79 | 0.70 |
 
 The loudness-consistency win holds in both languages and is larger in Malay (0.95 vs 1.14 dB).
-The seam-probe numbers split by language the same way they split overall — English shows the bigger
-|step| increase under B, Malay the smaller — and with A's row unreliable at seam level there is
+The seam-probe numbers split by language the same way they split overall: English shows the bigger
+|step| increase under B, Malay the smaller. With A's row unreliable at seam level, there is
 nothing here that changes the verdict either way.
 
 ## 5. Caveats
@@ -289,13 +289,13 @@ nothing here that changes the verdict either way.
   pooled per join with a bootstrap CI over joins.
 - **The serving path is excluded on purpose.** No normalizer, no crossfade stitcher, no
   `STREAM_NORMALIZE`, no `speaking_rate`. In production `STREAM_NORMALIZE` applies one loudness gain
-  per request, which partly masks the chunk-to-chunk level spread measured in §4c — so C's real-world
+  per request, which partly masks the chunk-to-chunk level spread measured in §4c. So C's real-world
   loudness inconsistency is smaller than 1.20 dB, and carrying the locked gain through the interleave
   store (the follow-up `INTERLEAVE.md` §9 already names) is the way to close the rest.
 - **The metric is not the ear.** A 0.4 st register step and a 0.45 dB level step are small in
   absolute terms; whether they are the difference between "awkward" and "continuous" is a listening
   question. Level-matched samples for four paragraphs × three conditions are in
-  `audio/interleave_ab/` (gitignored) — `en000` and `ms005` are among the largest B-over-C
+  `audio/interleave_ab/` (gitignored). `en000` and `ms005` are among the largest B-over-C
   improvements, `ms012` is the median case, and `en037` is one of the few where C came out tighter.
 
 ## 6. Reproducing
@@ -326,7 +326,7 @@ tokens, prompt size, latency, finish reason), `acoustics.jsonl`, `quality.jsonl`
 
 1. **Ship it.** The feature is already on `main` and defaults on with `MAX_RETAIN_INTERLEAVE=5`;
    nothing in these numbers argues against those defaults, and the prefill is free.
-2. **Deploy an interleave-trained checkpoint if the feature is wanted — there is no open-source
+2. **Deploy an interleave-trained checkpoint if the feature is wanted. There is no open-source
    substitute.** The effect is a property of the interleaved-document *training*, which only our own
    private checkpoints have: the earlier A/B on a model packed without it
    ([`INTERLEAVE.md`](../INTERLEAVE.md) §9, branch `feat/speech-context`) found no measurable
@@ -337,9 +337,9 @@ tokens, prompt size, latency, finish reason), `acoustics.jsonl`, `quality.jsonl`
    the right setting.
 3. **`INTERLEAVE_FALLBACK` can be left on but no longer earns its keep** (0/518). Keep it as
    insurance for other checkpoints; it costs nothing when it does not fire.
-4. **Next**: look at the extra 30 ms of join silence — trimming trailing-silence tokens from
+4. **Next**: look at the extra 30 ms of join silence. Trimming trailing-silence tokens from
    stored turns is the obvious lever, and `INTERLEAVE.md` §9 already lists it.
-   ~~carry the locked `STREAM_NORMALIZE` gain through the turn store~~ — **tried 2026-09-18 and it
+   ~~carry the locked `STREAM_NORMALIZE` gain through the turn store~~: **tried 2026-09-18 and it
    is wrong**: sharing the gain across a reply's chunks raised chunk-to-chunk level sd from
    1.19 dB to 1.45 dB and the share of replies with a >3 dB step from 29% to 52%, because a shared
    gain preserves each chunk's deviation instead of correcting it. Per-chunk normalisation is the
