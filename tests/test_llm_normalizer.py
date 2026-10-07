@@ -61,18 +61,19 @@ class TestBuildMessages:
         blob = json.dumps(build_messages('x'), ensure_ascii=False)
         assert '令吉' in blob  # ensure_ascii=False keeps CJK readable for the model
 
-    def test_prompt_appended_to_system(self):
+    def test_prompt_in_system_and_user_turn(self):
         msgs = build_messages('RM50', prompt='normalize this in Malay')
         assert msgs[0]['content'] == (
             f'{SYSTEM_PROMPT}\n\n{CALLER_PROMPT_HEADER}\nnormalize this in Malay'
         )
-        # only the system message changes: few-shots and the user turn are as without it
-        assert msgs[1:] == build_messages('RM50')[1:]
-        assert msgs[-1] == {'role': 'user', 'content': 'RM50'}
+        assert msgs[-1] == {'role': 'user', 'content': '[normalize this in Malay]\nRM50'}
+        # the few-shots are untouched
+        assert msgs[1:-1] == build_messages('RM50')[1:-1]
 
     def test_prompt_is_stripped(self):
         msgs = build_messages('x', prompt='  read numbers in English \n')
         assert msgs[0]['content'].endswith(f'{CALLER_PROMPT_HEADER}\nread numbers in English')
+        assert msgs[-1]['content'] == '[read numbers in English]\nx'
 
     @pytest.mark.parametrize('prompt', [None, '', '   ', '\n'])
     def test_blank_prompt_is_no_prompt(self, prompt):
@@ -179,12 +180,12 @@ class TestLLMNormalize:
         assert body['messages'][-1] == {'role': 'user', 'content': 'RM50'}
         assert body['messages'][0] == {'role': 'system', 'content': SYSTEM_PROMPT}
 
-    def test_prompt_sent_in_system_message(self, fake_server):
+    def test_prompt_sent(self, fake_server):
         run(llm_normalize('RM50', base_url=fake_server, api_key='k', model='m',
                           prompt='normalize this in English'))
         msgs = FakeOpenAI.requests[0]['body']['messages']
         assert msgs[0]['content'].endswith(f'{CALLER_PROMPT_HEADER}\nnormalize this in English')
-        assert msgs[-1] == {'role': 'user', 'content': 'RM50'}
+        assert msgs[-1] == {'role': 'user', 'content': '[normalize this in English]\nRM50'}
 
     def test_prompt_kept_on_retry_without_response_format(self, fake_server):
         FakeOpenAI.reject_response_format = True
@@ -331,6 +332,31 @@ class TestLive:
     def test_prompt_sets_language_english(self):
         out = run(llm_normalize('RM50', prompt='normalize this in English'))
         assert 'fifty ringgit' in out.lower()
+
+    # The prompt carries what a number *is*, not only its language: with "normalize it in
+    # english" alone, 50450 came back "fifty thousand four hundred fifty".
+    def test_prompt_postcode_chinese(self):
+        out = run(llm_normalize('08000', prompt='this is a postcode, normalize it in chinese'))
+        assert out.rstrip('.。') == '零八零零零'
+
+    def test_prompt_postcode_english_digit_by_digit(self):
+        out = run(llm_normalize('50450', prompt='this is a postcode, normalize it in english'))
+        assert out.lower().rstrip('.') == 'five zero four five zero'
+
+    # Spelling digits one by one in a language other than the sentence's. With the prompt in
+    # the system prompt only, both of these were ignored ("一千五百", Malay digits).
+    def test_prompt_spell_one_by_one(self):
+        out = run(llm_normalize('1500', prompt='please spell one by one in en'))
+        assert out.lower().rstrip('.') == 'one five zero zero'
+
+    def test_prompt_language_overrides_sentence_language(self):
+        out = run(llm_normalize('nombor akaun saya 1234234', prompt='please spell one by one in zh'))
+        assert out.rstrip('.。') == 'nombor akaun saya 一二三四二三四'
+
+    def test_prompt_does_not_leak(self):
+        out = run(llm_normalize('Order 12 sudah sampai', prompt='read the numbers in English'))
+        assert '[' not in out and 'read the numbers' not in out.lower()
+        assert 'twelve' in out.lower()
 
     def test_prompt_leaves_plain_text_alone(self):
         # LLM_NORMALIZER_SKIP_PLAIN still applies with a prompt; this is why that is safe

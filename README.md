@@ -393,12 +393,107 @@ curl -X POST 'http://localhost:9091/v1/audio/normalize' \
 # {"output":"lima puluh ringgit.","mode":"llm"}   (no prompt: "五十令吉.")
 ```
 
-`prompt` is for text too short or too mixed to show its language: a bare amount, a time, an
-id. It goes into the system prompt, not next to the text, so the model does not read it as
-part of the text.
-With a prompt the LLM is always the one that decides, so `LLM_NORMALIZER_RULE_FIRST` is skipped
-for that request. `LLM_NORMALIZER_SKIP_PLAIN` still applies: text with nothing to normalize
-came back unchanged under every language prompt (18/18 live).
+#### `prompt`: tell the normalizer what the text cannot
+
+A bare number has no language and no type. With no context the LLM read `RM50` as `五十令吉`,
+`1500` as `一千五百`, and a postcode as a quantity. `prompt` says what the token is and how to
+read it. `llm` mode only; `rule` and `spoken` ignore it.
+
+- **Where it goes:** the end of the system prompt *and* in brackets above the text
+  ([app/prompt.py](app/prompt.py)). In the system prompt alone it lost to the 23 few-shots
+  (5/10 cases followed). In both places: 10/10, and the instruction never leaked into the output.
+- **Shortcuts:** `LLM_NORMALIZER_RULE_FIRST` is skipped (the rules cannot read a prompt).
+  `LLM_NORMALIZER_SKIP_PLAIN` still applies: plain text came back unchanged under every language
+  prompt (18/18), so a plain chunk still costs no LLM call.
+- **How to write one:** say what the token *is* ("this is a postcode"), how to read it ("digit by
+  digit, keeping every zero"), in which language, and what to leave alone ("keep the Malay words").
+  Add a worked example with *other* values: the model copies the pattern.
+
+Every output below is verbatim from the live normalizer (gemma-4-31b, temperature 0,
+2026-10-07), run twice with the same result unless noted.
+
+**Short inputs**
+
+| input | prompt | output | without prompt |
+|---|---|---|---|
+| `RM50` | normalize this in Malay | lima puluh ringgit | 五十令吉 |
+| `1500` | please spell one by one in en | one five zero zero | 一千五百 |
+| `1234234` | please spell one by one in malay | satu dua tiga empat dua tiga empat | 一二三四二三四 |
+| `08000` | this is a postcode, normalize it in chinese | 零八零零零 | 零八零零零 |
+| `50450` | normalize it in english | fifty thousand four hundred fifty | 五零四五零 |
+| `50450` | this is a postcode, normalize it in english | five zero four five zero | 五零四五零 |
+| `nombor akaun saya 1234234` | please spell one by one in zh | nombor akaun saya 一二三四二三四 | nombor akaun saya satu dua tiga empat dua tiga empat |
+| `my account number is 1234234` | please spell one by one in malay | my account number is satu dua tiga empat dua tiga empat | my account number is one two three four two three four |
+
+The two `50450` rows: a language alone is not enough, the prompt has to say what the number is.
+
+**Complex sentences**
+
+| input | prompt | output |
+|---|---|---|
+| `Kod TAC anda 482910, sah sehingga 10:30 pagi. Baki RM1,250.50.` | Malay SMS read to a Chinese-speaking customer: read every number in Mandarin, the TAC code digit by digit, keep the Malay words. | Kod TAC anda 四八二九一零, sah sehingga 十点三十 pagi. Baki 一千二百五十令吉五十仙. *(spacing between the digits varies run to run)* |
+| `Bil TNB anda RM87.40 untuk 312 kWh, bayar sebelum 25/10.` | read the money in English, kWh as "kilowatt hour", keep the rest in Malay | Bil TNB anda eighty seven ringgit forty sen untuk tiga ratus dua belas kilowatt hour, bayar sebelum dua puluh lima Oktober. |
+| `Sila hubungi 1300-88-1234 atau 03-2141 8888 ext 204.` | Read phone numbers digit by digit, and say "ext" as "sambungan". | Sila hubungi satu tiga kosong kosong lapan lapan satu dua tiga empat atau kosong tiga dua satu empat satu lapan lapan lapan lapan sambungan dua kosong empat. |
+| `Flight MH370 departs 0845 from KLIA Gate C12.` | read the flight number and the gate character by character, 0845 is a 24-hour time | Flight M H three seven zero departs zero eight four five from K L I A Gate C one two. |
+
+**Addresses for a Chinese or Tamil listener**
+
+Two styles per language. *Numbers only* keeps every name as written and is the safe default.
+*Full* also puts place names in the listener's language. All four are clean on 8 addresses × 2
+runs: no digit left, no stray script, no English number words, no invented names. That check is
+mechanical; the Tamil output still needs a native speaker's review.
+
+```text
+# zh, numbers only
+This is a Malaysian address for a Chinese-speaking customer. Read the numbers in Mandarin: the house number as a normal number (No. 12 is 十二号); the postcode and unit or lot numbers digit by digit, keeping every zero (15-03 is 一五零三); numbers inside street names too (Jalan SS 15/4 is Jalan SS 十五斜杠四). Keep street, building, city and state names exactly as written.
+
+# zh, full
+This is a Malaysian address for a Chinese-speaking customer. Read it in Mandarin: the house number as a normal number (No. 12 is 十二号); the postcode and unit or lot numbers digit by digit, keeping every zero (15-03 is 一五零三); numbers inside street names are read in Mandarin too (Jalan SS 15/4 is Jalan SS 十五斜杠四). Use a Chinese place name only if it is the official, commonly used one (吉隆坡, 雪兰莪, 槟城, 新山); if you are not sure, keep the name exactly as written. Never invent a transliteration. Use only Chinese characters and Latin letters.
+
+# ta, numbers only
+This is a Malaysian address for a Tamil-speaking customer. Read the numbers with Tamil words only, never English: the house number as a normal number (No. 12 is எண் பன்னிரண்டு); the postcode and unit or lot numbers digit by digit, one word per digit (15-03 is ஒன்று ஐந்து பூஜ்ஜியம் மூன்று); numbers inside street names too. Keep street, building, city and state names exactly as written.
+
+# ta, full
+This is a Malaysian address for a Tamil-speaking customer. Read it in Tamil: write place names in Tamil script as they sound; numbers with Tamil words only, never English: the house number as a normal number (No. 12 is எண் பன்னிரண்டு); the postcode and unit or lot numbers digit by digit, one word per digit (15-03 is ஒன்று ஐந்து பூஜ்ஜியம் மூன்று); numbers inside street names too.
+```
+
+| input | style | output |
+|---|---|---|
+| `No. 12, Jalan Bukit Bintang, 55100 Kuala Lumpur` | *(no prompt)* | Number twelve, Jalan Bukit Bintang, five five one zero zero Kuala Lumpur |
+| | zh, numbers only | 十二号, Jalan Bukit Bintang, 五五一零零 Kuala Lumpur |
+| | zh, full | 十二号, Jalan Bukit Bintang, 五五一零零 吉隆坡 |
+| | ta, numbers only | எண் பன்னிரண்டு, Jalan Bukit Bintang, ஐந்து ஐந்து ஒன்று பூஜ்ஜியம் பூஜ்ஜியம் Kuala Lumpur |
+| | ta, full | எண் பன்னிரண்டு, ஜாலான் புக்கிட் பின்தாங், ஐந்து ஐந்து ஒன்று பூஜ்ஜியம் பூஜ்ஜியம் கோலா லம்பூர் |
+| `Unit 15-03, Menara KL, Jalan Sultan Ismail, 50250 Kuala Lumpur` | zh, full | Unit 一五零三, Menara KL, Jalan Sultan Ismail, 五零二五零 吉隆坡 |
+| | ta, full | யூனிட் ஒன்று ஐந்து பூஜ்ஜியம் மூன்று, மெனாரா கே.எல், ஜாலான் சுல்தான் இஸ்மாயில், ஐந்து பூஜ்ஜியம் இரண்டு ஐந்து பூஜ்ஜியம் கோலா லம்பூர் |
+| `No. 9, Jalan Seri Austin 2/7, 81100 Johor Bahru, Johor` | zh, numbers only | 九号, Jalan Seri Austin 二斜杠七, 八一一零零 Johor Bahru, Johor |
+| | zh, full | 九号, Jalan Seri Austin 二斜杠七, 八一一零零 新山, Johor |
+| `18, Lorong Tun Ismail 3, 08000 Sungai Petani, Kedah` | zh, full | 十八号, Lorong Tun Ismail 三, 零八零零零 Sungai Petani, Kedah |
+| | ta, full | எண் பதினெட்டு, லோரோங் துன் இஸ்மாயில் மூன்று, பூஜ்ஜியம் எட்டு பூஜ்ஜியம் பூஜ்ஜியம் பூஜ்ஜியம் சுங்கை பெடானி, கெடா |
+
+**Fixing a prompt that is not followed**
+
+Short prompts leave the model room to fall back on its defaults. Each fix below was measured on
+the same inputs, both runs.
+
+| problem | short prompt → output | what fixed it → output |
+|---|---|---|
+| day/month dates read month first (2/4 right) | "the date is day/month" → `3/11` 三月十一日 (11 March) | "Dates are written day/month, Malaysian style: the first number is the day and the second is the month (5/12 is the fifth of December, 十二月五日)." → 十一月三日 (4/4) |
+| a Malay sentence keeps Malay numbers (0/4) | "read the numbers in English" → Mesyuarat three four jam dua lima belas petang di Aras dua belas. | "Keep every Malay word as it is, but say every number, amount, date and time in English words (for example 'jam 4:45ptg pada 9/8' becomes 'jam four forty-five p m pada the ninth of August')." → Mesyuarat the third of April jam two fifteen p m di Aras twelve. (4/4) |
+| invented Chinese place names | "use the Chinese names of places" → Sungai Petani as 杉节丹 (it is 双溪大年), and once `苏丹 इस्梅尔路` with Devanagari in it | "Use a Chinese place name only if it is the official, commonly used one (…); if you are not sure, keep the name exactly as written. Never invent a transliteration. Use only Chinese characters and Latin letters." → Sungai Petani kept |
+| "digit by digit" spreads to the house number | "the postcode and unit or lot numbers digit by digit" → `No. 12` as 号 一二 | add "the house number as a normal number (No. 12 is 十二号)" → 十二号 |
+| a numbered street kept as digits | "keep the names exactly as written" → Jalan SS 2/24 | add "numbers inside street names too (Jalan SS 15/4 is Jalan SS 十五斜杠四)" → Jalan SS 二斜杠二十四 |
+| Tamil numbers slip into English | "read it in Tamil" → `Lot 3A-2` as …ஏ டூ (English "two"), `15-03` with an extra zero | "Tamil words only, never English", "one word per digit (15-03 is ஒன்று ஐந்து பூஜ்ஜியம் மூன்று)" → clean |
+
+The same field works on `/v1/audio/speech`:
+
+```bash
+curl -X POST 'http://localhost:9091/v1/audio/speech' -H 'Content-Type: application/json' -d '{
+  "input": "Alamat penghantaran anda No. 12, Jalan Bukit Bintang, 55100 Kuala Lumpur.",
+  "voice": "husein", "mode": "llm", "response_format": "wav", "stream": false,
+  "prompt": "This is a Malaysian address for a Chinese-speaking customer. Read the numbers in Mandarin: the house number as a normal number (No. 12 is 十二号); the postcode digit by digit, keeping every zero. Keep the Malay words and place names exactly as written."
+}' -o address.wav
+```
 
 In `llm` mode the LLM is only called when the text contains something it could rewrite (a
 digit, a symbol, an ALL-CAPS or dotted token, a known abbreviation). Plain sentences such as

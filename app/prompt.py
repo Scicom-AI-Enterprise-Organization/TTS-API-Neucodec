@@ -84,9 +84,14 @@ EXAMPLES = [
 ]
 
 # The request's `prompt` field (caller context the text alone does not carry, e.g.
-# "normalize this in Malay") goes under this heading at the end of SYSTEM_PROMPT. Not in
-# the user turn: that would no longer look like the few-shot inputs, and the instruction
-# could leak into the normalized text. Live LLM, no context: "RM50" -> "五十令吉".
+# "normalize this in Malay"; with none the LLM read a bare "RM50" as "五十令吉") goes in two
+# places: under this heading at the end of SYSTEM_PROMPT, and in brackets above the text in
+# the final user turn. Measured on the live LLM (2026-10-07, 10 cases with one right answer
+# + 18 plain sentences under language prompts):
+#   system prompt only  5/10, 18/18 plain unchanged -- the 23 few-shots outvote it:
+#                       "1500" + "spell one by one in en" -> "一千五百"
+#   user turn only     10/10, 15/18 -- began translating plain sentences
+#   both               10/10, 18/18, and the instruction never leaked into the output
 CALLER_PROMPT_HEADER = "Additional instructions from the caller for this text:"
 
 # Strict schema for OpenAI `response_format`; guided decoding guarantees the reply

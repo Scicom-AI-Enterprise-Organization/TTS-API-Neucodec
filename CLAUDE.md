@@ -73,10 +73,13 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   Request-field defaults are env-driven: `DEFAULT_NORMALIZER_MODE` (`rule`|`llm`) and
   `DEFAULT_NORMALIZE_MALAYSIAN` (bool) set what requests get when they omit `mode` /
   `normalize_malaysian`.
-  **`prompt` request field** (both endpoints, `mode=llm` only): caller context appended to the
-  system prompt under `CALLER_PROMPT_HEADER` (`app/prompt.py`), e.g. "normalize this in Malay".
-  Exists because a bare `RM50` with no context came back as `五十令吉`. It bypasses `RULE_FIRST`,
-  but not `SKIP_PLAIN`: plain text came back unchanged under every language prompt (18/18 live).
+  **`prompt` request field** (both endpoints, `mode=llm` only): caller context, e.g. "this is a
+  postcode, read it digit by digit in Chinese". Exists because a bare `RM50` with no context came
+  back as `五十令吉`. Goes in **two places**, the end of the system prompt (`CALLER_PROMPT_HEADER`)
+  and `[prompt]` above the text: the system prompt alone lost to the 23 few-shots (5/10 followed;
+  `1500` + "spell one by one in en" → `一千五百`), the user turn alone began translating plain text
+  (15/18 unchanged); both = 10/10 and 18/18, no leakage. It bypasses `RULE_FIRST` but not
+  `SKIP_PLAIN`. Tested prompts for addresses (zh/ta) and for the failure modes are in the README.
   **TTFB shortcut (`LLM_NORMALIZER_SKIP_PLAIN`, default on):** the LLM round trip is ~0.55 s and
   sits entirely before the first audio byte, yet on plain conversational text the model returns
   its input unchanged. `needs_normalization()` in `llm_normalizer.py` skips the call when the

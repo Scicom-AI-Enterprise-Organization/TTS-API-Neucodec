@@ -34,8 +34,9 @@ _CODE_FENCE = re.compile(r'^```(?:json)?\s*(.*?)\s*```$', re.DOTALL)
 
 
 def build_messages(text, prompt=None):
-    """`prompt` is the caller's extra context (the request's `prompt` field), appended to
-    the system prompt; blank or None leaves the messages exactly as without it."""
+    """`prompt` is the caller's extra context (the request's `prompt` field), put both at
+    the end of the system prompt and in brackets above the text (why both: app/prompt.py);
+    blank or None leaves the messages exactly as without it."""
     system = SYSTEM_PROMPT
     prompt = (prompt or '').strip()
     if prompt:
@@ -47,7 +48,7 @@ def build_messages(text, prompt=None):
             'role': 'assistant',
             'content': json.dumps({'normalized': after}, ensure_ascii=False),
         })
-    messages.append({'role': 'user', 'content': text})
+    messages.append({'role': 'user', 'content': f'[{prompt}]\n{text}' if prompt else text})
     return messages
 
 
