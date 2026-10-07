@@ -27,6 +27,7 @@ from app.llm_normalizer import llm_normalize, needs_normalization, has_unspoken,
 from app.spoken_normalizer import normalize as spoken_normalize
 from app import tracing
 from app.fade import fade_in_pcm16
+from app import lm_inprocess  # LM_BACKEND=inprocess only; imports vllm lazily
 from app.interleave import (
     make_store, RequestInterleave, build_prompt, fit_interleave, select_voice,
     seconds_to_tokens, total_tokens,
@@ -130,6 +131,16 @@ def _suppress_asgi_message_spans():
 
 
 app = FastAPI()
+
+
+@app.on_event('startup')
+async def _load_inprocess_lm():
+    # LM_BACKEND=inprocess: load the engine before the first request, so the API only
+    # answers (and bench/serve_inprocess.py only reports it up) once it can generate.
+    if LM_BACKEND == 'inprocess':
+        await lm_inprocess.get_engine()
+
+
 if wan is not None:
     wan.patch(app=app)
     # Everything below is deliberately *after* patch(), which is what configures logging:
@@ -178,11 +189,20 @@ else:
 
 # Accelerator helper module: torch.cuda / torch.npu / None. CUDA graphs and CUDA/NPU
 # streams are only used when this is not None; on cpu the decode falls back to eager.
-if device == "cuda":
+# ⚠ Keyed on the device TYPE: DEVICE=cuda:1 used to miss `device == "cuda"`, leave `dev`
+# unset and send the decode down the cpu path with the codec on the GPU -- every request then
+# died in the quantizer ("cuda:1 and cpu"). An index also becomes the CURRENT device, so the
+# streams and CUDA graphs below are created on the codec's GPU, not on GPU 0.
+device_type = device.split(":", 1)[0]
+if device_type == "cuda":
     dev = torch.cuda
-elif device == "npu":
+    if ":" in device:
+        torch.cuda.set_device(device)
+elif device_type == "npu":
     import torch_npu  # noqa: F401  registers the 'npu' device backend
     dev = torch.npu
+    if ":" in device:
+        torch.npu.set_device(device)
 else:
     logging.warning("No CUDA/NPU device selected, will run using CPU.")
     dev = None
@@ -253,7 +273,7 @@ BUCKET_TOKENS = sorted(BUCKET_TOKENS)
 CUDA_GRAPH_LAZY = os.environ.get('CUDA_GRAPH_LAZY', 'true').lower() == 'true'
 CUDA_GRAPH_MAX_SHAPES = int(os.environ.get('CUDA_GRAPH_MAX_SHAPES', '64'))
 
-if len(BUCKET_TOKENS) and device == "cuda" and not CUDA_GRAPH_LAZY:
+if len(BUCKET_TOKENS) and device_type == "cuda" and not CUDA_GRAPH_LAZY:
     if TORCH_COMPILE:
         logging.info("warming up with torch compile")
     else:
@@ -776,7 +796,7 @@ async def stream_speech(
         # rather than with a `with` so a cancelled producer -- the normal outcome of a
         # client disconnect -- is an event, not an ERROR span.
         lm_span = tracing.start_span('lm.generate', parent=stream_ctx, attrs={
-            'lm.url': TTS_API,
+            'lm.url': TTS_API if LM_BACKEND == 'http' else f'inprocess:{LM_MODEL}',
             'lm.model': model,
             'lm.max_tokens': max_tokens,
             'lm.temperature': temperature,
@@ -839,6 +859,31 @@ async def stream_speech(
             )
             attempt_prompt = prompt
             fallback_used = False
+            t_headers = None
+
+            async def take(text):
+                # One LM text delta, from either backend: count it, keep it for the
+                # interleave store, and hand it to the stitcher -- or hold it back until
+                # the fallback check below has seen enough speech tokens.
+                nonlocal n_deltas, held, held_tokens, released
+                if not n_deltas:
+                    # prefill: what the request actually waited for
+                    tracing.record_span('lm.first_token', t_headers, tracing.now_ns(),
+                                        parent=lm_ctx)
+                n_deltas += 1
+                if interleave is not None:
+                    lm_text.append(text)
+                if released:
+                    await queue.put({'result': text})
+                else:
+                    held.append(text)
+                    held_tokens += text.count('<|s_')
+                    if held_tokens >= hold_tokens:
+                        for h in held:
+                            await queue.put({'result': h})
+                        held = []
+                        released = True
+
             while True:
                 held = []                   # deltas withheld from the stitcher so far
                 held_tokens = 0
@@ -848,6 +893,33 @@ async def stream_speech(
                 finish_reason = None
                 json_data['prompt'] = attempt_prompt
                 t_post = tracing.now_ns()
+                if LM_BACKEND == 'inprocess':
+                    # Same body, same deltas, no HTTP hop (app/lm_inprocess.py).
+                    t_headers = t_post
+                    async for text, fr in lm_inprocess.stream(attempt_prompt, json_data):
+                        if await client_gone():
+                            tracing.add_event(lm_span, 'client_disconnected')
+                            break
+                        finish_reason = fr or finish_reason
+                        if text:
+                            await take(text)
+                    else:
+                        lm_done = True
+                    if not released and lm_done and interleave is not None and not fallback_used:
+                        logging.warning(
+                            f'interleave {interleave.key}: LM stopped after {held_tokens} speech '
+                            f'tokens (< {hold_tokens}) -- regenerating without history'
+                        )
+                        tracing.add_event(lm_span, 'interleave_fallback', {
+                            'lm.tokens': held_tokens, 'lm.hold': hold_tokens,
+                        })
+                        tracing.set_attributes(stream_span, {'tts.interleave_fallback': True})
+                        fallback_used = True
+                        attempt_prompt = interleave.plain_prompt()
+                        continue
+                    for h in held:          # short but final: release what there is
+                        await queue.put({'result': h})
+                    break
                 async with aiohttp.ClientSession() as session:
                     async with session.post(
                         TTS_API,
@@ -880,26 +952,7 @@ async def stream_speech(
                                     delta = data_json["choices"][0]
                                     finish_reason = delta.get("finish_reason") or finish_reason
                                     if "text" in delta:
-                                        if not n_deltas:
-                                            # prefill: what the request actually waited for
-                                            tracing.record_span(
-                                                'lm.first_token', t_headers, tracing.now_ns(),
-                                                parent=lm_ctx,
-                                            )
-                                        n_deltas += 1
-                                        text = delta["text"]
-                                        if interleave is not None:
-                                            lm_text.append(text)
-                                        if released:
-                                            await queue.put({'result': text})
-                                        else:
-                                            held.append(text)
-                                            held_tokens += text.count('<|s_')
-                                            if held_tokens >= hold_tokens:
-                                                for h in held:
-                                                    await queue.put({'result': h})
-                                                held = []
-                                                released = True
+                                        await take(delta["text"])
                                 except json.JSONDecodeError:
                                     continue
 

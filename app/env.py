@@ -6,6 +6,31 @@ if '/v1/completions' not in TTS_API:
     TTS_API = TTS_API + '/v1/completions'
 TTS_API_KEY = os.environ.get('TTS_API_KEY', '')
 MODEL_NAME = os.environ.get('MODEL_NAME', 'TTS-model')
+
+# --- where speech tokens come from ---------------------------------------------------------
+#   http       (default) a separate vLLM server at TTS_API, as deployed.
+#   inprocess  this process loads the LM with vLLM's async engine and streams tokens from it
+#              (app/lm_inprocess.py): one process per GPU or TP group, no second server or port.
+#              Everything after the LM (interleave, stitcher, loudness, fade-in) is the same code
+#              either way, so a checkpoint can be judged through the serving path from one
+#              process. ⚠ Run it with ONE uvicorn worker: every worker loads its own engine.
+#              bench/serve_inprocess.py launches it on chosen GPUs and a free port.
+LM_BACKEND = os.environ.get('LM_BACKEND', 'http').strip().lower()
+if LM_BACKEND not in ('http', 'inprocess'):
+    raise ValueError(f"LM_BACKEND must be 'http' or 'inprocess', got {LM_BACKEND!r}")
+LM_MODEL = os.environ.get('LM_MODEL', '')                     # local dir or HF repo id
+if LM_BACKEND == 'inprocess' and not LM_MODEL:
+    raise ValueError('LM_BACKEND=inprocess needs LM_MODEL (a checkpoint dir or HF repo id)')
+LM_TENSOR_PARALLEL_SIZE = int(os.environ.get('LM_TENSOR_PARALLEL_SIZE', '1'))
+LM_GPU_MEMORY_UTILIZATION = float(os.environ.get('LM_GPU_MEMORY_UTILIZATION', '0.3'))
+LM_DTYPE = os.environ.get('LM_DTYPE', 'bfloat16')
+LM_ENFORCE_EAGER = os.environ.get('LM_ENFORCE_EAGER', 'false').lower() == 'true'
+# '' = vLLM's default, as the served engine runs. Cap it (64) if sampler warmup OOMs: the
+# speech-token vocab is ~217K (see CLAUDE.md gotchas).
+LM_MAX_NUM_SEQS = int(os.environ.get('LM_MAX_NUM_SEQS') or 0) or None
+# The served engine relabels the checkpoint (vllm-tts-1020: --hf-overrides architectures);
+# '' sends none.
+LM_HF_OVERRIDES = os.environ.get('LM_HF_OVERRIDES', '{"architectures": ["Qwen3ForCausalLM"]}')
 DEFAULT_SPEAKER = os.environ.get('DEFAULT_SPEAKER', 'husein')
 SPEAKERS = os.environ.get('SPEAKERS', 'husein,idayu')
 # 0.6 is what the Whisper-CER guardrail and all bench results were measured at;

@@ -421,7 +421,41 @@ python bench/bench.py --concurrency 1,4,16,50 --out /tmp/bench.json
 python bench/cer_eval.py --wav-dir /tmp/eval --out /tmp/cer.json   # needs faster-whisper + jiwer
 ```
 
+## In-process LM (`LM_BACKEND=inprocess`): one process per model, no vLLM server
+
+For EVALUATING a checkpoint through the serving path, not for production. The app loads the LM
+itself with vLLM's async engine (`app/lm_inprocess.py`) instead of POSTing to `TTS_API`, and feeds
+the same text deltas into the same producer: interleave hold-back/fallback, stitcher, loudness,
+fade-in are untouched. Sampling is exactly the HTTP body (temperature, repetition_penalty,
+max_tokens; top-k/top-p off, as on the served engine) and the checkpoint is relabelled like the
+served engine (`LM_HF_OVERRIDES`, default `Qwen3ForCausalLM`).
+
+```bash
+# one model per GPU (or TP group), on a free random port; prints the URL once it can generate
+python bench/serve_inprocess.py --model /path/ckpt --gpus 3 --env-file bench/inprocess.env.example
+python bench/serve_inprocess.py --model /path/ckpt --gpus 4,5 --tp 2 --port 9191   # TP 2
+```
+
+- **One uvicorn worker** (the launcher forces it): every worker would load its own engine.
+- `--gpus` is `CUDA_VISIBLE_DEVICES`; the LM takes the first `--tp`, the codec the first one too
+  unless `--codec-device cuda:N`. Knobs: `LM_TENSOR_PARALLEL_SIZE`, `LM_GPU_MEMORY_UTILIZATION`
+  (0.3), `LM_DTYPE`, `LM_ENFORCE_EAGER`, `LM_MAX_NUM_SEQS`, `LM_HF_OVERRIDES`.
+- **The venv needs vllm next to this repo's requirements**, and they conflict on four pins:
+  vllm 0.16.0 (production's engine version, same torch 2.9.1) needs protobuf >= 5.29.6,
+  numpy >= 2 and pydantic >= 2.12, against `protobuf==3.20.3`, `numpy==1.26.4` and gradio's
+  pydantic < 2.12. Drop those pins, the gradio/notebook/tensorboard/wandb dev packages and the
+  git-only packages (the app imports its vendored `app.neucodec`), and add `local-attention==1.11.2`
+  (the vendored codec's import). numpy 2 breaks only fasttext, which loads for
+  `normalize_malaysian=true` requests alone.
+- Startup is ~7 min the first time (vLLM compiles), ~2 min once its compile cache exists.
+
 ## Gotchas (these will bite)
+
+- **`DEVICE=cuda:N` used to break every request.** The accelerator helpers keyed on
+  `device == "cuda"`, so `cuda:1` left `dev` unset and the decode took the cpu path with the codec
+  on the GPU ("Expected all tensors to be on the same device, cuda:1 and cpu" in the quantizer).
+  They key on the device type now, and an index becomes the current device. Production leaves
+  `DEVICE` unset, which was never affected.
 
 - **Pin `uvicorn==0.35.x`.** `main.py` calls `asyncio.create_task()` / `get_running_loop()` at module top
   level; uvicorn ≥0.36 eagerly imports the app *outside* the event loop → `RuntimeError: no running event
