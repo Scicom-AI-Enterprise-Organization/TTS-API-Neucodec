@@ -5,8 +5,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchaudio
-from torchaudio import transforms as T
 from huggingface_hub import PyTorchModelHubMixin, ModelHubMixin, hf_hub_download
 from transformers import AutoFeatureExtractor, HubertModel, Wav2Vec2BertModel
 
@@ -112,6 +110,10 @@ class NeuCodec(
         
         # load from file
         if isinstance(audio_or_path, (Path, str)):
+            # imported here, not at module top: the app always passes a tensor, and torchaudio
+            # has no build for torch >= 2.12 (vllm 0.31 pins torch 2.13, requirements-inprocess.txt)
+            import torchaudio
+            from torchaudio import transforms as T
             y, sr = torchaudio.load(audio_or_path)
             if sr != 16_000:
                 y, sr = (T.Resample(sr, 16_000)(y), 16_000)

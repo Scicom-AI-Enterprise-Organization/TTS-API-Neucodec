@@ -1,0 +1,26 @@
+# Venv for LM_BACKEND=inprocess (app/lm_inprocess.py, bench/serve_inprocess.py): the app with
+# vLLM's engine inside it, for evaluating checkpoints. Production runs LM_BACKEND=http from
+# requirements.txt and never imports vllm, so the two venvs are independent.
+#
+# vllm pins torch (0.31.0 -> torch 2.13.0); the app's codec just runs on that torch. Left out of
+# requirements.txt's list on purpose:
+#   torchaudio     no build past 2.11; the vendored codec imports it only for file paths
+#   fasttext       breaks on numpy 2; loads only for normalize_malaysian=true requests
+#   gradio, ipykernel, ipython, tensorboard, wandb, matplotlib   dev/demo tools
+#   distilcodec, neucodec, wan (git)   the app uses its vendored app.neucodec; wan is optional
+vllm==0.31.0
+
+aiohttp>=3.12.15
+fastapi>=0.116.1
+uvicorn>=0.35.0,<0.36
+pydantic>=2.12
+librosa==0.11.0     # 1.0.0 segfaults in pyin on numba 0.67 (CLAUDE.md gotchas)
+soundfile>=0.13.1
+vector-quantize-pytorch==1.17.8
+local-attention==1.11.2
+
+# vendored normalizer (app/normalizer)
+pysastrawi>=1.2.0
+dateparser>=1.2.0
+num2words>=0.5.14
+Unidecode>=1.3.0

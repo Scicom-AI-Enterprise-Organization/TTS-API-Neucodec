@@ -443,14 +443,20 @@ python bench/serve_inprocess.py --model /path/ckpt --gpus 4,5 --tp 2 --port 9191
 - `--gpus` is `CUDA_VISIBLE_DEVICES`; the LM takes the first `--tp`, the codec the first one too
   unless `--codec-device cuda:N`. Knobs: `LM_TENSOR_PARALLEL_SIZE`, `LM_GPU_MEMORY_UTILIZATION`
   (0.3), `LM_DTYPE`, `LM_ENFORCE_EAGER`, `LM_MAX_NUM_SEQS`, `LM_HF_OVERRIDES`.
-- **The venv needs vllm next to this repo's requirements**, and they conflict on four pins:
-  vllm 0.16.0 (production's engine version, same torch 2.9.1) needs protobuf >= 5.29.6,
-  numpy >= 2 and pydantic >= 2.12, against `protobuf==3.20.3`, `numpy==1.26.4` and gradio's
-  pydantic < 2.12. Drop those pins, the gradio/notebook/tensorboard/wandb dev packages and the
-  git-only packages (the app imports its vendored `app.neucodec`), and add `local-attention==1.11.2`
-  (the vendored codec's import). numpy 2 breaks only fasttext, which loads for
-  `normalize_malaysian=true` requests alone.
-- Startup is ~7 min the first time (vLLM compiles), ~2 min once its compile cache exists.
+- **Own venv: `requirements-inprocess.txt`** (vllm 0.31.0, torch 2.13.0), installed with
+  `uv pip install -r requirements-inprocess.txt --torch-backend auto`. No vllm release fits
+  `requirements.txt`: every one since 0.12 needs pydantic >= 2.12 (gradio 5.37 caps it), every one
+  since 0.14 needs protobuf >= 5.29.6 (repo pins 3.20.3). It leaves out torchaudio (no build past
+  2.11, so `app/neucodec/model.py` imports it lazily, only on the file-path branch the app never
+  takes), fasttext (numpy 2; only `normalize_malaysian=true` loads it) and the dev tools. Production
+  is `http` mode and never imports vllm, so its venv is unaffected.
+- **Tested 2026-10-07** on box 1024 (H20, slurm job 751, production's checkpoint): up in 270 s (74 s
+  NFS weight read, 32 s compile), Whisper CER 1.0% on 9 en/ms/zh sentences, 0 clipped samples,
+  interleave works, TTFB median 241 ms (TP=1 LM + codec on one GPU). Production's engine is still
+  vllm 0.16.0 (`/version`), so in-process tokens can differ slightly from production's.
+- **HF 403 for Scicom-intl private repos** ("Private repository storage limit reached", seen
+  2026-10-07): vLLM logs it while checking safetensors metadata but loads from the local HF cache,
+  so a box with the cache works and a fresh one cannot download the checkpoint.
 
 ## Gotchas (these will bite)
 

@@ -13,7 +13,8 @@ candidate per GPU side by side:
 first one too, unless --codec-device names another (cuda:1 = the second of --gpus). --port 0 (the default) binds a free port; the
 URL is printed (and written to --url-file) once the API answers, i.e. after the engine loaded.
 Runs uvicorn with ONE worker on purpose: every worker would load its own engine. Ctrl-C / SIGTERM
-stops it. Needs a venv with vllm next to this repo's requirements (same torch: 2.9.1).
+stops it. Run it with the in-process venv's python (`uv pip install -r requirements-inprocess.txt
+--torch-backend auto`: vllm 0.31.0, torch 2.13), or point --python at that venv.
 """
 import argparse
 import os

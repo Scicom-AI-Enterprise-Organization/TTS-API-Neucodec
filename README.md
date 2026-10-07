@@ -238,7 +238,7 @@ flowchart LR
 | speech tokens from | a vLLM server at `TTS_API`, same box or another host | vLLM's async engine inside this process ([app/lm_inprocess.py](app/lm_inprocess.py)) |
 | processes per model | 2 (vLLM + app), two ports | 1, one port |
 | uvicorn workers | any (several on one GPU need MPS) | **1**: every worker would load its own engine |
-| venv | this repo's requirements; vllm is never imported | + vllm, with four pins changed (below) |
+| venv | this repo's requirements; vllm is never imported | its own: [requirements-inprocess.txt](requirements-inprocess.txt) (vllm 0.31.0, torch 2.13) |
 | use it for | production | putting a checkpoint through the serving path |
 
 #### External vLLM (`LM_BACKEND=http`, the default)
@@ -248,7 +248,8 @@ the stream.
 
 ```bash
 # 1. a vLLM server: § 1's docker compose, or directly
-vllm serve Scicom-intl/Multilingual-Expressive-TTS-1.7B --dtype bfloat16 --port 9093   --gpu-memory-utilization 0.4 --max-model-len 4096 --max-num-seqs 64 --served-model-name TTS-model
+vllm serve Scicom-intl/Multilingual-Expressive-TTS-1.7B --dtype bfloat16 --port 9093 \
+  --gpu-memory-utilization 0.4 --max-model-len 4096 --max-num-seqs 64 --served-model-name TTS-model
 
 # 2. .env: point the app at it
 LM_BACKEND=http                    # the default, can be left out
@@ -267,15 +268,22 @@ is exactly what the HTTP body would send (temperature, repetition_penalty, max_t
 off, as on the served engine), and the checkpoint is relabelled the way the served engine
 relabels it (`LM_HF_OVERRIDES`). The API answers only once the engine has loaded.
 
+**Install** a separate venv. Production's `requirements.txt` stays as it is:
+
+```bash
+uv venv venv-inproc --python 3.12
+VIRTUAL_ENV=venv-inproc uv pip install -r requirements-inprocess.txt --torch-backend auto
+```
+
 **Launch** with [bench/serve_inprocess.py](bench/serve_inprocess.py), one model per GPU or TP group:
 
 ```bash
 # free random port; prints the URL once the API answers
-python bench/serve_inprocess.py --model /path/ckpt --gpus 3 --env-file bench/inprocess.env.example
-python bench/serve_inprocess.py --model /path/ckpt --gpus 4,5 --tp 2 --port 9191   # TP 2
+venv-inproc/bin/python bench/serve_inprocess.py --model /path/ckpt --gpus 3 --env-file bench/inprocess.env.example
+venv-inproc/bin/python bench/serve_inprocess.py --model /path/ckpt --gpus 4,5 --tp 2 --port 9191   # TP 2
 
 # or by hand: ONE worker
-LM_BACKEND=inprocess LM_MODEL=/path/ckpt uvicorn app.main:app --port 9091 --workers 1
+LM_BACKEND=inprocess LM_MODEL=/path/ckpt venv-inproc/bin/uvicorn app.main:app --port 9091 --workers 1
 ```
 
 - `--gpus` becomes `CUDA_VISIBLE_DEVICES`. The LM takes the first `--tp` of them; the codec takes
@@ -283,7 +291,8 @@ LM_BACKEND=inprocess LM_MODEL=/path/ckpt uvicorn app.main:app --port 9091 --work
 - `--env-file bench/inprocess.env.example` is a snapshot of production's serving settings, minus
   the LLM normalizer (evaluation text arrives already in spoken form).
 - Each instance gets its own interleave store (`/dev/shm/tts-interleave-inproc-<port>`).
-- Startup: ~7 min the first time (vLLM compiles), ~2 min once the compile cache exists.
+- Startup on one H20: 270 s the first time. 74 s of that is reading the weights from NFS and 32 s is
+  vLLM's compile, which is cached for the next start.
 
 | Variable | Default | Description |
 |---|---|---|
@@ -297,12 +306,25 @@ LM_BACKEND=inprocess LM_MODEL=/path/ckpt uvicorn app.main:app --port 9091 --work
 | `LM_HF_OVERRIDES` | `{"architectures": ["Qwen3ForCausalLM"]}` | Relabels the checkpoint as the served engine does; empty sends none |
 | `LM_MAX_MODEL_LEN` | `4096` | LM window. Shared with `http` mode, where it sizes the interleave history |
 
-**The venv needs vllm next to this repo's requirements**, and they conflict on four pins. vllm
-0.16.0 (production's engine version, same torch 2.9.1) needs protobuf >= 5.29.6, numpy >= 2 and
-pydantic >= 2.12, against `protobuf==3.20.3`, `numpy==1.26.4` and gradio's pydantic < 2.12. Drop
-those pins, the gradio/notebook/tensorboard/wandb dev packages and the git-only packages (the app
-imports its vendored `app.neucodec`), and add `local-attention==1.11.2`. numpy 2 breaks only
-fasttext, which loads for `normalize_malaysian=true` requests alone. `http` mode never imports vllm.
+**Why a separate venv.** No vllm release fits `requirements.txt`. Every release since 0.12 needs
+pydantic >= 2.12, which gradio 5.37 caps below. Every release since 0.14 needs protobuf >= 5.29.6,
+and the repo pins 3.20.3. vllm 0.31.0 pins torch 2.13.0. None of this matters in `http` mode: the
+app only streams tokens and never imports vllm. `requirements-inprocess.txt` also leaves out
+torchaudio (no build past 2.11; the codec imports it only for file paths), fasttext (breaks on
+numpy 2; only `normalize_malaysian=true` loads it) and the dev tools.
+
+**Tested 2026-10-07** on one H20 with production's checkpoint (vllm 0.31.0, torch 2.13.0+cu129,
+transformers 5.17.0):
+
+| check | result |
+|---|---|
+| Whisper CER, 9 sentences in en/ms/zh | 1.0% (en 0%, zh 0%, ms 3%: one word) |
+| loudness | active RMS −15.5 to −17.2 dB, 0 clipped samples |
+| interleave | the second chunk saw the first (`X-Interleave-Turns` 0, then 1) |
+| streaming TTFB, first audio byte | median 241 ms (LM at TP=1 next to the codec on one GPU) |
+
+Production's engine runs vllm 0.16.0, so in-process token streams can differ slightly from what
+production would sample for the same checkpoint.
 
 ## Tracing (Loki + Tempo)
 
