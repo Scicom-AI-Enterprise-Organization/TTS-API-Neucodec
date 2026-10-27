@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import pytest
 
-from app.rules import sanitize_markdown
+from app.rules import product_names, sanitize_markdown
 
 
 class TestBoldItalicStrikethrough:
@@ -445,3 +445,31 @@ class TestAgentOutput:
     def test_a_long_number_at_the_start_is_not_a_list_marker(self, text):
         assert sanitize_markdown(text) == text
 
+
+class TestProductNames:
+    """A version number after a product name is part of the name, read in English in any sentence."""
+
+    @pytest.mark.parametrize('text,expected', [
+        ('Kekal bersama Unifi dengan promosi StaywithUnifi 5.0!',
+         'Kekal bersama Unifi dengan promosi Stay with Unifi five point oh!'),
+        ('Sign up with the StaywithUnifi 5.0 promotion today.',
+         'Sign up with the Stay with Unifi five point oh promotion today.'),
+        ('Pakej Unifi 2.5 kini tersedia.', 'Pakej Unifi two point five kini tersedia.'),
+        ('Muat turun MyUnifi 3.0 sekarang.', 'Muat turun MyUnifi three point oh sekarang.'),
+        ('Promosi StaywithUnifi kini dilanjutkan.', 'Promosi Stay with Unifi kini dilanjutkan.'),
+    ])
+    def test_read_as_names(self, text, expected):
+        assert product_names(text) == expected
+
+    @pytest.mark.parametrize('text', [
+        'Bil anda RM5.0 sahaja.',
+        'Kira-kira 2.5 juta pelanggan.',
+        'Unifi 1.5 Gbps untuk rumah anda.',
+        'Unifi 2.5% lebih murah.',
+        'Kemas kini MyUnifi 5.0.1 sekarang.',
+        'Pakej 2.0 kini tersedia.',
+        'Your speed is 1.5 times faster.',
+        'Unifi 300Mbps at RM129.',
+    ])
+    def test_left_alone(self, text):
+        assert product_names(text) == text

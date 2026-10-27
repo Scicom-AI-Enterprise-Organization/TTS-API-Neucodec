@@ -174,11 +174,18 @@ def _spoken_digits(out):
     return len(words) + words.count('triple')       # "double eight" is two words already
 
 
-def rejected_reason(text, normalized, prompt=None):
+def rejected_reason(text, normalized, prompt=None, keep=()):
     """Why the LLM's `normalized` reply to `text` must not be spoken, or None if it may.
 
-    Skipped for Tamil (no digit-word list here). With a caller `prompt` the Chinese and
-    leftover-digit checks are off, since a prompt may ask for exactly that."""
+    `keep`: phrases already spelled out before the LLM (rules.product_names) that the reply
+    must hand back unchanged. Skipped for Tamil (no digit-word list here). With a caller
+    `prompt` the keep, Chinese and leftover-digit checks are off, since a prompt may ask for
+    exactly that."""
+    if not prompt:
+        squashed = ' '.join(normalized.lower().split())
+        for k in keep:
+            if ' '.join(k.lower().split()) not in squashed:
+                return 'name changed'
     if not re.search(r'\d', text) or re.search('[஀-௿]', text):
         return None
     if not re.search(r'\d', normalized) and not _NUMBER_WORD.search(normalized):
@@ -195,10 +202,11 @@ def rejected_reason(text, normalized, prompt=None):
 
 
 async def llm_normalize(text, base_url=None, api_key=None, model=None, timeout=None,
-                        prompt=None):
+                        prompt=None, keep=()):
     """Normalize `text` via the OpenAI-compatible endpoint, with the caller's `prompt`
-    (see build_messages) if given. Raises LLMNormalizerError on any failure; callers
-    decide whether to fall back to the rule-based path."""
+    (see build_messages) if given. Raises LLMNormalizerError on any failure, including a
+    reply rejected_reason() refuses (`keep` goes there); callers decide whether to fall back
+    to the rule-based path."""
     base_url = (OPENAI_BASE_URL if base_url is None else base_url).rstrip('/')
     api_key = OPENAI_API_KEY if api_key is None else api_key
     model = OPENAI_MODEL_NAME if model is None else model
@@ -252,7 +260,7 @@ async def llm_normalize(text, base_url=None, api_key=None, model=None, timeout=N
     normalized = parse_normalized(content)
     if normalized is None:
         raise LLMNormalizerError(f'unusable reply from model: {content[:500]!r}')
-    reason = rejected_reason(text, normalized, prompt)
+    reason = rejected_reason(text, normalized, prompt, keep)
     if reason:
         raise LLMNormalizerError(f'rejected reply ({reason}): {normalized[:500]!r}')
     return normalized

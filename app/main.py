@@ -1501,8 +1501,8 @@ if not MIN_RATE <= DEFAULT_SPEAKING_RATE <= MAX_RATE:
         f'DEFAULT_SPEAKING_RATE={DEFAULT_SPEAKING_RATE} must be within [{MIN_RATE}, {MAX_RATE}]'
     )
 
-def _pre_normalize(s):
-    s = sanitize_markdown(s)
+def _pre_normalize(s, spans=None):
+    s = product_names(sanitize_markdown(s), spans)
     s = s.replace('\n', ' ')
     s = re.sub(r'[ ]+', ' ', s).strip()
 
@@ -1635,7 +1635,8 @@ async def normalize_request_text(data, fallback_to_rule=False):
                 tracing.set_attributes(sp, {'normalizer.chars_out': len(s)})
                 return s
             else:
-                s = _pre_normalize(data.input)
+                spans = []        # product names spelled out here; the LLM must keep them
+                s = _pre_normalize(data.input, spans)
                 if LLM_NORMALIZER_SKIP_PLAIN and not needs_normalization(s):
                     # Plain words only: the LLM would hand this back unchanged, so give
                     # the caller what that reply would have become and save the ~0.55 s
@@ -1665,7 +1666,7 @@ async def normalize_request_text(data, fallback_to_rule=False):
                         'llm.timeout_s': OPENAI_TIMEOUT,
                         'llm.prompt_chars': len(prompt or ''),
                     }):
-                        s = await llm_normalize(s, prompt=prompt)
+                        s = await llm_normalize(s, prompt=prompt, keep=spans)
                     logging.info(f'out from llm normalizer: {s}'
                                  + (f' (prompt: {prompt!r})' if prompt else ''))
                     s = _post_normalize(s)

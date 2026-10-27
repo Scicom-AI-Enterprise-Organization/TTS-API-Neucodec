@@ -316,6 +316,41 @@ class TestNeedsNormalization:
         assert not needs_normalization(None)
 
 
+class TestKeepProductNames:
+    """A product name spelled out before the LLM must come back unchanged: gemma knows the
+    promotion and wrote "five point oh" back as Malay "lima perpuluhan sifar"."""
+
+    TEXT = 'Kekal bersama Unifi dengan promosi StaywithUnifi 5.0! Langganan dari RM129 sebulan.'
+
+    def spans(self):
+        from app.rules import product_names
+        spans = []
+        out = product_names(self.TEXT, spans)
+        return out, spans
+
+    def test_spans_are_what_was_written(self):
+        out, spans = self.spans()
+        assert spans == ['Stay with Unifi', 'Unifi five point oh']
+        assert all(sp in out for sp in spans)
+
+    def test_reply_that_changes_the_name_is_rejected(self):
+        out, spans = self.spans()
+        reply = ('Kekal bersama Unifi dengan promosi Stay with Unifi lima perpuluhan sifar, '
+                 'Langganan dari seratus dua puluh sembilan ringgit sebulan.')
+        assert rejected_reason(out, reply, keep=spans) == 'name changed'
+
+    def test_reply_that_keeps_it_passes(self):
+        out, spans = self.spans()
+        reply = ('Kekal bersama Unifi dengan promosi Stay with Unifi five point oh, '
+                 'Langganan dari seratus dua puluh sembilan ringgit sebulan.')
+        assert rejected_reason(out, reply, keep=spans) is None
+
+    def test_caller_prompt_decides(self):
+        out, spans = self.spans()
+        assert rejected_reason(out, 'promosi Stay with Unifi lima titik kosong, seratus dua puluh sembilan ringgit',
+                               prompt='baca nama produk dalam bahasa Melayu', keep=spans) is None
+
+
 class TestRejectedReason:
     @pytest.mark.parametrize('text,reply,reason', [
         ('750412105678. Did we get that right?', 'Did we get that right?', 'number dropped'),

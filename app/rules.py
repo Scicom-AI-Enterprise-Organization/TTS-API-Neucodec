@@ -2,6 +2,7 @@ import re
 import json
 
 from app.normalizer.regex import _expressions as _malay_expressions
+from app.spoken_normalizer.numbers import en_cardinal
 
 contractions = {
     "ain't": "is not",
@@ -169,6 +170,44 @@ def _stage_direction(m):
     if not before or not after or after[0] in _SENTENCE_PUNCT:
         return ''
     return ' ' if before[-1] in _SENTENCE_PUNCT else ', '
+
+
+# Product names, read as names before any normalizer sees them. A version number after a product
+# name ("StaywithUnifi 5.0") is part of the name, not a quantity: in a Malay sentence every
+# normalizer read it as a Malay decimal, "lima perpuluhan sifar" (the LLM) or "lima
+# perpuluhan kosong" (the rules). It is read in English
+# ("five point oh") whatever the sentence's language. Narrow on purpose: only after a known brand
+# or a word with an inner capital, and never before a unit or percent.
+_SPOKEN_AS = {
+    'StaywithUnifi': 'Stay with Unifi',      # glued words the voice runs into one
+}
+_SPOKEN_AS_RE = re.compile(r'(?<![A-Za-z0-9])(' + '|'.join(map(re.escape, _SPOKEN_AS)) + r')(?![A-Za-z0-9])')
+_VERSION_NAME = re.compile(
+    r'(?<![A-Za-z0-9])((?:Unifi|UniFi)|[A-Za-z]*[a-z][A-Z][A-Za-z]*)\s+(\d{1,2})\.(\d)'
+    r'(?![\d])(?![.,]\d)(?!\s*(?:%|[kKmMgGtT]?(?:B|b|bps)\b))')
+
+
+def _version_words(m):
+    frac = 'oh' if m.group(3) == '0' else en_cardinal(int(m.group(3)))
+    return f'{m.group(1)} {en_cardinal(int(m.group(2)))} point {frac}'
+
+
+def product_names(text: str, spans=None) -> str:
+    """`spans`, if a list, gets every phrase written here: the LLM normalizer must hand each
+    back unchanged (llm_normalizer.rejected_reason, `keep`). It knows the promotion and put
+    "five point oh" back into Malay, "lima perpuluhan sifar", 3 of 3 times."""
+    def spoken_as(m):
+        out = _SPOKEN_AS[m.group(1)]
+        if spans is not None:
+            spans.append(out)
+        return out
+
+    def version(m):
+        out = _version_words(m)
+        if spans is not None:
+            spans.append(out)
+        return out
+    return _VERSION_NAME.sub(version, _SPOKEN_AS_RE.sub(spoken_as, text))
 
 
 def sanitize_markdown(text: str) -> str:

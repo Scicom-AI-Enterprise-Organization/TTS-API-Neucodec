@@ -71,7 +71,13 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   right?" became "Did we get that right?") before any normalizer saw it. A request left with
   nothing to say (a chunk that was only a tool call) returns empty audio in the shape asked for
   and never reaches the LM (`tts_stream`): given a bare ".", the LM made up a phrase of its own
-  ("See ya!", up to 4.7 s) in 3 of 12 takes.
+  ("See ya!", up to 4.7 s) in 3 of 12 takes. `product_names()` (also in `rules.py`, called by
+  `_pre_normalize`, so every mode) reads a version number after a product name as part of the
+  name, in English: "StaywithUnifi 5.0" -> "Stay with Unifi five point oh". In a Malay sentence
+  every normalizer read it as a Malay decimal, "lima perpuluhan sifar" (the LLM) or "lima
+  perpuluhan kosong" (the rules). Narrow: only after a known brand or a word with an inner
+  capital, never before a unit or %; it changes none of the 497 truth-set inputs. Glued brand
+  words go through its `_SPOKEN_AS` table.
 - `app/llm_normalizer.py`, `app/prompt.py`: **LLM-based normalizer** (`mode: "llm"` on
   `/v1/audio/normalize` and TTS requests; default `mode: "rule"` is the pipeline above). Calls any
   OpenAI-compatible `/chat/completions` (`OPENAI_BASE_URL`/`OPENAI_API_KEY`/`OPENAI_MODEL_NAME`,
@@ -102,7 +108,10 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   text with no words of its own triggers it). Each leaves a mechanical trace, so `llm_normalize()`
   raises on it: the TTS path falls back to `app/spoken_normalizer`, `/v1/audio/normalize` returns
   502 with the reason. Chinese numerals pass when the text has Chinese characters or punctuation,
-  or when the caller sent a `prompt`; Tamil is not checked. Measured on gemma-4-31b (2026-10-27,
+  or when the caller sent a `prompt`; Tamil is not checked. A reply that changes a phrase
+  `product_names()` already spelled out is rejected too ("name changed", `keep=`): gemma knows
+  the promotion and turned "five point oh" back into "lima perpuluhan sifar" whenever the same
+  chunk also had something for it to normalize (3 of 3). Measured on gemma-4-31b (2026-10-27,
   harness in ucc_ai_research `evaluation/tts/prod-audit/llm_normalizer_ab.py`): 28 agent-shaped
   synthetic texts x 3 runs, 66/84 replies right as returned, 84/84 after check + fallback; on the
   497-sentence truth set it rejected 1 to 2 replies, each a real leftover digit. **Rewriting the
