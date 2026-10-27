@@ -1,6 +1,11 @@
 import os
 import logging
 
+# What this deployment serves, returned by GET /: set it to the commit the image was built from.
+# The Dockerfile bakes it in with `--build-arg VERSION=$(git rev-parse --short HEAD)`; a VERSION
+# set in the deployment overrides that.
+VERSION = os.environ.get('VERSION', '').strip()
+
 TTS_API = os.environ.get('TTS_API', 'http://tts-engine:9093')
 if '/v1/completions' not in TTS_API:
     TTS_API = TTS_API + '/v1/completions'

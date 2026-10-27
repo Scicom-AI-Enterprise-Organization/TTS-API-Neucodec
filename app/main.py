@@ -1692,6 +1692,12 @@ async def normalize_text(data: NormalizeRequest):
     return {'output': s, 'mode': data.mode}
 
 
+@app.get('/')
+async def root():
+    """Which build this is: VERSION (a commit sha), or "unknown" when the deployment did not set it."""
+    return {'version': VERSION or 'unknown'}
+
+
 @app.get('/v1/audio/speaker')
 async def speaker():
     return SPEAKERS

@@ -25,7 +25,8 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
 ## Key files
 
 - `app/main.py` is the whole serving app: `/v1/audio/speech` (TTS), `/v1/audio/vc` (voice conversion),
-  `/v1/audio/normalize`, `/v1/audio/speaker`. Holds the dynamic-batching + CUDA-graph decode pipeline.
+  `/v1/audio/normalize`, `/v1/audio/speaker`, and `GET /`, which returns `VERSION` (the commit sha a
+  deployment sets, or the Dockerfile's `--build-arg VERSION`) so prod can say what it is serving. Holds the dynamic-batching + CUDA-graph decode pipeline.
 - `app/env.py` holds all runtime config, read from environment / `.env`.
 - `app/interleave.py`: **interleaved generation, needs an interleave-trained LM** (`interleave_id` on `/v1/audio/speech`,
   aliases `request_id`/`context_id`, header `X-Interleave-Id`/`X-Context-Id`). Requests sharing

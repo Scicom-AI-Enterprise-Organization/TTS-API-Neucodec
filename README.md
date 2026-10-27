@@ -197,6 +197,7 @@ Copy [.env_example](.env_example) to `.env` and adjust as needed. See [app/env.p
 
 | Variable | Default | Description |
 |---|---|---|
+| `VERSION` | ` ` | What this deployment serves, returned by `GET /`: set it to the commit sha the image was built from. The Dockerfile bakes it in with `--build-arg VERSION=$(git rev-parse --short HEAD)`; the deployment's value wins |
 | `TTS_API` | `http://tts-engine:9093` | vLLM backend URL |
 | `TTS_API_KEY` | ` ` | Bearer token sent to the vLLM backend when set |
 | `LM_BACKEND` | `http` | Where speech tokens come from: `http` = the vLLM server at `TTS_API`; `inprocess` = load the LM inside this process (evaluation). See [LM backend](#4-lm-backend-external-vllm-or-in-process) |
@@ -489,6 +490,15 @@ SERVICE_NAME=tts-api
 check the tree without a backend.
 
 ## API Endpoints
+
+### `GET /`
+
+Which build is serving: `{"version": "<VERSION>"}`, or `"unknown"` when `VERSION` is not set.
+
+```bash
+curl localhost:9091/
+# {"version":"db747ef"}
+```
 
 ### `GET /v1/audio/speaker`
 

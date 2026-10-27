@@ -12,3 +12,9 @@ RUN pip install -r requirements.txt
 WORKDIR /app
 
 COPY app ./app
+
+# The commit this image is built from, returned by GET /:
+#   docker build --build-arg VERSION=$(git rev-parse --short HEAD) .
+# A VERSION set in the deployment overrides it.
+ARG VERSION=
+ENV VERSION=${VERSION}
