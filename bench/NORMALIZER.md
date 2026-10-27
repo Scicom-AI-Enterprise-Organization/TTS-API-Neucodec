@@ -37,7 +37,7 @@ to reproduce it:
    CER against the LLM text, per language and per category, and prints every disagreement.
 4. `bench/normalizer_api_agreement.py --url` runs the same comparison through a running app, so
    the pre/post cleanup (markdown, replace mappings, trailing period) is included.
-5. `tests/test_spoken_normalizer.py` has 1,726 tests: number words in all four languages, one
+5. `tests/test_spoken_normalizer.py` has 1,734 tests: number words in all four languages, one
    LLM-agreed example per category and language, the deliberate differences, and three
    corpus-wide properties: **no digit survives in any output**, plain text is byte-identical,
    and the output is a fixed point (`normalize(normalize(x)) == normalize(x)`).

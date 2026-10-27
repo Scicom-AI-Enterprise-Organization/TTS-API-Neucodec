@@ -492,6 +492,52 @@ class TestEdges:
         assert normalize('') == ''
 
 
+class TestAgentShapes:
+    """Shapes a voice agent sends that the rules used to leave for the LLM (or misread)."""
+
+    def test_line_speeds(self):
+        assert normalize('Unifi Home comes in 300Mbps, 1Gbps and 2Gbps.') == \
+            'Unifi Home comes in three hundred megabits per second, one gigabit per second and two gigabits per second.'
+        assert normalize('Pakej 1Gbps berharga RM299.') == \
+            'Pakej satu gigabit sesaat berharga dua ratus sembilan puluh sembilan ringgit.'
+        assert normalize('512kbps is slow.') == 'five hundred twelve kilobits per second is slow.'
+
+    def test_upper_case_g_is_a_network_not_grams(self):
+        assert normalize('We also offer Unifi Air 5G.') == 'We also offer Unifi Air five G.'
+        assert normalize('Akses 5G tanpa had.') == 'Akses lima G tanpa had.'
+        assert normalize('Add 500g of sugar.') == 'Add five hundred grams of sugar.'
+
+    def test_domain_without_scheme(self):
+        assert normalize('Use Live Chat at maya.unifi.com.my for help.') == \
+            'Use Live Chat at maya dot unifi dot com dot my for help.'
+        assert normalize('Check coverage at unifi.com.my/check.') == 'Check coverage at unifi dot com dot my slash check.'
+
+    def test_dictated_email(self):
+        assert normalize('Your email is home @ t m dot com dot my.') == 'Your email is home at t m dot com dot my.'
+        assert normalize('T S 1 8 @ y o p m a i l . c o m.') == 'T S one eight at y o p m a i l dot c o m.'
+
+    def test_address_slash_is_not_a_date_or_fraction(self):
+        assert normalize('We have 30, Jalan Tun Gajah, 7/1, Shah Alam.') == \
+            'We have thirty, Jalan Tun Gajah, seven slash one, Shah Alam.'
+        assert normalize('Jalan SS21/10, Damansara Utama.') == 'Jalan SS twenty-one slash ten, Damansara Utama.'
+        assert normalize('SS 21/1A, Damansara Utama.') == 'SS twenty-one slash one A, Damansara Utama.'
+        assert normalize('1 A J A L A N S S 2 5 / 3 4 2.') == 'one A J A L A N S S two five slash three four two.'
+        assert normalize('14, M 1 / 2, Sepang.') == 'fourteen, M one slash two, Sepang.'
+        # still dates and fractions without an address around them
+        assert normalize('Pay by 7/1 please.') == 'Pay by the seventh of January please.'
+        assert normalize('Mix 1/2 cup of flour.') == 'Mix one half cup of flour.'
+
+    def test_postcode_before_a_place_name(self):
+        assert normalize('Jalan SS2/10, 47300 Petaling Jaya, Selangor.') == \
+            'Jalan SS two slash ten, four seven three zero zero Petaling Jaya, Selangor.'
+        assert normalize('Over 50000 customers in Selangor use it.') == 'Over fifty thousand customers in Selangor use it.'
+
+    def test_word_slash_word(self):
+        assert normalize('Bayar dengan Kad Kredit/Debit.') == 'Bayar dengan Kad Kredit atau Debit.'
+        assert normalize('Choose the Malay/Mandarin line.') == 'Choose the Malay or Mandarin line.'
+        assert normalize('Use TCP/IP and/or UDP.') == 'Use TCP/IP and or UDP.'
+
+
 # --------------------------------------------------------------------------- corpus-wide properties
 @pytest.mark.parametrize('cid,lang,cat,text', CORPUS, ids=[c[0] for c in CORPUS])
 def test_every_digit_is_read(cid, lang, cat, text):

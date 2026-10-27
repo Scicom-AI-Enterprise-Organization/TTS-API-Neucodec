@@ -56,6 +56,11 @@ UNITS = {
     'tb': {'en': ('terabyte', 'terabytes'), 'ms': 'terabait', 'zh': 'TB', 'ta': 'டிபி'},
     'kb': {'en': ('kilobyte', 'kilobytes'), 'ms': 'kilobait', 'zh': 'KB', 'ta': 'கேபி'},
     'mbps': {'en': 'megabits per second', 'ms': 'megabit sesaat', 'zh': '兆比特每秒', 'ta': 'எம்பிபிஎஸ்'},
+    # TM's plan speeds ("1Gbps", "2Gbps"); without it the id rule read "two Gbps"
+    'gbps': {'en': ('gigabit per second', 'gigabits per second'), 'ms': 'gigabit sesaat', 'zh': '千兆比特每秒',
+             'ta': 'ஜிபிபிஎஸ்'},
+    'kbps': {'en': ('kilobit per second', 'kilobits per second'), 'ms': 'kilobit sesaat', 'zh': '千比特每秒',
+             'ta': 'கேபிபிஎஸ்'},
     'kwh': {'en': ('kilowatt hour', 'kilowatt hours'), 'ms': 'kilowatt jam', 'zh': '千瓦时', 'ta': 'கிலோவாட் மணி'},
     '°c': {'en': ('degree Celsius', 'degrees Celsius'), 'ms': 'darjah Celsius', 'zh': '摄氏度', 'ta': 'டிகிரி செல்சியஸ்'},
     '°f': {'en': ('degree Fahrenheit', 'degrees Fahrenheit'), 'ms': 'darjah Fahrenheit', 'zh': '华氏度', 'ta': 'டிகிரி பாரன்ஹீட்'},
@@ -84,7 +89,7 @@ _UNIT_ALIASES = {'kgs': 'kg', 'kilo': 'kg', 'kilos': 'kg', '℃': '°c', '℉': 
                  'hrs': 'hr', 'mins': 'min', 'secs': 'sec', 'yrs': 'yr', 'mths': 'mth', 'lbs': 'lb',
                  'sqft': 'sqft', 'sq ft': 'sqft', 'sq.ft': 'sqft', 'sq. ft': 'sqft', 'sq.ft.': 'sqft',
                  'sqm': 'sqm', 'sq m': 'sqm', 'sq.m': 'sqm'}
-_UNIT_ALT = (r'°\s?[CcFf]|℃|℉|°|kgs|kg|mg|g|km|cm|mm|m|ml|ltr|litre|l|gb|mbps|mb|tb|kb|kwh|khz|mhz|ghz|hz|'
+_UNIT_ALT = (r'°\s?[CcFf]|℃|℉|°|kgs|kg|mg|g|km|cm|mm|m|ml|ltr|litre|l|gbps|gb|mbps|mb|tb|kbps|kb|kwh|khz|mhz|ghz|hz|'
              r'hrs|hr|mins|min|secs|sec|ms|yrs|yr|mths|mth|w|v|sq\.?\s?ft\.?|sqft|sq\.?\s?m|sqm|ft|mph|lbs|lb|oz')
 
 # "/unit" after a quantity: RM5/kg, 110 km/h, 8 tablets/day, RM38/mth
@@ -280,6 +285,23 @@ def _url(m, lang):
     out = re.sub(r'\d+', lambda mm: ' ' + _digits(mm.group(0), lang) + ' ', out)
     out = re.sub(r'\s+', ' ', out).strip()
     return (f' {out} ' if lang == 'zh' else out) + trail
+
+
+# a domain with no scheme or www: "maya.unifi.com.my", "unifi.com.my/check" (lowercase TLD only)
+_TLD = r'(?:com|net|org|gov|edu|my|io|asia|info|biz)'
+DOMAIN_RE = re.compile(r'(?<![A-Za-z0-9_@./-])((?:[A-Za-z0-9-]+\.)+' + _TLD + r'(?![A-Za-z0-9-])(?:/[A-Za-z0-9_/-]*)?)')
+# "@" on its own and " . " between spelled letters, as an agent dictates an email back:
+# "T S 1 8 @ y o p m a i l . c o m"
+AT_RE = re.compile(r'(?<=\s)@(?=\s)')
+SPELLED_DOT_RE = re.compile(r'(?<=(?<![A-Za-z])[A-Za-z]) \. (?=[A-Za-z](?![A-Za-z]))')
+
+
+def _at(m, lang):
+    return V[lang]['at']
+
+
+def _spelled_dot(m, lang):
+    return f" {V[lang]['dot']} "
 
 
 # a minus sign glued to a number / amount: -5°C, -RM250, -3.5% (a dash with a space after it is a range)
@@ -651,6 +673,8 @@ def unit_words(whole, frac, unit, lang, before=''):
 
 
 def _unit(m, lang):
+    if m.group(3) == 'G' and not m.group(2):            # 5G, Unifi Air 5G: a network, not grams
+        return _join([_card(int(m.group(1).replace(',', '')), lang), 'G'], lang)
     return unit_words(m.group(1), m.group(2), m.group(3), lang, m.string[:m.start()])
 
 
@@ -828,12 +852,24 @@ def _fraction(a, b, lang):
     return f'{N.ta_attach(_card(b, "ta"), "இல்")} {_card(a, "ta")}'
 
 
+# a road name earlier in the same sentence, past the commas _ctx_before stops at:
+# "30, Jalan Tun Gajah, 7/1, Shah Alam" is a house number, not the seventh of January
+_ROAD_BEFORE = re.compile(r'(?<![A-Za-z])(?:jalan|jln|lorong|lrg|persiaran|taman|tmn|seksyen)(?![A-Za-z])[^.!?;]{0,40}$',
+                          re.IGNORECASE)
+
+
 def _slash(m, lang):
     a, b = int(m.group(1)), int(m.group(2))
     before = m.string[:m.start()]
     if (a, b) == (24, 7):
         return _TWENTY_FOUR_SEVEN[lang]
-    if _ctx_before(before, _ROAD_CTX, tokens=2):
+    # one digit at a time on either side ("S S 2 5 / 3 4 2") or a lone capital before it
+    # ("M 1 / 2"): a code being dictated, read as written
+    if len(m.group(1)) == len(m.group(2)) == 1 and (
+            re.search(r'(?:(?<![\d,.])\d|(?<![A-Za-z])[B-HJ-Z]) $', before) or re.match(r' \d(?!\d)', m.string[m.end():])):
+        return _join([_digits(m.group(1), lang), V[lang]['slash'], _digits(m.group(2), lang)], lang)
+    if _ctx_before(before, _ROAD_CTX, tokens=2) or (
+            _ROAD_BEFORE.search(before) and not _ctx_before(before, _DATE_CUE, tokens=0)):
         return _join([_card(a, lang), V[lang]['slash'], _card(b, lang)], lang)
     is_date = 1 <= b <= 12 and 1 <= a <= 31
     if a < b and a >= 1 and not (is_date and _ctx_before(before, _DATE_CUE, tokens=0)):
@@ -841,6 +877,32 @@ def _slash(m, lang):
     if is_date:
         return _date_words(a, b, None, lang)
     return _join([_card(a, lang), _card(b, lang)], lang)
+
+
+# a road code: "Jalan SS21/10", "SS 21/1A", "USJ 2/3". The id rule would read "SS twenty one" and
+# leave "/ten" for the LLM.
+CODE_SLASH_RE = re.compile(r'(?<![A-Za-z0-9_./-])(?!(?:RM|MYR|USD|SGD|A|I)\s?\d)([A-Z]{1,4}) ?(\d{1,4})([A-Z]?)'
+                           r'\s?/\s?(\d{1,4})([A-Z]?)(?![A-Za-z0-9_/])(?!\.\d)')
+
+
+def _code_slash(m, lang):
+    head, a, a_tail, b, b_tail = m.groups()
+    return _join([head, _card(int(a), lang), a_tail, V[lang]['slash'], _card(int(b), lang), b_tail], lang)
+
+
+# "Kredit/Debit", "Malay/Mandarin": the LLM reads the slash as "or". Two acronyms (TCP/IP) are
+# left to it.
+WORD_SLASH_RE = re.compile(r'(?<![A-Za-z0-9_/.:@-])([A-Za-z]{2,})/([A-Za-z]{2,})(?![A-Za-z0-9_/-])(?!\.\w)')
+_OR = {'en': 'or', 'ms': 'atau', 'zh': '或', 'ta': 'அல்லது'}
+
+
+def _word_slash(m, lang):
+    a, b = m.groups()
+    if a.isupper() and b.isupper():
+        return m.group(0)
+    if (a.lower(), b.lower()) in (('and', 'or'), ('dan', 'atau')):
+        return f'{a} {b}'
+    return _join([a, _OR[lang], b], lang)
 
 
 RANGE_RE = re.compile(r'(?<![A-Za-z0-9_.,/-])(\d{1,4})\s?[-–—]\s?(\d{1,4})(?![A-Za-z0-9_,/-])(?!\.\d)')
@@ -893,6 +955,10 @@ def _year(m, lang):
     return N.year(int(m.group(1)), lang)
 
 
+# a postcode needs an address around it: five digits before a place name read digit by digit
+_ADDRESS = re.compile(r'(?<![A-Za-z])(?:jalan|jln|lorong|lrg|taman|tmn|persiaran|seksyen|kampung|selangor|johor|kedah|'
+                      r'kelantan|melaka|negeri sembilan|pahang|perak|perlis|pulau pinang|penang|sabah|sarawak|'
+                      r'terengganu|kuala lumpur|putrajaya|labuan)(?![A-Za-z])', re.IGNORECASE)
 NUMBER_RE = re.compile(r'(?<![A-Za-z0-9_.])(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d+))?(?![A-Za-z0-9_])(?!,\d)')
 
 
@@ -909,8 +975,10 @@ def _number(m, lang):
     ctx = _ctx_before(before, _DIGIT_CONTEXT[lang])
     caps = re.search(r'(?<![A-Za-z])[A-Z]{2,}\s+$', before)
     round_thousand = re.fullmatch(r'[1-9]\d?000', digits)           # "the code is 1000" stays a cardinal
+    postcode = len(digits) == 5 and re.match(r',?\s+[A-Z][a-z]', after) and _ADDRESS.search(m.string)
     if (',' not in whole) and (
             (caps and len(digits) >= 3)                                 # HTTP 404
+            or postcode                                                 # 47300 Petaling Jaya
             or (len(digits) > 1 and digits[0] == '0')                   # 0457
             or (len(digits) >= 7 and not digits.endswith('000'))        # phone-like run (1000000 is a million)
             or (ctx and not round_thousand
@@ -968,15 +1036,18 @@ _ABBR_COMPILED = {lang: [(re.compile(p), r) for p, r in rules] for lang, rules i
 
 # --------------------------------------------------------------------------- pipeline
 PIPELINE = [
-    (EMAIL_RE, _email), (URL_RE, _url), (NEG_RE, _neg), (IC_RE, _ic), (DATE_NUM_RE, _date_numeric),
+    (EMAIL_RE, _email), (URL_RE, _url), (DOMAIN_RE, _url), (AT_RE, _at), (SPELLED_DOT_RE, _spelled_dot),
+    (NEG_RE, _neg), (IC_RE, _ic), (DATE_NUM_RE, _date_numeric),
     (DATE_DMY_RE, _date_dmy), (DATE_MDY_RE, _date_mdy), (PHONE_RE, _phone), (MIL_RE, _military),
     (MS_TIME_RANGE_RE, _ms_time_range), (TIME_RANGE_RE, _time_range), (TIME24_RANGE_RE, _time24_range),
     (TIME_AMPM_RE, _time_ampm), (TIME_24_RE, _time_24), (TIME_DOT_RE, _time_dot), (VERSION_RE, _version),
     (RANGE_PCT_RE, _range_pct), (RANGE_MONEY_RE, _range_money), (RANGE_UNIT_RE, _range_unit),
     (MONEY_RE, _money), (PERCENT_RE, _percent), (UNIT_RE, _unit), (PER_RE, _per),
     (ORD_EN_RE, _ord_en), (ORD_MS_RE, _ord_ms), (ORD_MS_SPACE_RE, _ord_ms_space), (ORD_ZH_RE, _ord_zh), (ORD_TA_RE, _ord_ta),
-    (DECADE_RE, _decade), (HYPHEN_RE, _hyphen), (K_RE, _k), (X_RE, _x), (TA_ONE_PERSON_RE, _ta_one_person), (GROUPS_RE, _groups), (SLASH_RE, _slash),
+    (DECADE_RE, _decade), (HYPHEN_RE, _hyphen), (K_RE, _k), (X_RE, _x), (TA_ONE_PERSON_RE, _ta_one_person), (GROUPS_RE, _groups),
+    (CODE_SLASH_RE, _code_slash), (SLASH_RE, _slash),
     (RANGE_RE, _range), (HASH_RE, _hash), (ALNUM_RE, _alnum), (YEAR_RE, _year), (NUMBER_RE, _number),
+    (WORD_SLASH_RE, _word_slash),
 ]
 
 
@@ -990,7 +1061,7 @@ def normalize(text, lang=None):
 
     In a Malay/English code-switched sentence (markers of both present and no explicit
     lang) every number picks its own language from its neighbours (lang.local_lang)."""
-    if not text or not re.search(r'\d|[@#%°℃℉]|www\.|https?://', text):
+    if not text or not re.search(r'\d|[@#%°℃℉/]|www\.|https?://|\w\.' + _TLD + r'(?![A-Za-z0-9-])', text):
         return _abbreviations(text or '', lang or detect_lang(text or ''))
     base = lang or detect_lang(text)
     pick = None

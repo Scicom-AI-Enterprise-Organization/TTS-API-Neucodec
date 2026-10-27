@@ -7,6 +7,8 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
+import pytest
+
 from app.rules import sanitize_markdown
 
 
@@ -402,3 +404,44 @@ class TestEdgeCases:
         result = sanitize_markdown(text)
         assert '你好' in result
         assert '**' not in result
+
+
+class TestAgentOutput:
+    """What a voice agent's LLM leaves in its reply that must not be spoken."""
+
+    @pytest.mark.parametrize('text,expected', [
+        ('<call:transfer_to_agent{destination:<|"|>billing<|"|>}/>', ''),
+        ('Let me transfer you. <call:transfer_to_agent{destination:<|"|>billing<|"|>}<tool_call|>',
+         'Let me transfer you. '),
+        ('<|tool_call>call:end_call{}<tool_call|>', ''),
+        ('<call:transfer_to_agent destination="billing"/> Okay.', ' Okay.'),
+        ('<tool_call>handle_enquiry(case_content="Asking for the balance.", outcome="general")</tool_call>', ''),
+        ('handle_enquiry(case_content="Asking for the balance.", outcome="general")', ''),
+    ])
+    def test_tool_calls_are_dropped(self, text, expected):
+        assert sanitize_markdown(text) == expected
+
+    def test_tool_call_split_across_chunks(self):
+        # the agent cuts its reply into sentences, so a call can arrive in pieces
+        assert sanitize_markdown('<|tool_call>call:handle_enquiry{case_content:<|"|>Asking about a payment of RM 120.50') == ''
+        assert sanitize_markdown('Paid on 2026-07-25.<|"|>,outcome:<|"|>general<|"|>}<tool_call|> Thank you.') == ' Thank you.'
+        assert sanitize_markdown('Account details provided.<|"|>payments<|"|>payment_not_reflected') == ''
+
+    @pytest.mark.parametrize('text,expected', [
+        ('Your number is 6711 [pause] 4051 [pause] 22.', 'Your number is 6711, 4051, 22.'),
+        ('We have 6711 [pause]. Did we get that right?', 'We have 6711. Did we get that right?'),
+        ('[pause] Hello there.', 'Hello there.'),
+        ('Thank you. [short pause] Your reference is 12.', 'Thank you. Your reference is 12.'),
+        ('Use the [Hesitation] tag.', 'Use the [Hesitation] tag.'),
+    ])
+    def test_stage_directions(self, text, expected):
+        assert sanitize_markdown(text) == expected
+
+    @pytest.mark.parametrize('text', [
+        '750412105678. Did we get that right?',
+        '0123456789. Betul ya?',
+        '2026. A good year?',
+    ])
+    def test_a_long_number_at_the_start_is_not_a_list_marker(self, text):
+        assert sanitize_markdown(text) == text
+

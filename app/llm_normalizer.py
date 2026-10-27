@@ -129,6 +129,71 @@ def has_unspoken(text):
     return bool(_UNSPOKEN.search(text or ''))
 
 
+# ---------------------------------------------------------------------------
+# Replies that must not be spoken
+# ---------------------------------------------------------------------------
+# The LLM sometimes hands back a reply that reads well and is wrong in a way no listener can
+# recover from: a number dropped, the digits of a read-back dropped or left as digits ("D 3 6 7 6"
+# came back as written), or English text read with Chinese numerals ("8 8 0 1" -> "八 八 零 一"),
+# which the TTS then speaks in Mandarin. Each leaves a trace that needs no second model to see. rejected_reason() names it; llm_normalize() raises
+# on it, so the TTS path falls back to the spoken rules, which read every digit.
+_HAN = '㐀-䶿一-鿿豈-﫿'
+_CJK_TEXT = re.compile(f'[{_HAN}　-〿！-？]')
+_HAN_CHAR = re.compile(f'[{_HAN}]')
+_DIGIT_WORD = re.compile(
+    r'(?i)(?<![a-z])(?:zero|oh|one|two|three|four|five|six|seven|eight|nine|double|triple|'
+    r'kosong|sifar|satu|dua|tiga|empat|lima|enam|tujuh|lapan|sembilan)(?![a-z])|[零〇一二两三四五六七八九]')
+_NUMBER_WORD = re.compile(
+    r'(?i)(?<![a-z])(?:zero|oh|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|'
+    r'(?:thir|four|fif|six|seven|eigh|nine)teen|(?:twen|thir|for|fif|six|seven|eigh|nine)ty|'
+    r'hundred|thousand|million|billion|half|quarter|first|second|third|'
+    r'(?:four|fif|six|seven|eigh|nin|ten|eleven|twelf|(?:\w+teen)|(?:\w+tie)|hundred|thousand)th|'
+    r'kosong|sifar|satu|dua|tiga|empat|lima|enam|tujuh|lapan|sembilan|sepuluh|sebelas|belas|'
+    r'puluh|ratus|ribu|juta|bilion|seratus|seribu|sejuta|separuh|pertama|'
+    r'ke(?:dua|tiga|empat|lima|enam|tujuh|lapan|sembilan|sepuluh|sebelas))(?![a-z])'
+    r'|[零〇一二两三四五六七八九十百千万亿半]')
+# Digits that are read one at a time: a 7+ digit run (not a round amount), single digits
+# spaced out, or dash-joined groups of 9+ digits (IC, phone; a dashed date has 8).
+_READ_BACK = re.compile(r'(?<![\d,.])(?:\d(?: \d(?!\d)){6,}|\d+(?:-\d+)+|\d{7,})(?![\d,.]\d)')
+
+
+def _read_back_digits(text):
+    need = 0
+    for m in _READ_BACK.finditer(text):
+        run = re.sub(r'\D', '', m.group(0))
+        if '-' in m.group(0) and len(run) < 9:
+            continue
+        if ' ' not in m.group(0) and '-' not in m.group(0) and run.endswith('000'):
+            continue
+        need += len(run)
+    return need
+
+
+def _spoken_digits(out):
+    words = [w.lower() for w in _DIGIT_WORD.findall(out)]
+    return len(words) + words.count('triple')       # "double eight" is two words already
+
+
+def rejected_reason(text, normalized, prompt=None):
+    """Why the LLM's `normalized` reply to `text` must not be spoken, or None if it may.
+
+    Skipped for Tamil (no digit-word list here). With a caller `prompt` the Chinese and
+    leftover-digit checks are off, since a prompt may ask for exactly that."""
+    if not re.search(r'\d', text) or re.search('[஀-௿]', text):
+        return None
+    if not re.search(r'\d', normalized) and not _NUMBER_WORD.search(normalized):
+        return 'number dropped'
+    if _spoken_digits(normalized) + len(re.findall(r'\d', normalized)) < _read_back_digits(text):
+        return 'read-back digits dropped'
+    if prompt:
+        return None
+    if re.search(r'\d', normalized):
+        return 'digits left'
+    if _HAN_CHAR.search(normalized) and not _CJK_TEXT.search(text):
+        return 'Chinese numerals in non-Chinese text'
+    return None
+
+
 async def llm_normalize(text, base_url=None, api_key=None, model=None, timeout=None,
                         prompt=None):
     """Normalize `text` via the OpenAI-compatible endpoint, with the caller's `prompt`
@@ -187,4 +252,7 @@ async def llm_normalize(text, base_url=None, api_key=None, model=None, timeout=N
     normalized = parse_normalized(content)
     if normalized is None:
         raise LLMNormalizerError(f'unusable reply from model: {content[:500]!r}')
+    reason = rejected_reason(text, normalized, prompt)
+    if reason:
+        raise LLMNormalizerError(f'rejected reply ({reason}): {normalized[:500]!r}')
     return normalized

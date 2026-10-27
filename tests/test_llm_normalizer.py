@@ -27,6 +27,7 @@ from app.llm_normalizer import (
     parse_normalized,
     llm_normalize,
     needs_normalization,
+    rejected_reason,
     LLMNormalizerError,
     NormalizerMode,
 )
@@ -169,6 +170,7 @@ class TestLLMNormalize:
         assert out == 'lima puluh ringgit'
 
     def test_request_payload(self, fake_server):
+        FakeOpenAI.reply_content = '{"normalized": "fifty ringgit"}'
         run(llm_normalize('RM50', base_url=fake_server, api_key='secret', model='my-model'))
         (req,) = FakeOpenAI.requests
         assert req['path'] == '/v1/chat/completions'
@@ -181,6 +183,7 @@ class TestLLMNormalize:
         assert body['messages'][0] == {'role': 'system', 'content': SYSTEM_PROMPT}
 
     def test_prompt_sent(self, fake_server):
+        FakeOpenAI.reply_content = '{"normalized": "fifty ringgit"}'
         run(llm_normalize('RM50', base_url=fake_server, api_key='k', model='m',
                           prompt='normalize this in English'))
         msgs = FakeOpenAI.requests[0]['body']['messages']
@@ -221,6 +224,22 @@ class TestLLMNormalize:
         FakeOpenAI.reply_content = 'lima puluh ringgit'
         out = run(llm_normalize('RM50', base_url=fake_server, api_key='k', model='m'))
         assert out == 'lima puluh ringgit'
+
+    def test_reply_that_drops_the_number_raises(self, fake_server):
+        FakeOpenAI.reply_content = '{"normalized": "Did we get that right?"}'
+        with pytest.raises(LLMNormalizerError, match='number dropped'):
+            run(llm_normalize('750412105678. Did we get that right?', base_url=fake_server, api_key='k', model='m'))
+
+    def test_chinese_numerals_for_english_text_raise(self, fake_server):
+        FakeOpenAI.reply_content = '{"normalized": "八 八 零 一 二 三 四 五"}'
+        with pytest.raises(LLMNormalizerError, match='Chinese'):
+            run(llm_normalize('8 8 0 1 2 3 4 5', base_url=fake_server, api_key='k', model='m'))
+
+    def test_prompt_may_ask_for_chinese_numerals(self, fake_server):
+        FakeOpenAI.reply_content = '{"normalized": "一五零零"}'
+        out = run(llm_normalize('1500', base_url=fake_server, api_key='k', model='m',
+                                prompt='please spell one by one in zh'))
+        assert out == '一五零零'
 
     def test_unconfigured_raises(self):
         with pytest.raises(LLMNormalizerError, match='not configured'):
@@ -295,6 +314,40 @@ class TestNeedsNormalization:
     def test_empty(self):
         assert not needs_normalization('')
         assert not needs_normalization(None)
+
+
+class TestRejectedReason:
+    @pytest.mark.parametrize('text,reply,reason', [
+        ('750412105678. Did we get that right?', 'Did we get that right?', 'number dropped'),
+        ('Is 0123456789 the number on file with us?', 'Is the number on file with us?', 'number dropped'),
+        ('Your IC is 750412-10-5678, correct?', 'Your IC is seven five zero four one two, correct?',
+         'read-back digits dropped'),
+        ('6 4 0 9 2 3 0 8 7 7 6 6.', 'six four zero nine two three.', 'read-back digits dropped'),
+        ('D 3 6 7 6 T S 1 5.', 'D 3 6 7 6 T S one five.', 'digits left'),
+        ('The 1Gbps plan.', 'The 1Gbps plan.', 'digits left'),
+        ('8 8 0 1 2 3 4 5', '八 八 零 一 二 三 四 五', 'Chinese numerals in non-Chinese text'),
+        ('A 5 5 2 0 9 1 3.', 'A 五 五 二 零 九 一 三.', 'Chinese numerals in non-Chinese text'),
+    ])
+    def test_rejected(self, text, reply, reason):
+        assert rejected_reason(text, reply) == reason
+
+    @pytest.mark.parametrize('text,reply', [
+        ('750412105678. Did we get that right?',
+         'seven five zero four one two one zero five six seven eight. Did we get that right?'),
+        ('Call 012-3456789 now.', 'Call zero one double two three four five six seven eight nine now.'),
+        ('Your IC is 750412-10-5678.', 'Your IC is seven five zero four one two, one zero, five six seven eight.'),
+        ('Pay before 2026-07-25.', 'Pay before the twenty-fifth of July twenty twenty-six.'),
+        ('About 1000000 people.', 'About one million people.'),
+        ('You are 3rd in the queue.', 'You are third in the queue.'),
+        ('Anda yang ke-3.', 'Anda yang ketiga.'),
+        ('总共RM1,250.50', '总共一千二百五十令吉五十仙'),
+        ('D 3 7 1 5 H O S P 1 6。', 'D 三 七 一 五 H O S P 一 六。'),     # Chinese punctuation: a Chinese call
+        ('Kami buka 24/7.', 'Kami buka dua puluh empat jam tujuh hari seminggu.'),
+        ('2024ல் நடந்தது', '2024ல் நடந்தது'),                                  # Tamil is not checked
+        ('No number here.', 'No number here.'),
+    ])
+    def test_accepted(self, text, reply):
+        assert rejected_reason(text, reply) is None
 
 
 LIVE_READY = all(os.environ.get(k) for k in ('OPENAI_BASE_URL', 'OPENAI_API_KEY', 'OPENAI_MODEL_NAME'))

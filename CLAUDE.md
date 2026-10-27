@@ -62,6 +62,13 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   is bit-identical regardless of chunking, which the tests rely on; keep it that way.
 - `app/neucodec/`: **vendored** NeuCodec (`from app.neucodec import NeuCodec`; *not* the pip package).
 - `app/normalizer/`, `app/rules.py`: Malaysian/multilingual text normalization + markdown sanitization.
+  `sanitize_markdown()` runs before every normalizer mode. It also drops tool calls an agent's LLM
+  wrote as text (gemma `<|tool_call>call:x{...}<tool_call|>`, `<call:x{...}/>`, Hermes
+  `<tool_call>...</tool_call>`, python `x_y(key="v")`). An agent splits its reply into sentences, so
+  a call cut across two requests is dropped to the chunk edge. It maps `[pause]`-style stage
+  directions to a comma; other bracketed tags pass. Its ordered-list rule takes only 1 to 2 digit
+  markers: `^\d+\.\s` deleted a read-back's leading number ("880101145678. Did we get that
+  right?" became "Did we get that right?") before any normalizer saw it.
 - `app/llm_normalizer.py`, `app/prompt.py`: **LLM-based normalizer** (`mode: "llm"` on
   `/v1/audio/normalize` and TTS requests; default `mode: "rule"` is the pipeline above). Calls any
   OpenAI-compatible `/chat/completions` (`OPENAI_BASE_URL`/`OPENAI_API_KEY`/`OPENAI_MODEL_NAME`,
@@ -86,20 +93,38 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   pre-normalized text has no digit, symbol, ALL-CAPS/dotted token or known abbreviation; the
   output is identical (51/51 sentences vs the live LLM, `bench/normalizer_gate_eval.py`). Rerun
   it after touching the gate or the prompt. Conservative: anything doubtful still goes to the LLM.
+  **Reply check (`rejected_reason()`):** a reply can read well and still be wrong in a way no
+  listener recovers from: a number dropped, a read-back's digits dropped or left as digits, or
+  English/Malay text given Chinese numerals (`8 8 0 1` -> `八 八 零 一`, then spoken in Mandarin;
+  text with no words of its own triggers it). Each leaves a mechanical trace, so `llm_normalize()`
+  raises on it: the TTS path falls back to `app/spoken_normalizer`, `/v1/audio/normalize` returns
+  502 with the reason. Chinese numerals pass when the text has Chinese characters or punctuation,
+  or when the caller sent a `prompt`; Tamil is not checked. Measured on gemma-4-31b (2026-10-27,
+  harness in ucc_ai_research `evaluation/tts/prod-audit/llm_normalizer_ab.py`): 28 agent-shaped
+  synthetic texts x 3 runs, 66/84 replies right as returned, 84/84 after check + fallback; on the
+  497-sentence truth set it rejected 1 to 2 replies, each a real leftover digit. **Rewriting the
+  prompt for these shapes was tried and dropped:** 78/84 raw, but truth agreement fell to 394/497
+  against a 403 to 411 run-to-run band (the same prompt twice changes 35 replies), with Tamil and
+  Malay sentences drifting into English. A code check also works unchanged on a fine-tuned
+  production model nobody can A/B a prompt on.
 - `app/spoken_normalizer/`: **rule-based replica of the LLM normalizer** (`mode: "spoken"`), pure Python,
   importable anywhere: `numbers.py` (cardinals/ordinals/years/digits for en, ms, zh, ta; Tamil with sandhi,
   lakhs below 10⁷, `ta_attach()` glues case suffixes: 2024ல் → …நான்கில்), `lang.py` (script → zh/ta;
   Malay-vs-English by marker words per sentence, and per number in code-switched sentences: distance-weighted
-  neighbour vote + sentence prior), `core.py` (ordered regex handlers: email, url, negative sign, IC, numeric
+  neighbour vote + sentence prior), `core.py` (ordered regex handlers: email, url, bare domain
+  (`maya.unifi.com.my`), a lone `@` and spelled ` . `, negative sign, IC, numeric
   dates, month-name dates, phone, military time, Malay period ranges, time ranges, times, dotted times with a
-  cue, versions, percent/money/unit ranges, money, percent, units, `/unit`, ordinals, decades, hyphenated
-  compounds, `10k`/`2x`, digit groups, fractions & slashes & d/m dates, ranges & scores, `#N`, alphanumeric
-  ids, years, plain numbers, abbreviations). Built against the LLM's own outputs (`bench/normalizer_corpus.py`
+  cue, versions, percent/money/unit ranges, money, percent, units (incl. `Gbps`/`kbps`; `5G` is a network,
+  not grams), `/unit`, ordinals, decades, hyphenated compounds, `10k`/`2x`, digit groups, road codes
+  (`SS21/10`), fractions & slashes & d/m dates (a slash after a road name or inside dictated digits is
+  "slash"), ranges & scores, `#N`, alphanumeric ids, years, plain numbers (a 5-digit postcode before a place
+  name in an address is digits), `Kredit/Debit` -> "atau"/"or", abbreviations). These are the fallback
+  when the LLM fails or its reply is rejected. Built against the LLM's own outputs (`bench/normalizer_corpus.py`
   → `bench/normalizer_truth.py` → `bench/results/normalizer_truth.jsonl`, 497 sentences: 300 everyday +
   197 harder cases added 2026-09-04) and scored by `bench/normalizer_agreement.py`: 82% verbatim agreement
   (en 89 / ms 87 / zh 88 / ta 67 / code-switch 59; the original 300 still 85%). Of the 88 residual diffs, 28
   are LLM errors (it returned 8 Tamil sentences with digits in them), 50 the LLM contradicting itself, 10
-  code-switch hybrids; every digit is read in all 497. Full write-up in `bench/NORMALIZER.md`, 1,726 tests,
+  code-switch hybrids; every digit is read in all 497. Full write-up in `bench/NORMALIZER.md`, 1,734 tests,
   ~45 µs. Also the fallback for `mode=llm`, and with `LLM_NORMALIZER_RULE_FIRST=true` the LLM is only
   called for what the rules leave unspeakable. Regex gotchas that each cost a whole language or category:
   Python's `\w`/`\b` treat CJK and Tamil letters as word characters, so digit boundaries must be ASCII
@@ -402,7 +427,7 @@ uv run --with aiohttp python bench/ttfb_report.py --url http://127.0.0.1:9091 --
 python bench/lm_probe.py --gates 35,60,85,110          # vLLM alone: prefill, tok/s, arrival of the N-th token (source .env first)
 python bench/window_ab.py --url ... --configs 1.5:0.2,0.75:0.2   # temp-0 streamed vs one-shot decode: envelope, clicks (+ --save-dir, then bench/cer_wavs.py)
 PYTHONPATH=. python bench/normalizer_gate_eval.py --old-url ... --new-url ...   # LLM-skip gate: outputs must be identical
-uv run --with pytest pytest tests/test_spoken_normalizer.py -q   # rule normalizer (1,726 tests, no deps)
+uv run --with pytest pytest tests/test_spoken_normalizer.py -q   # rule normalizer (1,734 tests, no deps)
 PYTHONPATH=. python bench/normalizer_agreement.py               # rule vs LLM ground truth, per language/category
 uv run --with fasttext-wheel --with "numpy<2" --with huggingface_hub --with aiohttp python bench/langid_compare.py --llm   # marker words vs fastText vs LLM language detection (results in bench/NORMALIZER.md)
 set -a; source .env; set +a; uv run --with aiohttp python bench/normalizer_truth.py   # extend the ground truth (new corpus ids only)

@@ -468,7 +468,10 @@ selected by `mode`:
   with a multilingual few-shot prompt ([app/prompt.py](app/prompt.py)). The reply is constrained to
   `{"normalized": "..."}` via `response_format` json_schema (vLLM guided decoding), so the model can
   only return the normalized text. Returns `400` if `OPENAI_*` is not configured, `502` if the LLM
-  call fails. `normalize_malaysian` is ignored in this mode.
+  call fails or its reply is rejected: a number dropped, a read-back's digits dropped or left as
+  digits, or Chinese numerals for text with no Chinese in it (`rejected_reason()` in
+  [app/llm_normalizer.py](app/llm_normalizer.py)). A TTS request speaks the `spoken` rules'
+  reading instead. `normalize_malaysian` is ignored in this mode.
 
 **Parameters:**
 
@@ -539,6 +542,9 @@ Every output below is verbatim from the live normalizer (gemma-4-31b, temperatur
 | `my account number is 1234234` | please spell one by one in malay | my account number is satu dua tiga empat dua tiga empat | my account number is one two three four two three four |
 
 The two `50450` rows: a language alone is not enough, the prompt has to say what the number is.
+Since 2026-10-27 the Chinese *without prompt* replies to text with no Chinese in it (`五十令吉`,
+`一千五百`, `一二三四二三四`) are rejected: `/v1/audio/normalize` returns 502, and a TTS request
+speaks the `spoken` rules' reading (`fifty ringgit`).
 
 **Complex sentences**
 

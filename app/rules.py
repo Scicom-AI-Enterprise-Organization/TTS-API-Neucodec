@@ -125,8 +125,56 @@ def apply_pronunciation_replacements(text):
         logging.error(f"Error applying pronunciation replacements: {e}")
         return text
 
+# Tool calls an agent's LLM wrote into its reply as text: gemma's
+# `<|tool_call>call:name{key:<|"|>value<|"|>}<tool_call|>`, `<call:name{...}/>`, and the python
+# shape `name_with_underscores(key="value")`. The HTML-tag rule in sanitize_markdown drops the
+# tags and keeps what is between them, which the voice then reads out: "call colon transfer
+# underscore to...". The agent splits a reply into sentences before it reaches us, so a call
+# can arrive cut in two: an opening with no close loses everything after it, a close with no
+# opening everything before it, and a chunk holding only gemma's quote token is the middle of
+# a call. `<tool_call>...</tool_call>` is the same in the Hermes/Qwen shape.
+_TOOL_MARK = re.compile(r'<\|tool_call>|<tool_call\|>|<\|"\|>|</?call:|</?tool_call>')
+_TOOL_OPEN = re.compile(r'<\|tool_call>|<call:|<tool_call>')
+_TOOL_CLOSE = re.compile(r'<tool_call\|>>?|</call:[\w.-]*>|</tool_call>|/>|\}>')
+_PY_CALL = re.compile(r'\b[a-z]+(?:_[a-z]+)+\(\s*\w+\s*=.*?\)(?=\s*(?:$|[.!?]))', re.DOTALL)
+
+
+def _without_tool_calls(text):
+    text = _PY_CALL.sub('', text)
+    if not _TOOL_MARK.search(text):
+        return text
+    opened, closed = _TOOL_OPEN.search(text), _TOOL_CLOSE.search(text)
+    if closed and (opened is None or closed.start() < opened.start()):
+        text = text[closed.end():]
+    elif opened is None:
+        return ''
+    kept = []
+    while (opened := _TOOL_OPEN.search(text)) is not None:
+        kept.append(text[:opened.start()])
+        closed = _TOOL_CLOSE.search(text, opened.end())
+        text = '' if closed is None else text[closed.end():]
+    return ''.join(kept) + text
+
+
+# Stage directions for the voice ("6711 [pause] 4051"). They are read out ("pause", "pos") and
+# they broke the digit runs they sat in; a comma is the pause they asked for. Only these words:
+# a bracketed tag the model was trained on must still reach it.
+_STAGE_DIRECTION = re.compile(r'\s*\[\s*(?:(?:short|long|brief)\s+)?(?:pause|beat|silence|jeda)\s*\]\s*',
+                              re.IGNORECASE)
+_SENTENCE_PUNCT = '.,!?;:。，！？；：'
+
+
+def _stage_direction(m):
+    before, after = m.string[:m.start()].rstrip(), m.string[m.end():].lstrip()
+    if not before or not after or after[0] in _SENTENCE_PUNCT:
+        return ''
+    return ' ' if before[-1] in _SENTENCE_PUNCT else ', '
+
+
 def sanitize_markdown(text: str) -> str:
     """Remove markdown formatting and HTML tags from text so TTS doesn't speak markup."""
+    text = _without_tool_calls(text)
+    text = _STAGE_DIRECTION.sub(_stage_direction, text)
     # code blocks (fenced)
     text = re.sub(r'```[\s\S]*?```', '', text)
     # inline code
@@ -152,8 +200,9 @@ def sanitize_markdown(text: str) -> str:
     text = re.sub(r'^>\s+', '', text, flags=re.MULTILINE)
     # unordered list markers
     text = re.sub(r'^[\s]*[-*+]\s+', '', text, flags=re.MULTILINE)
-    # ordered list markers
-    text = re.sub(r'^[\s]*\d+\.\s+', '', text, flags=re.MULTILINE)
+    # ordered list markers: one or two digits. A longer number at the start of a line is
+    # content, e.g. a read-back "880101145678. Did we get that right?", which lost its number here.
+    text = re.sub(r'^[\s]*\d{1,2}\.\s+', '', text, flags=re.MULTILINE)
     # HTML tags (with or without attributes, self-closing)
     text = re.sub(r'<[^>]+>', '', text)
     return text
