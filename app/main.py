@@ -1342,6 +1342,11 @@ async def stream_speech(
         # whatever came before (crossfade, loudness gain, time stretch). See app/fade.py.
         stitched = fade_in_pcm16(stitched, int(round(FADE_IN_MS * sr / 1000)))
     func = with_producer_cleanup(stitched)
+    return await audio_response(func, response_format, stream, stream_format, extra_headers)
+
+async def audio_response(func, response_format, stream, stream_format, extra_headers=None):
+    """Wrap a PCM16 chunk generator in the response shape the request asked for: OpenAI SSE,
+    streamed wav or pcm, or one buffered wav/pcm body."""
     stream_headers = {
         'Cache-Control': 'no-cache, no-store',
         'X-Accel-Buffering': 'no',
@@ -1425,6 +1430,12 @@ async def stream_speech(
                 filename="merged_audio.pcm",
                 headers=dict(extra_headers or {}),
             )
+
+
+async def _no_audio():
+    return
+    yield b''
+
 
 class NormalizeRequest(BaseModel):
     input: str = "Hello! How can I help you?"
@@ -1776,6 +1787,12 @@ async def tts_stream(data: TTSRequest, request: Request = None):
     else:
         s = await normalize_request_text(data, fallback_to_rule=True)
         logging.info(f'normalized: {s}')
+        if not re.search(r'\w', s):
+            # Nothing left to say, e.g. a chunk that was only an agent's tool call: sanitizing
+            # leaves "" and _post_normalize a ".". Given that, the LM makes up a phrase of its
+            # own ("See ya!", "Did we get that right?": 3 of 12 takes, up to 4.7 s). An empty
+            # response in the shape asked for; no LM call, nothing stored for interleave.
+            return await audio_response(_no_audio(), data.response_format, data.stream, data.stream_format)
         if interleave_key and interleave_store is not None:
             interleave, max_tokens = load_interleave(
                 interleave_key, speaker, s, data.max_tokens, data.max_retain_interleave,

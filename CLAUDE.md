@@ -68,7 +68,10 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   a call cut across two requests is dropped to the chunk edge. It maps `[pause]`-style stage
   directions to a comma; other bracketed tags pass. Its ordered-list rule takes only 1 to 2 digit
   markers: `^\d+\.\s` deleted a read-back's leading number ("880101145678. Did we get that
-  right?" became "Did we get that right?") before any normalizer saw it.
+  right?" became "Did we get that right?") before any normalizer saw it. A request left with
+  nothing to say (a chunk that was only a tool call) returns empty audio in the shape asked for
+  and never reaches the LM (`tts_stream`): given a bare ".", the LM made up a phrase of its own
+  ("See ya!", up to 4.7 s) in 3 of 12 takes.
 - `app/llm_normalizer.py`, `app/prompt.py`: **LLM-based normalizer** (`mode: "llm"` on
   `/v1/audio/normalize` and TTS requests; default `mode: "rule"` is the pipeline above). Calls any
   OpenAI-compatible `/chat/completions` (`OPENAI_BASE_URL`/`OPENAI_API_KEY`/`OPENAI_MODEL_NAME`,
@@ -229,6 +232,25 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   jump (hence 70%-voiced windows and voiced-only levels; without them the same run reports 3× the
   events), and **librosa 1.0.0 segfaults in `pyin`** on numba 0.67 / numpy 2.2 (exit 139, no
   traceback). Pin `librosa==0.11.0`.
+- `tests/test_audio_quality.py`: **live audio checks, one step after the text tests.** Renders
+  ~40 synthetic voicebot lines x 4 takes through `TTS_TEST_URL` (opt-in; ~5 min on one H20) and
+  holds RATES over takes to thresholds, since sampled audio has no golden file: intelligibility
+  and read-back digits by Whisper large-v3 (twice per take: language left to it, so a Mandarin
+  read shows as `zh`; and forced, with a verbatim prompt on read-backs), pace (syllables/s),
+  pauses, pitch register (pyin, semitones against the language's statements), sudden jumps
+  (+3 dB and +1.5 st across adjacent 0.5 s windows, as `bench/pitch_stress.py`), interleaved
+  chunk joins (chunk N+1's median pitch minus chunk N's, as `INTERLEAVE.md`; not last second vs
+  first second, which is a phrase's fall against the next onset and positive in natural speech),
+  level and clipping, first word heard, MOS (`MOS_API` + `MOS_API_KEY`, reps=16), and a
+  tool-call-only chunk staying silent. The scorer uses no LLM: the normalizer is under test.
+  **Thresholds are production's own spread** (v5-recut, 2026-10-27, four runs of identical plain
+  input), so a pass means "no worse than production", not "good"; nothing is zero-tolerance,
+  because a fourth run produced one odd take the first three never had. On the code before
+  the leading-number and tool-call fixes it fails exactly those two checks (read-backs 50 to 60%
+  right, the tool call spoken 4 of 4); after, 14 of 14 pass. Trap: two runs at once wrote
+  librosa's numba cache together and every pyin after it segfaulted, so the suite uses a private
+  cache compiled before the worker pool forks. Box recipe (two commits side by side on one
+  engine): ucc_ai_research `evaluation/tts/prod-audit/normalizer_audio_up.sh`.
 - `bench/livekit/`: LiveKit agent stress rig (no-STT/no-LLM agent + load client): measures TTFB and
   per-utterance loudness through a real agent + WebRTC path, and with `--wav-dir` saves one wav per
   utterance for `bench/pitch_stress_score.py`. `TTS_INTERLEAVE=true` (default) makes the agent send
@@ -428,6 +450,7 @@ python bench/lm_probe.py --gates 35,60,85,110          # vLLM alone: prefill, to
 python bench/window_ab.py --url ... --configs 1.5:0.2,0.75:0.2   # temp-0 streamed vs one-shot decode: envelope, clicks (+ --save-dir, then bench/cer_wavs.py)
 PYTHONPATH=. python bench/normalizer_gate_eval.py --old-url ... --new-url ...   # LLM-skip gate: outputs must be identical
 uv run --with pytest pytest tests/test_spoken_normalizer.py -q   # rule normalizer (1,734 tests, no deps)
+set -a; source .env; set +a; TTS_TEST_URL=http://127.0.0.1:9091 python -m pytest tests/test_audio_quality.py -v   # live audio checks (torch, transformers, librosa==0.11.0)
 PYTHONPATH=. python bench/normalizer_agreement.py               # rule vs LLM ground truth, per language/category
 uv run --with fasttext-wheel --with "numpy<2" --with huggingface_hub --with aiohttp python bench/langid_compare.py --llm   # marker words vs fastText vs LLM language detection (results in bench/NORMALIZER.md)
 set -a; source .env; set +a; uv run --with aiohttp python bench/normalizer_truth.py   # extend the ground truth (new corpus ids only)

@@ -659,6 +659,11 @@ flowchart TD
 First audio leaves as soon as the first window decodes, at `playback_speed × 50` tokens. That
 gate is the TTFB.
 
+Text with nothing left to say after normalization, such as a chunk that was only an agent's tool
+call, returns an empty response in the shape asked for (a wav with 0 frames, an empty pcm body,
+or SSE with only `speech.audio.done`) and never reaches the LM. Given a bare ".", the LM made up a
+phrase of its own ("See ya!") in 3 of 12 takes.
+
 Accepts a JSON body.
 
 **Parameters:**
