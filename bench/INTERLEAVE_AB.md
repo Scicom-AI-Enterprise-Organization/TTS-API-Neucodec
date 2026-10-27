@@ -4,6 +4,10 @@ Measured **2026-09-07** on **H20**, against a **private interleave-trained
 checkpoint**.
 
 ![interleave A/B](../docs/img/interleave_ab.png)
+
+80 paragraphs, 438 matched chunk pairs. Declination is negated (x -10) so lower is better on every
+bar.
+
 The checkpoint is an in-house 1.7B TTS LM packed with interleaved documents, deliberately not named
 here because this document is public. It is the first checkpoint actually trained that way, and so
 the first one on which `interleave_id` ([`INTERLEAVE.md`](../INTERLEAVE.md),

@@ -2,7 +2,13 @@
 
 **Measured 2026-09-23.** `FADE_IN_MS` (default 10, `app/fade.py`).
 
-![fade in](../docs/img/fade_in.png)
+![clicks](../docs/img/fade_in_clicks.png)
+
+![first millisecond](../docs/img/fade_in_first_ms.png)
+
+![one voiced start](../docs/img/fade_in_example.png)
+
+Same build, `FADE_IN_MS=0` against `10`, 240 requests per level, TM_English_Normal, SSE as the LiveKit openai plugin asks for it (`bench/fade_bench.py`).
 
 ## The problem
 

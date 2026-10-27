@@ -6,7 +6,19 @@ That window is the TTFB gate. Everything after it grows by `STREAM_CHUNK_GROWTH`
 Temperature 0, so the LM emits identical tokens at every setting. Every difference below is the
 windowing alone. 6 texts, 20 settings, reference = `playback_speed=50` (one window, no seams).
 
-![playback_speed sweep](../docs/img/playback_speed_sweep.png)
+![TTFB](../docs/img/playback_ttfb.png)
+
+![loudness](../docs/img/playback_loudness.png)
+
+![pitch](../docs/img/playback_pitch.png)
+
+![level step between chunks](../docs/img/playback_step.png)
+
+![seams over 3 dB](../docs/img/playback_seams.png)
+
+![UTMOSv2](../docs/img/playback_mos.png)
+
+Temperature 0, so the LM emits identical tokens at every setting and every difference is the windowing. Shaded: the recommended 0.4 to 0.5. Dashed: today's 0.75.
 
 ## Recommendation: **0.4**
 

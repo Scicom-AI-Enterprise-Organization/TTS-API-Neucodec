@@ -4,9 +4,21 @@ Measured **2026-09-05** against the staging deployment of this app, from a lapto
 internet. Every wall-clock number below therefore contains one client round trip; the
 decomposition in *Where the time goes* separates that out.
 
-![latency percentiles](../docs/img/latency_percentiles.png)
+![time to first audio byte](../docs/img/latency_ttfb.png)
 
-![saturation](../docs/img/saturation.png)
+![end-to-end time](../docs/img/latency_e2e.png)
+
+![real-time factor](../docs/img/latency_rtf.png)
+
+Closed-loop concurrency, the app on one H20 and a TP=4 LM on another host. 396 requests, 0 errors, about 5.2 s of audio each (`bench/latency_bench.py`).
+
+![throughput](../docs/img/saturation_throughput.png)
+
+![codec GPU](../docs/img/saturation_codec.png)
+
+![client buffer](../docs/img/saturation_buffer.png)
+
+The codec GPU is the only resource that climbs with load: 96% at 6% memory bandwidth, so launch-bound. The client buffer falls to 0.19 s at 96 concurrent. 0 errors at every level.
 
 
 ## What was measured

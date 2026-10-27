@@ -2,7 +2,11 @@
 
 **Measured 2026-09-22/23**, one H20, batch 1, real LM token streams, fp32.
 
-![megakernel](../docs/img/megakernel.png)
+![compile speedup](../docs/img/megakernel_speedup.png)
+
+![compile cost](../docs/img/megakernel_compile.png)
+
+One window-121 eager decode is 609 kernel launches over 51 distinct ops. Compiled output is about 80 dB SNR against eager, not bit-exact.
 
 ## Why try fusion at all
 

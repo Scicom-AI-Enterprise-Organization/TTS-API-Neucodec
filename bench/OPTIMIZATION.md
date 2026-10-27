@@ -1,6 +1,12 @@
 # Inference optimization: H100 SXM, colocated vLLM + NeuCodec
 
-![saturation](../docs/img/saturation.png)
+![throughput](../docs/img/saturation_throughput.png)
+
+![codec GPU](../docs/img/saturation_codec.png)
+
+![client buffer](../docs/img/saturation_buffer.png)
+
+The codec GPU is the only resource that climbs with load: 96% at 6% memory bandwidth, so launch-bound. The client buffer falls to 0.19 s at 96 concurrent. 0 errors at every level.
 
 ![cuda graphs](../docs/img/cuda_graphs.png)
 

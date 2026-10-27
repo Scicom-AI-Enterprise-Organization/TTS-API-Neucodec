@@ -4,7 +4,13 @@
 `livekit-agents` worker + the `openai.TTS` plugin. No STT, no LLM, no VAD, so what is
 measured is the TTS path and the transport around it, nothing else.
 
-![livekit bench](../docs/img/livekit_bench.png)
+![LiveKit TTFB](../docs/img/livekit_ttfb.png)
+
+![LiveKit loudness](../docs/img/livekit_loudness.png)
+
+![LiveKit TTFB per utterance](../docs/img/livekit_tail.png)
+
+8 utterances per room, TM_English_Normal, the patched app on one H20 and a TP=4 LM. Boxes are p25 to p75, whiskers p5 to p95.
 
 ```
 load_client.py ──text on "tts-input"──▶ livekit-server ──job──▶ stress_agent.py
@@ -111,7 +117,9 @@ Both were recorded as server results before being caught. Both were the rig.
 The first 16-room run reported **TTFB p50 8.4 s**, then 14.1 s on a repeat, a clean
 cliff after 0.25 s at 8 rooms. It looked like saturation.
 
-![livekit client trap](../docs/img/livekit_client_trap.png)
+![one client process against two](../docs/img/livekit_client_ttfb.png)
+
+![who was busy](../docs/img/livekit_client_cpu.png)
 
 It was not. Same 16 rooms, split across two client processes of 8, nothing server-side
 touched: **0.307 s**. 45× better.
