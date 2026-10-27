@@ -55,22 +55,22 @@ Older / reference:
 
 ### 1. Latency
 
-![time to first audio byte](docs/img/latency_ttfb.png)
-
-![end-to-end time](docs/img/latency_e2e.png)
-
-![real-time factor](docs/img/latency_rtf.png)
+<p>
+<img src="docs/img/latency_ttfb.png" alt="time to first audio byte" width="49%">
+<img src="docs/img/latency_e2e.png" alt="end-to-end time" width="49%">
+<img src="docs/img/latency_rtf.png" alt="real-time factor" width="49%">
+</p>
 
 TTFB p50 **102 ms** single-stream, **195 ms** at concurrency 32. RTF p50 0.096 → 0.152.
 Details: [TTFB.md](bench/TTFB.md).
 
 ### 2. First decode window
 
-![TTFB](docs/img/playback_ttfb.png)
-
-![loudness](docs/img/playback_loudness.png)
-
-![seams over 3 dB](docs/img/playback_seams.png)
+<p>
+<img src="docs/img/playback_ttfb.png" alt="TTFB" width="49%">
+<img src="docs/img/playback_loudness.png" alt="loudness" width="49%">
+<img src="docs/img/playback_seams.png" alt="seams over 3 dB" width="49%">
+</p>
 
 `0.4` gives TTFB 70 ms against 0.75's 103 ms, with loudness, pitch and MOS unchanged within noise.
 ⚠ Client buffer falls to **30 ms at concurrency 32** (0.75 keeps 390 ms) while the TTFB win shrinks
@@ -79,20 +79,21 @@ Details: [PLAYBACK_SPEED.md](bench/PLAYBACK_SPEED.md).
 
 ### 3. Through a LiveKit agent
 
-![LiveKit TTFB](docs/img/livekit_ttfb.png)
-
-![LiveKit loudness](docs/img/livekit_loudness.png)
-
-![LiveKit TTFB per utterance](docs/img/livekit_tail.png)
+<p>
+<img src="docs/img/livekit_ttfb.png" alt="LiveKit TTFB" width="49%">
+<img src="docs/img/livekit_loudness.png" alt="LiveKit loudness" width="49%">
+<img src="docs/img/livekit_tail.png" alt="LiveKit TTFB per utterance" width="49%">
+</p>
 
 TTFB is flat from 1 to 16 rooms (0.232 → 0.258 s). The agent + WebRTC tax is a constant
 **+111 to +136 ms**, not a slope, so a LiveKit TTFB regression is almost never LiveKit.
 0 errors in 688 utterances. Loudness sd stays 0.92–1.26 dB. `interleave_id` costs ~64 ms
 and shrinks under load. Full report: [LIVEKIT.md](bench/LIVEKIT.md).
 
-![one client process against two](docs/img/livekit_client_ttfb.png)
-
-![who was busy](docs/img/livekit_client_cpu.png)
+<p>
+<img src="docs/img/livekit_client_ttfb.png" alt="one client process against two" width="49%">
+<img src="docs/img/livekit_client_cpu.png" alt="who was busy" width="49%">
+</p>
 
 The first 16-room run reported an 8.4 s TTFB cliff. It was the load client: one python
 process cannot drive more than ~8 rooms, and its own scheduling delay is charged to the
@@ -100,29 +101,33 @@ server. Split over two processes, the same 16 rooms returned **0.307 s**.
 
 ### 4. Saturation and decode correctness
 
-![throughput](docs/img/saturation_throughput.png)
-
-![codec GPU](docs/img/saturation_codec.png)
-
-![client buffer](docs/img/saturation_buffer.png)
+<p>
+<img src="docs/img/saturation_throughput.png" alt="throughput" width="49%">
+<img src="docs/img/saturation_codec.png" alt="codec GPU" width="49%">
+<img src="docs/img/saturation_buffer.png" alt="client buffer" width="49%">
+</p>
 
 The codec GPU is the only resource that climbs with load. It reaches 96% at 6% memory
 bandwidth. Launch-bound, not bandwidth-bound.
 
-![padding bug](docs/img/padding_bug.png)
+<p>
+<img src="docs/img/padding_bug.png" alt="padding bug" width="60%">
+</p>
 
 The batcher padded windows with token id 0. A non-causal decoder mixes that into the audio
 it keeps. Fixed 2026-09-22. Details: [PADDING_BUG.md](bench/PADDING_BUG.md).
 
-![cuda graphs](docs/img/cuda_graphs.png)
+<p>
+<img src="docs/img/cuda_graphs.png" alt="cuda graphs" width="60%">
+</p>
 
 With the fix, graphs are bit-exact and worth 1.0× at c=8, 1.44× at c=32, 1.54× at c=64.
 
-![clicks](docs/img/fade_in_clicks.png)
-
-![first millisecond](docs/img/fade_in_first_ms.png)
-
-![one voiced start](docs/img/fade_in_example.png)
+<p>
+<img src="docs/img/fade_in_clicks.png" alt="clicks" width="49%">
+<img src="docs/img/fade_in_first_ms.png" alt="first millisecond" width="49%">
+<img src="docs/img/fade_in_example.png" alt="one voiced start" width="49%">
+</p>
 
 About 1 response in 20 opened at full level on its first sample, a click, because the LM
 started voiced. A 10 ms fade-in (`FADE_IN_MS`) takes clicks from 3.3–3.8% to 0.0% at every
@@ -130,36 +135,44 @@ load. That treats the symptom. The voiced start is the model. Details: [FADE_IN.
 
 ### 5. Making the codec faster
 
-![precision matrix](docs/img/precision_matrix.png)
+<p>
+<img src="docs/img/precision_matrix.png" alt="precision matrix" width="60%">
+</p>
 
 fp16 cannot run: cuFFT rejects the ISTFT dims in half precision. bf16, TF32 and int8 do not
 beat fp32. The decoder is launch-bound (609 kernels per decode), not arithmetic-bound.
 
-![compile speedup](docs/img/megakernel_speedup.png)
-
-![compile cost](docs/img/megakernel_compile.png)
+<p>
+<img src="docs/img/megakernel_speedup.png" alt="compile speedup" width="49%">
+<img src="docs/img/megakernel_compile.png" alt="compile cost" width="49%">
+</p>
 
 Fusion is the only lever that works, up to 2.27× per decode. A ~10 s compile per new window
 length blocks it, so it is off. Details: [MEGAKERNEL.md](bench/MEGAKERNEL.md).
 
 ### 6. Pitch, tone and chunk joins
 
-![pitch and tone](docs/img/pitch_tone.png)
-
-![interleave A/B](docs/img/interleave_ab.png)
+<p>
+<img src="docs/img/pitch_tone.png" alt="pitch and tone" width="49%">
+<img src="docs/img/interleave_ab.png" alt="interleave A/B" width="49%">
+</p>
 
 Half of the audible tone jumps come from chunking, half from the model. `interleave_id` cuts
 the chunk-join jump ~25%. Details: [PITCH_TONE_AB.md](bench/PITCH_TONE_AB.md), [INTERLEAVE_AB.md](bench/INTERLEAVE_AB.md).
 
 ### 7. Text normalization
 
-![normalizer agreement](docs/img/normalizer.png)
+<p>
+<img src="docs/img/normalizer.png" alt="normalizer agreement" width="60%">
+</p>
 
 Details: [NORMALIZER.md](bench/NORMALIZER.md).
 
 ### 8. Codec choice
 
-![widecodec A/B](docs/img/widecodec_ab.png)
+<p>
+<img src="docs/img/widecodec_ab.png" alt="widecodec A/B" width="60%">
+</p>
 
 Details: [WIDECODEC_AB.md](bench/WIDECODEC_AB.md).
 
