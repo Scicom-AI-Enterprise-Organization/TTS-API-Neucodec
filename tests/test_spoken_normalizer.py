@@ -79,6 +79,18 @@ class TestNumbers:
         assert N.decimal('2', '5', 'zh') == '二点五'
         assert N.decimal('4', '8', 'ta') == 'நான்கு புள்ளி எட்டு'
 
+    @pytest.mark.parametrize('lang,largest', [('en', 10 ** 15 - 1), ('ms', 10 ** 15 - 1), ('zh', 10 ** 16 - 1),
+                                              ('ta', 10 ** 12 - 1)])
+    def test_past_the_largest_unit_is_read_digit_by_digit(self, lang, largest):
+        """Each language's unit table ran out and raised (IndexError, KeyError in Tamil), failing the
+        whole request. The largest number with words keeps them; one more is read digit by digit."""
+        assert N.cardinal(largest, lang) != N.digits(str(largest), lang)
+        for n in (largest + 1, 2 * (largest + 1) + 7, 10 ** 30):
+            assert N.cardinal(n, lang) == N.digits(str(n), lang)
+            assert N.cardinal(-n, lang).endswith(N.digits(str(n), lang))
+        for built_on_cardinal in (N.en_ordinal, N.ms_ordinal, N.ta_ordinal, N.ta_half):
+            built_on_cardinal(10 ** 18)                      # must not raise either
+
 
 # --------------------------------------------------------------------------- language
 class TestLanguage:
@@ -490,6 +502,20 @@ class TestEdges:
 
     def test_empty(self):
         assert normalize('') == ''
+
+    def test_huge_amounts_do_not_fail_the_request(self):
+        # each of these raised before and the request failed; past the largest unit they are digits
+        assert normalize('Jumlahnya RM1,000,000,000,000,000.') == \
+            'Jumlahnya ' + ' '.join(['satu'] + ['kosong'] * 15) + ' ringgit.'
+        assert normalize('The total is 1,000,000,000,000,000,000 dollars.') == \
+            'The total is ' + ' '.join(['one'] + ['zero'] * 18) + ' dollars.'
+        assert normalize('உங்கள் தொகை 1,000,000,000,000 ரூபாய்.') == \
+            'உங்கள் தொகை ' + ' '.join(['ஒன்று'] + ['பூஜ்ஜியம்'] * 12) + ' ரூபாய்.'
+        assert normalize('总数是1000000000000000000元。') == '总数是一' + '零' * 18 + '元。'
+        for text in ('The amount is 1000000000000k today.', 'It is the 1000000000000000000th time.',
+                     'Bayar RM1,000,000,000,000,000-RM2,000,000,000,000,000 sahaja.', 'Naik 1000000000000000000% tahun ini.',
+                     'மொத்தம் 1,000,000,000,000ல் உள்ளது.', 'Turun -1,000,000,000,000,000 mata.'):
+            assert not re.search(r'[0-9]', normalize(text)), text
 
 
 class TestAgentShapes:

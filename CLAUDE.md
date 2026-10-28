@@ -137,8 +137,10 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   197 harder cases added 2026-09-04) and scored by `bench/normalizer_agreement.py`: 82% verbatim agreement
   (en 89 / ms 87 / zh 88 / ta 67 / code-switch 59; the original 300 still 85%). Of the 88 residual diffs, 28
   are LLM errors (it returned 8 Tamil sentences with digits in them), 50 the LLM contradicting itself, 10
-  code-switch hybrids; every digit is read in all 497. Full write-up in `bench/NORMALIZER.md`, 1,734 tests,
-  ~45 µs. Also the fallback for `mode=llm`, and with `LLM_NORMALIZER_RULE_FIRST=true` the LLM is only
+  code-switch hybrids; every digit is read in all 497. Full write-up in `bench/NORMALIZER.md`, 1,739 tests,
+  ~45 µs. A number past the largest unit (10^15 in en/ms, 10^16 in zh, 10^12 in ta) is read digit by
+  digit: the unit tables used to run out and raise, failing the request (`RM1,000,000,000,000,000`).
+  Also the fallback for `mode=llm`, and with `LLM_NORMALIZER_RULE_FIRST=true` the LLM is only
   called for what the rules leave unspeakable. Regex gotchas that each cost a whole language or category:
   Python's `\w`/`\b` treat CJK and Tamil letters as word characters, so digit boundaries must be ASCII
   classes (`(?<![A-Za-z0-9_])`); trailing lookaheads must allow a sentence-final `.` (`(?![...])(?!\.\d)`,
@@ -459,7 +461,7 @@ uv run --with aiohttp python bench/ttfb_report.py --url http://127.0.0.1:9091 --
 python bench/lm_probe.py --gates 35,60,85,110          # vLLM alone: prefill, tok/s, arrival of the N-th token (source .env first)
 python bench/window_ab.py --url ... --configs 1.5:0.2,0.75:0.2   # temp-0 streamed vs one-shot decode: envelope, clicks (+ --save-dir, then bench/cer_wavs.py)
 PYTHONPATH=. python bench/normalizer_gate_eval.py --old-url ... --new-url ...   # LLM-skip gate: outputs must be identical
-uv run --with pytest pytest tests/test_spoken_normalizer.py -q   # rule normalizer (1,734 tests, no deps)
+uv run --with pytest pytest tests/test_spoken_normalizer.py -q   # rule normalizer (1,739 tests, no deps)
 set -a; source .env; set +a; TTS_TEST_URL=http://127.0.0.1:9091 python -m pytest tests/test_audio_quality.py -v   # live audio checks (torch, transformers, librosa==0.11.0)
 PYTHONPATH=. python bench/normalizer_agreement.py               # rule vs LLM ground truth, per language/category
 uv run --with fasttext-wheel --with "numpy<2" --with huggingface_hub --with aiohttp python bench/langid_compare.py --llm   # marker words vs fastText vs LLM language detection (results in bench/NORMALIZER.md)
@@ -518,6 +520,13 @@ python bench/serve_inprocess.py --model /path/ckpt --gpus 4,5 --tp 2 --port 9191
 
 ## Gotchas (these will bite)
 
+- **Tear down when you are done, without being asked.** Anything started on a shared GPU box for a
+  task (vLLM engines, app instances, Whisper or LLM servers, slurm test jobs) is stopped as soon as
+  the task is finished: the boxes are multi-tenant and an idle engine holds tens of GB. Stop by
+  exact pid, or by listening port or working directory, never with `pkill -f <pattern>`: a pattern
+  that also appears in the ssh command line kills the shell sending it, and vLLM's engine core
+  (`VLLM::EngineCor`) outlives a kill aimed at its parent. Finish by checking that the ports are
+  closed and `nvidia-smi` is back where it started.
 - **`DEVICE=cuda:N` used to break every request.** The accelerator helpers keyed on
   `device == "cuda"`, so `cuda:1` left `dev` unset and the decode took the cpu path with the codec
   on the GPU ("Expected all tensors to be on the same device, cuda:1 and cpu" in the quantizer).

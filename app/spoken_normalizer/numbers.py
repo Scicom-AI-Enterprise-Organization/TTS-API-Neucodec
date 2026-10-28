@@ -5,6 +5,11 @@ Pure Python, no dependencies. Every function takes plain ints / digit strings an
 the words the LLM normalizer produces for the same input (bench/results/normalizer_truth.jsonl
 is the reference; see app/spoken_normalizer/__init__.py for the conventions and where they
 deliberately differ from the LLM).
+
+A number past the largest unit a language has here (a thousand trillion in English and Malay,
+万亿 x 10,000 in Mandarin, a thousand billion in Tamil) is read digit by digit, as long digit
+runs already are. Before, each language's unit table ran out and raised: "RM1,000,000,000,000,000"
+failed the whole request with an IndexError.
 """
 
 # --------------------------------------------------------------------------- English
@@ -13,6 +18,7 @@ _EN_UNITS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eig
              'seventeen', 'eighteen', 'nineteen']
 _EN_TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety']
 _EN_SCALES = [(10 ** 12, 'trillion'), (10 ** 9, 'billion'), (10 ** 6, 'million'), (1000, 'thousand')]
+_EN_LIMIT = _EN_SCALES[0][0] * 1000      # from here on: digit by digit
 _EN_ORD_IRREGULAR = {'one': 'first', 'two': 'second', 'three': 'third', 'five': 'fifth',
                      'eight': 'eighth', 'nine': 'ninth', 'twelve': 'twelfth'}
 
@@ -39,6 +45,8 @@ def en_cardinal(n):
         return 'minus ' + en_cardinal(-n)
     if n < 1000:
         return _en_below_1000(n)
+    if n >= _EN_LIMIT:
+        return en_digits(str(n))
     parts = []
     for value, name in _EN_SCALES:
         if n >= value:
@@ -84,6 +92,7 @@ def en_digits(s):
 # --------------------------------------------------------------------------- Malay
 _MS_UNITS = ['kosong', 'satu', 'dua', 'tiga', 'empat', 'lima', 'enam', 'tujuh', 'lapan', 'sembilan']
 _MS_SCALES = [(10 ** 12, 'trilion'), (10 ** 9, 'bilion'), (10 ** 6, 'juta'), (1000, 'ribu')]
+_MS_LIMIT = _MS_SCALES[0][0] * 1000
 
 
 def _ms_below_1000(n):
@@ -111,6 +120,8 @@ def ms_cardinal(n):
         return 'negatif ' + ms_cardinal(-n)
     if n < 1000:
         return _ms_below_1000(n)
+    if n >= _MS_LIMIT:
+        return ms_digits(str(n))
     parts = []
     for value, name in _MS_SCALES:
         if n >= value:
@@ -138,6 +149,7 @@ def ms_digits(s):
 _ZH_DIGITS = '零一二三四五六七八九'
 _ZH_SMALL = ['', '十', '百', '千']
 _ZH_BIG = ['', '万', '亿', '万亿']
+_ZH_LIMIT = 10 ** (4 * len(_ZH_BIG))     # one 4-digit group per entry of _ZH_BIG
 
 
 def _zh_group(n):
@@ -167,6 +179,8 @@ def zh_cardinal(n):
         return '负' + zh_cardinal(-n)
     if n == 0:
         return '零'
+    if n >= _ZH_LIMIT:
+        return zh_digits(str(n))
     groups = []
     while n:
         groups.insert(0, n % 10000)
@@ -204,6 +218,7 @@ _TA_HUNDREDS_OBL = {1: 'நூற்று', 2: 'இருநூற்று', 3
                     7: 'எழுநூற்று', 8: 'எண்ணூற்று', 9: 'தொள்ளாயிரத்து'}
 _TA_THOUSANDS = {1: 'ஆயிரம்', 2: 'இரண்டாயிரம்', 3: 'மூவாயிரம்', 4: 'நான்காயிரம்', 5: 'ஐயாயிரம்', 6: 'ஆறாயிரம்',
                  7: 'ஏழாயிரம்', 8: 'எண்ணாயிரம்', 9: 'ஒன்பதாயிரம்'}
+_TA_LIMIT = 10 ** 9 * 1000                # a thousand பில்லியன், the largest unit ta_cardinal says
 # independent vowel -> dependent vowel sign, for sandhi (இருபத்து + ஒன்று -> இருபத்தொன்று)
 _TA_VOWEL_SIGN = {'அ': '', 'ஆ': 'ா', 'இ': 'ி', 'ஈ': 'ீ', 'உ': 'ு', 'ஊ': 'ூ', 'எ': 'ெ', 'ஏ': 'ே', 'ஐ': 'ை',
                   'ஒ': 'ொ', 'ஓ': 'ோ', 'ஔ': 'ௌ'}
@@ -258,6 +273,8 @@ def ta_cardinal(n):
         return 'மைனஸ் ' + ta_cardinal(-n)
     if n < 1000:
         return _ta_below_1000(n)
+    if n >= _TA_LIMIT:
+        return ta_digits(str(n))
     parts = []
     if 10 ** 5 <= n < 10 ** 7:
         # Indian grouping below a crore, as the LLM says it: ஒரு லட்சம், பத்து லட்சம் (but
