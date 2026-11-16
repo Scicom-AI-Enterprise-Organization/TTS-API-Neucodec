@@ -94,6 +94,11 @@ EXAMPLES = [
 #   both               10/10, 18/18, and the instruction never leaked into the output
 CALLER_PROMPT_HEADER = "Additional instructions from the caller for this text:"
 
+# Clock times: llm_normalizer.clock_hint() works out how each time in the text is read and
+# puts it under this heading, at the end of the system prompt and in brackets above the text
+# (the two places the caller `prompt` goes, for the same reason). The reply must keep it.
+CLOCK_HINT_HEADER = "Read the clock times in this text exactly as given here (written -> spoken):"
+
 # Strict schema for OpenAI `response_format`; guided decoding guarantees the reply
 # parses as {"normalized": str}, so the output can be fed directly to the TTS LM.
 JSON_SCHEMA = {

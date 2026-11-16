@@ -120,6 +120,22 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   against a 403 to 411 run-to-run band (the same prompt twice changes 35 replies), with Tamil and
   Malay sentences drifting into English. A code check also works unchanged on a fine-tuned
   production model nobody can A/B a prompt on.
+  **Clock times (`clock_readings()` / `clock_hint()`, 2026-11-16):** a written time is 24-hour
+  unless am/pm or a period word is written, and is read on the 12-hour clock with its period:
+  `13:30` -> "pukul satu tiga puluh minit petang" / "one thirty p m" / "下午一点三十分", a whole
+  hour is the hour alone (`20:00` -> "pukul lapan malam"), a written period or pukul/jam is kept.
+  The reading is worked out in code and handed to the LLM with the text, under
+  `CLOCK_HINT_HEADER` in the same two places as the caller `prompt`; a reply that does not
+  hand it back whole is rejected ("clock time changed", so "lapan sifar sifar" cannot pass as
+  "lapan"). Why: prod read "pada pukul pagi 8:00" as "lapan sifar sifar". Alone, the LLM read
+  `:00` digit by digit on any shape but "pukul H:00 pagi" ("pukul pagi 8.00" 20/20, "8:00 am to
+  5:00 pm" 19/20, "at 20:00" 20/20). A clock rule + examples in the prompt got 55/61 time
+  shapes right but kept failing some 20/20 ("at 8:00" -> "eight p m") and, sent with every
+  request, cost ~20 non-time truth sentences. With the hint: 59/61 shapes right in 20 of 20
+  runs (1,186/1,220 replies; one miss is "bas pertama 7:05", no language markers, read
+  English), non-time truth agreement unchanged (383/383 vs 382/378), 0 rejections. Text with no
+  clock time gets byte-identical messages. Tamil is not hinted. The rule normalizer
+  (`app/spoken_normalizer`, the fallback) still reads times its old way.
 - `app/spoken_normalizer/`: **rule-based replica of the LLM normalizer** (`mode: "spoken"`), pure Python,
   importable anywhere: `numbers.py` (cardinals/ordinals/years/digits for en, ms, zh, ta; Tamil with sandhi,
   lakhs below 10⁷, `ta_attach()` glues case suffixes: 2024ல் → …நான்கில்), `lang.py` (script → zh/ta;

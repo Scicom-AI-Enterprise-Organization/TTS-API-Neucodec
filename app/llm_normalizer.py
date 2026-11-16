@@ -17,7 +17,9 @@ from enum import Enum
 import aiohttp
 
 from app.env import OPENAI_BASE_URL, OPENAI_API_KEY, OPENAI_MODEL_NAME, OPENAI_TIMEOUT
-from app.prompt import SYSTEM_PROMPT, EXAMPLES, JSON_SCHEMA, CALLER_PROMPT_HEADER
+from app.prompt import SYSTEM_PROMPT, EXAMPLES, JSON_SCHEMA, CALLER_PROMPT_HEADER, CLOCK_HINT_HEADER
+from app.spoken_normalizer.lang import detect_lang
+from app.spoken_normalizer.numbers import en_cardinal, ms_cardinal, zh_cardinal
 
 
 class NormalizerMode(str, Enum):
@@ -33,14 +35,134 @@ class LLMNormalizerError(Exception):
 _CODE_FENCE = re.compile(r'^```(?:json)?\s*(.*?)\s*```$', re.DOTALL)
 
 
+# How each clock time is read, worked out here and handed to the LLM with the text
+# (CLOCK_HINT_HEADER), so a time is read the same way every time. The rule and examples alone
+# left the LLM inconsistent on 6 of 61 time sentences over 20 runs (2026-11-16): "at 8:00" ->
+# "eight p m" 20/20, "14:05" -> "dua empat lima minit" 1/20. The reading (the user's): a
+# written time is 24-hour unless am/pm or a period word is written, said on the 12-hour clock
+# with its period; Malay "pukul" + hour + minutes "minit" + period, English hour + minutes +
+# a m / p m, Chinese period + hour 点 + minutes 分. A whole hour is the hour alone.
+_MS_PERIODS = r'pagi|petang|malam|tengah\s?hari|tengahari|tengah\s+malam'
+_ZH_PERIODS = '凌晨|早上|上午|中午|下午|晚上|傍晚'
+_CLOCK = re.compile(
+    r'(?P<cue>(?<![A-Za-z])(?:pukul|jam|pkl)\s+)?'
+    rf'(?P<pre>(?<![A-Za-z])(?:{_MS_PERIODS})\s+|{_ZH_PERIODS})?'
+    r'(?<![\d:.,/])(?P<h>\d{1,2})(?:(?P<sep>[:.])(?P<m>[0-5]\d))?(?![\d])(?![.:]\d)'
+    r'(?:\s?(?P<ap>[AaPp](?:\.\s?[Mm]\.|\s?[Mm]))(?![A-Za-z])'
+    rf'|\s?(?P<post>{_MS_PERIODS})(?![A-Za-z]))?', re.IGNORECASE)
+_EN_PERIOD_AFTER = re.compile(r'\s?(?:noon|midnight|in\s+the\s+(?:morning|afternoon|evening)|at\s+night)(?![A-Za-z])',
+                              re.IGNORECASE)
+_EN_CUE_BEFORE = re.compile(r'(?<![A-Za-z])(?:at|by|from|until|till|to|before|after|around|since)\s*$', re.IGNORECASE)
+_MS_CUE_BEFORE = re.compile(r'(?<![A-Za-z])(?:pada|sebelum|selepas|dari|hingga|sehingga|sampai|antara|dan)\s*$',
+                            re.IGNORECASE)
+
+
+def _ms_period(h24):
+    if h24 == 0:
+        return 'tengah malam'
+    if h24 < 12:
+        return 'pagi'
+    if h24 == 12:
+        return 'tengah hari'
+    return 'petang' if h24 <= 18 else 'malam'
+
+
+def _zh_period(h24):
+    if h24 < 6:
+        return '凌晨'
+    if h24 < 12:
+        return '上午'
+    if h24 == 12:
+        return '中午'
+    return '下午' if h24 < 18 else '晚上'
+
+
+def _clock_lang(text, m):
+    if _HAN_CHAR.search(text):
+        return 'zh'
+    if m.group('cue') or (m.group('pre') and not re.match(_ZH_PERIODS, m.group('pre'))) or m.group('post'):
+        return 'ms'
+    before = text[:m.start()]
+    if _EN_CUE_BEFORE.search(before):
+        return 'en'
+    if _MS_CUE_BEFORE.search(before):
+        return 'ms'
+    return detect_lang(text) if detect_lang(text) in ('en', 'ms') else 'en'
+
+
+def clock_readings(text):
+    """[(written, spoken)] for every clock time in `text`, in order. Empty for Tamil text."""
+    if not text or re.search('[஀-௿]', text):
+        return []
+    out = []
+    for m in _CLOCK.finditer(text):
+        h, sep, mm, ap = int(m.group('h')), m.group('sep'), m.group('m'), m.group('ap')
+        pre, post, cue = m.group('pre'), m.group('post'), m.group('cue')
+        if sep == ':':
+            ok = True
+        elif sep == '.':                    # 8.00 only beside a time word: RM8.00, 37.50 are not times
+            ok = bool(ap or pre or post or cue)
+        else:                               # a bare hour only with am/pm: 9am
+            ok = bool(ap)
+        if not ok or h > 24 or (ap and not 1 <= h <= 12):
+            continue
+        h24 = (h % 12) + (12 if ap and ap[0] in 'Pp' else 0) if ap else h % 24
+        h12 = h24 % 12 or 12
+        minutes = mm if mm and mm != '00' else None
+        lang = _clock_lang(text, m)
+        after = text[m.end():]
+        if lang == 'zh':
+            period = pre if pre and re.match(_ZH_PERIODS, pre) else _zh_period(h24)
+            hour = '零' if h24 == 0 else ('两' if h12 == 2 else zh_cardinal(h12))
+            spoken = f'{period}{hour}点'
+            if minutes:
+                spoken += ('零' if minutes[0] == '0' else '') + zh_cardinal(int(minutes)) + '分'
+        elif lang == 'ms':
+            words = [cue.strip() if cue else 'pukul']
+            if pre:
+                words.append(' '.join(pre.split()))
+            words.append(ms_cardinal(h12))
+            if minutes:
+                words += [ms_cardinal(int(minutes)), 'minit']
+            if post:
+                words.append(' '.join(post.split()))
+            elif not pre:
+                words.append(_ms_period(h24))
+            spoken = ' '.join(words)
+        else:
+            words = [en_cardinal(h12)]
+            if minutes:
+                words.append(('zero ' if minutes[0] == '0' else '') + en_cardinal(int(minutes)))
+            if ap or not _EN_PERIOD_AFTER.match(after):
+                period = 'a m' if h24 < 12 else 'p m'
+                words.append(period.upper() if ap and ap[0].isupper() and ap[-1].isupper() else period)
+            spoken = ' '.join(words)
+        written = m.group(0).strip()
+        out.append((written, spoken))
+    return out
+
+
+def clock_hint(text):
+    """The CLOCK_HINT_HEADER block for `text`, or None when it has no clock time."""
+    readings = clock_readings(text)
+    if not readings:
+        return None
+    return CLOCK_HINT_HEADER + '\n' + '\n'.join(f'{w} -> {s}' for w, s in readings)
+
+
 def build_messages(text, prompt=None):
     """`prompt` is the caller's extra context (the request's `prompt` field), put both at
     the end of the system prompt and in brackets above the text (why both: app/prompt.py);
-    blank or None leaves the messages exactly as without it."""
-    system = SYSTEM_PROMPT
+    blank or None leaves the messages exactly as without it. A clock time in `text` adds its
+    reading (clock_hint) the same two ways; text without one gets the messages unchanged."""
     prompt = (prompt or '').strip()
+    hint = clock_hint(text)
+    extra = [x for x in (prompt, hint) if x]
+    system = SYSTEM_PROMPT
     if prompt:
-        system = f'{SYSTEM_PROMPT}\n\n{CALLER_PROMPT_HEADER}\n{prompt}'
+        system = f'{system}\n\n{CALLER_PROMPT_HEADER}\n{prompt}'
+    if hint:
+        system = f'{system}\n\n{hint}'
     messages = [{'role': 'system', 'content': system}]
     for before, after in EXAMPLES:
         messages.append({'role': 'user', 'content': before})
@@ -48,7 +170,10 @@ def build_messages(text, prompt=None):
             'role': 'assistant',
             'content': json.dumps({'normalized': after}, ensure_ascii=False),
         })
-    messages.append({'role': 'user', 'content': f'[{prompt}]\n{text}' if prompt else text})
+    user = text
+    if extra:
+        user = '\n'.join(f'[{x}]' for x in extra) + '\n' + text
+    messages.append({'role': 'user', 'content': user})
     return messages
 
 
@@ -174,10 +299,26 @@ def _spoken_digits(out):
     return len(words) + words.count('triple')       # "double eight" is two words already
 
 
-def rejected_reason(text, normalized, prompt=None, keep=()):
+def _clock_kept(normalized, spoken):
+    """`spoken` is in the reply as a whole reading: not "pukul pagi lapan" inside "pukul pagi
+    lapan sifar sifar", i.e. no number word runs on after it."""
+    squashed = ' '.join(normalized.split())
+    for m in re.finditer(re.escape(' '.join(spoken.split())), squashed, re.IGNORECASE):
+        rest = squashed[m.end():]
+        if _HAN_CHAR.match(spoken[-1:] or ' ') or spoken.endswith('点') or spoken.endswith('分'):
+            if not re.match(r'[零〇一二两三四五六七八九十百半整分]', rest):
+                return True
+        elif not re.match(r'[A-Za-z]', rest) and not _NUMBER_WORD.match(rest.lstrip(' ,')) \
+                and not re.match(r'(?i)\s*(?:minit|minutes?|o.?clock|[ap]\.?\s?m\b)', rest):
+            return True
+    return False
+
+
+def rejected_reason(text, normalized, prompt=None, keep=(), clocks=()):
     """Why the LLM's `normalized` reply to `text` must not be spoken, or None if it may.
 
-    `keep`: phrases already spelled out before the LLM (rules.product_names) that the reply
+    `clocks`: the clock_readings() handed to the LLM, each to come back whole.
+    `keep`: phrases already spelled out (rules.product_names) that the reply
     must hand back unchanged. Skipped for Tamil (no digit-word list here). With a caller
     `prompt` the keep, Chinese and leftover-digit checks are off, since a prompt may ask for
     exactly that."""
@@ -185,7 +326,10 @@ def rejected_reason(text, normalized, prompt=None, keep=()):
         squashed = ' '.join(normalized.lower().split())
         for k in keep:
             if ' '.join(k.lower().split()) not in squashed:
-                return 'name changed'
+                return 'spelled-out phrase changed'
+        for spoken in clocks:
+            if not _clock_kept(normalized, spoken):
+                return 'clock time changed'
     if not re.search(r'\d', text) or re.search('[஀-௿]', text):
         return None
     if not re.search(r'\d', normalized) and not _NUMBER_WORD.search(normalized):
@@ -260,7 +404,8 @@ async def llm_normalize(text, base_url=None, api_key=None, model=None, timeout=N
     normalized = parse_normalized(content)
     if normalized is None:
         raise LLMNormalizerError(f'unusable reply from model: {content[:500]!r}')
-    reason = rejected_reason(text, normalized, prompt, keep)
+    # a clock reading handed to the LLM must come back as given (clock_hint)
+    reason = rejected_reason(text, normalized, prompt, keep, [s for _, s in clock_readings(text)])
     if reason:
         raise LLMNormalizerError(f'rejected reply ({reason}): {normalized[:500]!r}')
     return normalized

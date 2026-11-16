@@ -27,11 +27,13 @@ from app.llm_normalizer import (
     parse_normalized,
     llm_normalize,
     needs_normalization,
+    clock_readings,
+    clock_hint,
     rejected_reason,
     LLMNormalizerError,
     NormalizerMode,
 )
-from app.prompt import SYSTEM_PROMPT, EXAMPLES, JSON_SCHEMA, CALLER_PROMPT_HEADER
+from app.prompt import SYSTEM_PROMPT, EXAMPLES, JSON_SCHEMA, CALLER_PROMPT_HEADER, CLOCK_HINT_HEADER
 
 
 class TestBuildMessages:
@@ -79,6 +81,78 @@ class TestBuildMessages:
     @pytest.mark.parametrize('prompt', [None, '', '   ', '\n'])
     def test_blank_prompt_is_no_prompt(self, prompt):
         assert build_messages('x', prompt=prompt) == build_messages('x')
+
+
+class TestClockTime:
+    """A written time is 24-hour unless am/pm or a period word is written, and is read on the
+    12-hour clock with its period. The reading goes to the LLM with the text (clock_hint)."""
+
+    @pytest.mark.parametrize('text,readings', [
+        ('pada pukul pagi 8:00', [('pukul pagi 8:00', 'pukul pagi lapan')]),        # the prod report
+        ('pada pukul pagi 8.00', [('pukul pagi 8.00', 'pukul pagi lapan')]),
+        ('pukul 8:00', [('pukul 8:00', 'pukul lapan pagi')]),
+        ('jam 8:00 pagi', [('jam 8:00 pagi', 'jam lapan pagi')]),
+        ('mesyuarat 13:30', [('13:30', 'pukul satu tiga puluh minit petang')]),
+        ('Kereta api bertolak pada 14:05.', [('14:05', 'pukul dua lima minit petang')]),
+        ('pukul 12:15', [('pukul 12:15', 'pukul dua belas lima belas minit tengah hari')]),
+        ('pukul 00:30', [('pukul 00:30', 'pukul dua belas tiga puluh minit tengah malam')]),
+        ('Gangguan dijangka dari 23:00 hingga 02:00.',
+         [('23:00', 'pukul sebelas malam'), ('02:00', 'pukul dua pagi')]),
+        ('Kami akan hubungi anda sebelum 9.30am.', [('9.30am', 'pukul sembilan tiga puluh minit pagi')]),
+        ('at 8:00', [('8:00', 'eight a m')]),
+        ('at 20:00', [('20:00', 'eight p m')]),
+        ('at 8:05 am', [('8:05 am', 'eight zero five a m')]),
+        ('Our technician will arrive at 9:00 AM tomorrow.', [('9:00 AM', 'nine A M')]),
+        ('Operating hours are 8:00 am to 5:00 pm.', [('8:00 am', 'eight a m'), ('5:00 pm', 'five p m')]),
+        ('Your appointment is on Sept. 4, 2026 at 12:00 noon.', [('12:00', 'twelve')]),
+        ('在早上8:00', [('早上8:00', '早上八点')]),
+        ('14:00开会', [('14:00', '下午两点')]),
+        ('凌晨0:30', [('凌晨0:30', '凌晨零点三十分')]),
+        ('停机时间是23:00到02:00。', [('23:00', '晚上十一点'), ('02:00', '凌晨两点')]),
+    ])
+    def test_readings(self, text, readings):
+        assert clock_readings(text) == readings
+
+    @pytest.mark.parametrize('text', [
+        'harga RM8.00', 'suhu 37.50 darjah', 'Interest is charged at 3.25 per annum.', '4.8 bintang',
+        'RM1,250.50', 'StaywithUnifi 5.0', 'score 3-1', '03-12345678', 'apa khabar semua?',
+        'pukul 3 petang',                       # no minutes, no am/pm: the LLM reads it as before
+        'கூட்டம் காலை 10:45 மணிக்கு',             # Tamil: no Tamil reading here
+    ])
+    def test_not_a_clock_time(self, text):
+        assert clock_readings(text) == [] and clock_hint(text) is None
+
+    def test_hint_in_system_and_user_turn(self):
+        msgs = build_messages('pada pukul pagi 8:00')
+        hint = f'{CLOCK_HINT_HEADER}\npukul pagi 8:00 -> pukul pagi lapan'
+        assert msgs[0]['content'] == f'{SYSTEM_PROMPT}\n\n{hint}'
+        assert msgs[-1]['content'] == f'[{hint}]\npada pukul pagi 8:00'
+        assert msgs[1:-1] == build_messages('x')[1:-1]          # few-shots untouched
+
+    def test_hint_after_caller_prompt(self):
+        msgs = build_messages('pukul 8:00', prompt='normalize in Malay')
+        hint = f'{CLOCK_HINT_HEADER}\npukul 8:00 -> pukul lapan pagi'
+        assert msgs[0]['content'] == f'{SYSTEM_PROMPT}\n\n{CALLER_PROMPT_HEADER}\nnormalize in Malay\n\n{hint}'
+        assert msgs[-1]['content'] == f'[normalize in Malay]\n[{hint}]\npukul 8:00'
+
+    @pytest.mark.parametrize('reply,spoken,kept', [
+        ('pada pukul pagi lapan sifar sifar', 'pukul pagi lapan', False),
+        ('pada pukul pagi lapan.', 'pukul pagi lapan', True),
+        ('Kereta api bertolak pada pukul dua lima minit petang.', 'pukul dua lima minit petang', True),
+        ('pukul dua empat lima minit petang', 'pukul dua lima minit petang', False),
+        ('at eight p m', 'eight a m', False),
+        ('at eight a m, then', 'eight a m', True),
+        ('at eight o clock', 'eight', False),
+        ('at twelve noon', 'twelve', True),
+        ('在早上八点', '早上八点', True),
+        ('在早上八点零零', '早上八点', False),
+        ('下午两点开会', '下午两点', True),
+    ])
+    def test_clock_kept(self, reply, spoken, kept):
+        assert (rejected_reason('x 8:00', reply, clocks=[spoken]) != 'clock time changed') is kept
+
+    def test_no_time_no_hint(self):
+        assert build_messages('baki saya RM50')[0]['content'] == SYSTEM_PROMPT
 
 
 class TestJsonSchema:
@@ -230,6 +304,16 @@ class TestLLMNormalize:
         with pytest.raises(LLMNormalizerError, match='number dropped'):
             run(llm_normalize('750412105678. Did we get that right?', base_url=fake_server, api_key='k', model='m'))
 
+    def test_reply_that_ignores_the_clock_reading_raises(self, fake_server):
+        FakeOpenAI.reply_content = '{"normalized": "pada pukul pagi lapan sifar sifar"}'
+        with pytest.raises(LLMNormalizerError, match='clock time changed'):
+            run(llm_normalize('pada pukul pagi 8:00', base_url=fake_server, api_key='k', model='m'))
+
+    def test_reply_that_keeps_the_clock_reading_passes(self, fake_server):
+        FakeOpenAI.reply_content = '{"normalized": "pada pukul pagi lapan"}'
+        assert run(llm_normalize('pada pukul pagi 8:00', base_url=fake_server, api_key='k', model='m')) \
+            == 'pada pukul pagi lapan'
+
     def test_chinese_numerals_for_english_text_raise(self, fake_server):
         FakeOpenAI.reply_content = '{"normalized": "八 八 零 一 二 三 四 五"}'
         with pytest.raises(LLMNormalizerError, match='Chinese'):
@@ -337,7 +421,7 @@ class TestKeepProductNames:
         out, spans = self.spans()
         reply = ('Kekal bersama Unifi dengan promosi Stay with Unifi lima perpuluhan sifar, '
                  'Langganan dari seratus dua puluh sembilan ringgit sebulan.')
-        assert rejected_reason(out, reply, keep=spans) == 'name changed'
+        assert rejected_reason(out, reply, keep=spans) == 'spelled-out phrase changed'
 
     def test_reply_that_keeps_it_passes(self):
         out, spans = self.spans()
@@ -406,6 +490,18 @@ class TestLive:
         out = run(llm_normalize('余额还剩RM50'))
         assert '五十' in out
         assert not re.search(r'\d', out)
+
+    # "pada pukul pagi 8:00" was spoken "lapan sifar sifar" (prod, 2026-11-16)
+    @pytest.mark.parametrize('text,want', [
+        ('pada pukul pagi 8:00', 'pada pukul pagi lapan'),
+        ('pada pukul pagi 8.00', 'pada pukul pagi lapan'),
+        ('mesyuarat 13:30', 'mesyuarat pukul satu tiga puluh minit petang'),
+        ('pukul 20:00', 'pukul lapan malam'),
+        ('at 20:00', 'at eight p m'),
+        ('14:00开会', '下午两点开会'),
+    ])
+    def test_clock_time(self, text, want):
+        assert run(llm_normalize(text)).rstrip('.') == want
 
     def test_passthrough(self):
         out = run(llm_normalize('apa khabar semua?'))
