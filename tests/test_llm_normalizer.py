@@ -30,6 +30,7 @@ from app.llm_normalizer import (
     clock_readings,
     clock_hint,
     rejected_reason,
+    malay_hundreds,
     LLMNormalizerError,
     NormalizerMode,
 )
@@ -314,6 +315,11 @@ class TestLLMNormalize:
         assert run(llm_normalize('pada pukul pagi 8:00', base_url=fake_server, api_key='k', model='m')) \
             == 'pada pukul pagi lapan'
 
+    def test_satu_ratus_comes_back_seratus(self, fake_server):
+        FakeOpenAI.reply_content = '{"normalized": "Bayaran satu ratus dua puluh ringgit."}'
+        assert run(llm_normalize('Bayaran RM120.00.', base_url=fake_server, api_key='k', model='m')) \
+            == 'Bayaran seratus dua puluh ringgit.'
+
     def test_chinese_numerals_for_english_text_raise(self, fake_server):
         FakeOpenAI.reply_content = '{"normalized": "八 八 零 一 二 三 四 五"}'
         with pytest.raises(LLMNormalizerError, match='Chinese'):
@@ -332,6 +338,31 @@ class TestLLMNormalize:
     def test_unreachable_raises(self):
         with pytest.raises(LLMNormalizerError, match='failed'):
             run(llm_normalize('x', base_url='http://127.0.0.1:1/v1', api_key='k', model='m', timeout=2))
+
+
+class TestMalayHundreds:
+    @pytest.mark.parametrize('text,reply,want', [
+        ('RM120', 'satu ratus dua puluh ringgit', 'seratus dua puluh ringgit'),
+        ('RM180,000', 'satu ratus lapan puluh ribu ringgit', 'seratus lapan puluh ribu ringgit'),
+        ('RM1,100', 'seribu satu ratus ringgit', 'seribu seratus ringgit'),
+        ('RM1,150,000', 'satu juta satu ratus lima puluh ribu ringgit',
+         'satu juta seratus lima puluh ribu ringgit'),
+        ('101 aduan', 'Satu ratus satu aduan', 'Seratus satu aduan'),
+        ('RM1,000', 'satu ribu ringgit', 'seribu ringgit'),
+        ('RM1,001,000', 'satu juta satu ribu ringgit', 'satu juta seribu ringgit'),
+        # "satu ribu" ending a larger group is right as it is
+        ('RM21,000', 'dua puluh satu ribu ringgit', 'dua puluh satu ribu ringgit'),
+        ('RM201,000', 'dua ratus satu ribu ringgit', 'dua ratus satu ribu ringgit'),
+        ('RM101,000', 'satu ratus satu ribu ringgit', 'seratus satu ribu ringgit'),
+        ('RM11,000', 'sebelas ribu ringgit', 'sebelas ribu ringgit'),
+        ('RM120', 'one hundred twenty ringgit', 'one hundred twenty ringgit'),
+    ])
+    def test_reply(self, text, reply, want):
+        assert malay_hundreds(text, reply) == want
+
+    def test_phrase_the_text_wrote_is_kept(self):
+        assert malay_hundreds('satu ratus 20 orang', 'satu ratus dua puluh orang') \
+            == 'satu ratus dua puluh orang'
 
 
 class TestNormalizerMode:

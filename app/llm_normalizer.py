@@ -314,6 +314,23 @@ def _clock_kept(normalized, spoken):
     return False
 
 
+# Malay says one hundred and one thousand with the prefix se-: "seratus", "seribu". The LLM
+# wrote "satu ratus" for RM120, 110 km/j, RM180,000 (10 of 20 shapes, many 10/10), never for
+# RM100 or RM199.90. "satu ribu" stays when it ends a larger group: 21,000 is "dua puluh satu
+# ribu", 201,000 "dua ratus satu ribu".
+_SATU_RATUS = re.compile(r'\b([Ss])atu ratus\b')
+_SATU_RIBU = re.compile(r'(?<![A-Za-z])(?<!puluh )(?<!ratus )(?<!belas )([Ss])atu ribu\b')
+
+
+def malay_hundreds(text, normalized):
+    """"satu ratus" -> "seratus" (and a leading "satu ribu" -> "seribu") in the reply, unless
+    the text itself wrote that phrase, which is the caller's to keep."""
+    if not re.search(r'(?i)\bsatu r(?:atus|ibu)\b', text):
+        normalized = _SATU_RATUS.sub(lambda m: ('S' if m.group(1) == 'S' else 's') + 'eratus', normalized)
+        normalized = _SATU_RIBU.sub(lambda m: ('S' if m.group(1) == 'S' else 's') + 'eribu', normalized)
+    return normalized
+
+
 def rejected_reason(text, normalized, prompt=None, keep=(), clocks=()):
     """Why the LLM's `normalized` reply to `text` must not be spoken, or None if it may.
 
@@ -404,6 +421,7 @@ async def llm_normalize(text, base_url=None, api_key=None, model=None, timeout=N
     normalized = parse_normalized(content)
     if normalized is None:
         raise LLMNormalizerError(f'unusable reply from model: {content[:500]!r}')
+    normalized = malay_hundreds(text, normalized)
     # a clock reading handed to the LLM must come back as given (clock_hint)
     reason = rejected_reason(text, normalized, prompt, keep, [s for _, s in clock_readings(text)])
     if reason:

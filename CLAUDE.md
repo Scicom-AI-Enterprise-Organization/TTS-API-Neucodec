@@ -136,6 +136,12 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   English), non-time truth agreement unchanged (383/383 vs 382/378), 0 rejections. Text with no
   clock time gets byte-identical messages. Tamil is not hinted. The rule normalizer
   (`app/spoken_normalizer`, the fallback) still reads times its old way.
+  **Malay hundreds (`malay_hundreds()`, 2026-11-17):** the reply's "satu ratus" becomes
+  "seratus", and "satu ribu" becomes "seribu" unless it ends a larger group ("dua puluh satu
+  ribu" stays). Done in code, after the reply: the LLM wrote "satu ratus" in 10 of 20 Malay
+  number shapes (RM120, RM180,000, 110 km/j, many 10/10) and the prompt already shows
+  "seribu". Replayed over 19,040 stored replies it changed 224, all right; live, 200/200
+  replies came back "seratus". A phrase the text itself wrote is left alone.
 - `app/spoken_normalizer/`: **rule-based replica of the LLM normalizer** (`mode: "spoken"`), pure Python,
   importable anywhere: `numbers.py` (cardinals/ordinals/years/digits for en, ms, zh, ta; Tamil with sandhi,
   lakhs below 10⁷, `ta_attach()` glues case suffixes: 2024ல் → …நான்கில்), `lang.py` (script → zh/ta;
