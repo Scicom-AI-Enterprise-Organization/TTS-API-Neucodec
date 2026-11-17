@@ -106,6 +106,13 @@ class TestClockTime:
         ('Our technician will arrive at 9:00 AM tomorrow.', [('9:00 AM', 'nine A M')]),
         ('Operating hours are 8:00 am to 5:00 pm.', [('8:00 am', 'eight a m'), ('5:00 pm', 'five p m')]),
         ('Your appointment is on Sept. 4, 2026 at 12:00 noon.', [('12:00', 'twelve')]),
+        # no marker word either way: the dictionaries decide
+        ('bas pertama 7:05', [('7:05', 'pukul tujuh lima minit pagi')]),
+        ('bas terakhir 20:00, pertama 7:05',
+         [('20:00', 'pukul lapan malam'), ('7:05', 'pukul tujuh lima minit pagi')]),
+        ('kaunter dibuka 8:30', [('8:30', 'pukul lapan tiga puluh minit pagi')]),
+        ('last bus 20:00', [('20:00', 'eight p m')]),
+        ('Gate 7:05', [('7:05', 'seven zero five a m')]),
         ('在早上8:00', [('早上8:00', '早上八点')]),
         ('14:00开会', [('14:00', '下午两点')]),
         ('凌晨0:30', [('凌晨0:30', '凌晨零点三十分')]),
@@ -314,6 +321,12 @@ class TestLLMNormalize:
         FakeOpenAI.reply_content = '{"normalized": "pada pukul pagi lapan"}'
         assert run(llm_normalize('pada pukul pagi 8:00', base_url=fake_server, api_key='k', model='m')) \
             == 'pada pukul pagi lapan'
+
+    def test_ordinal_after_a_clock_reading_passes(self, fake_server):
+        reply = 'bas terakhir pukul lapan malam, pertama pukul tujuh lima minit pagi'
+        FakeOpenAI.reply_content = json.dumps({'normalized': reply})
+        assert run(llm_normalize('bas terakhir 20:00, pertama 7:05', base_url=fake_server,
+                                 api_key='k', model='m')) == reply
 
     def test_satu_ratus_comes_back_seratus(self, fake_server):
         FakeOpenAI.reply_content = '{"normalized": "Bayaran satu ratus dua puluh ringgit."}'

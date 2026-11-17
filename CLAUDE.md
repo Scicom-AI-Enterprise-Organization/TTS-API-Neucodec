@@ -134,7 +134,12 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   request, cost ~20 non-time truth sentences. With the hint: 59/61 shapes right in 20 of 20
   runs (1,186/1,220 replies; one miss is "bas pertama 7:05", no language markers, read
   English), non-time truth agreement unchanged (383/383 vs 382/378), 0 rejections. Text with no
-  clock time gets byte-identical messages. Tamil is not hinted. The rule normalizer
+  clock time gets byte-identical messages. A time's language: a cue word (pukul/at), else the
+  marker words, and on a marker tie the dictionaries in `app/normalizer/data` (a word only in
+  the Malay ones votes Malay, only in the English one English; loaded on first use, never on
+  text without a time). That fixed "bas pertama 7:05" and changed no other of 93 known clock
+  texts; 61/61 time shapes right in 10 of 10 live runs (2026-11-17). An ordinal after a time
+  ("20:00, pertama 7:05") is not a run-on of its reading. Tamil is not hinted. The rule normalizer
   (`app/spoken_normalizer`, the fallback) still reads times its old way.
   **Malay hundreds (`malay_hundreds()`, 2026-11-17):** the reply's "satu ratus" becomes
   "seratus", and "satu ribu" becomes "seribu" unless it ends a larger group ("dua puluh satu

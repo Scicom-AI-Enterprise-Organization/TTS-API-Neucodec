@@ -10,6 +10,7 @@ unit tests run anywhere; only aiohttp + app.env + app.prompt are allowed here.
 
 import asyncio
 import json
+import os
 import re
 import logging
 from enum import Enum
@@ -18,7 +19,7 @@ import aiohttp
 
 from app.env import OPENAI_BASE_URL, OPENAI_API_KEY, OPENAI_MODEL_NAME, OPENAI_TIMEOUT
 from app.prompt import SYSTEM_PROMPT, EXAMPLES, JSON_SCHEMA, CALLER_PROMPT_HEADER, CLOCK_HINT_HEADER
-from app.spoken_normalizer.lang import detect_lang
+from app.spoken_normalizer.lang import latin_scores
 from app.spoken_normalizer.numbers import en_cardinal, ms_cardinal, zh_cardinal
 
 
@@ -87,7 +88,41 @@ def _clock_lang(text, m):
         return 'en'
     if _MS_CUE_BEFORE.search(before):
         return 'ms'
-    return detect_lang(text) if detect_lang(text) in ('en', 'ms') else 'en'
+    ms, en = latin_scores(text)
+    if ms == en:            # no marker word either way: "bas pertama 7:05"
+        return _lexicon_lang(text)
+    return 'ms' if ms > en else 'en'
+
+
+# When the marker words tie, the dictionaries bundled with the legacy normalizer decide: a word
+# only in the Malay ones (DBP, Kamus Dewan, malay_words) votes Malay, a word only in the English
+# one votes English. Marker words alone sent "bas pertama 7:05" to English (neither word is a
+# marker), read "seven zero five a m" 10 of 10.
+_LEXICONS = None
+
+
+def _lexicon_lang(text):
+    global _LEXICONS
+    if _LEXICONS is None:
+        data = os.path.join(os.path.dirname(__file__), 'normalizer', 'data')
+
+        def words(*names):
+            out = set()
+            for n in names:
+                try:
+                    with open(os.path.join(data, f'{n}.json')) as f:
+                        out.update(w.lower() for w in json.load(f))
+                except (OSError, ValueError):
+                    pass
+            return out
+
+        _LEXICONS = (words('malay_words', 'dbp_words', 'kamus_dewan_words'), words('english_words'))
+    ms_words, en_words = _LEXICONS
+    ms = en = 0
+    for tok in re.findall(r'[a-z]{2,}', text.lower()):
+        ms += tok in ms_words and tok not in en_words
+        en += tok in en_words and tok not in ms_words
+    return 'ms' if ms > en else 'en'
 
 
 def clock_readings(text):
@@ -299,6 +334,16 @@ def _spoken_digits(out):
     return len(words) + words.count('triple')       # "double eight" is two words already
 
 
+_ORDINAL_WORD = re.compile(r'(?i)pertama|ke\w+|first|second|third|\w+th')
+
+
+def _runs_on(rest):
+    """`rest` opens with a number word that would continue a clock reading. An ordinal does
+    not: "pukul lapan malam, pertama pukul tujuh ..." is two readings."""
+    w = _NUMBER_WORD.match(rest)
+    return bool(w) and not _ORDINAL_WORD.fullmatch(w.group(0))
+
+
 def _clock_kept(normalized, spoken):
     """`spoken` is in the reply as a whole reading: not "pukul pagi lapan" inside "pukul pagi
     lapan sifar sifar", i.e. no number word runs on after it."""
@@ -308,7 +353,7 @@ def _clock_kept(normalized, spoken):
         if _HAN_CHAR.match(spoken[-1:] or ' ') or spoken.endswith('点') or spoken.endswith('分'):
             if not re.match(r'[零〇一二两三四五六七八九十百半整分]', rest):
                 return True
-        elif not re.match(r'[A-Za-z]', rest) and not _NUMBER_WORD.match(rest.lstrip(' ,')) \
+        elif not re.match(r'[A-Za-z]', rest) and not _runs_on(rest.lstrip(' ,')) \
                 and not re.match(r'(?i)\s*(?:minit|minutes?|o.?clock|[ap]\.?\s?m\b)', rest):
             return True
     return False
