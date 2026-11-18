@@ -27,6 +27,7 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
 - `app/main.py` is the whole serving app: `/v1/audio/speech` (TTS), `/v1/audio/vc` (voice conversion),
   `/v1/audio/normalize`, `/v1/audio/speaker`, and `GET /`, which returns `VERSION` (the commit sha a
   deployment sets, or the Dockerfile's `--build-arg VERSION`) so prod can say what it is serving. Holds the dynamic-batching + CUDA-graph decode pipeline.
+- `app/speech_tokens.py`: **`response_format: "tokens"`** on `/v1/audio/speech` returns JSON instead of audio (`tokens` = the LM's `<|s_N|>` ids, `speech`, `n_tokens`, `seconds` at 50 tokens/s, `finish_reason`, `normalized`; `return_prompt: true` adds the exact prompt the LM saw). Same normalization, prompt (interleave history included) and sampling as an audio request, both LM backends, no NeuCodec decode; a clean finish is committed to the interleave store like an audio turn. For collecting the served model's own takes (DPO data) and debugging a take without the codec. Tests: `tests/test_speech_tokens.py` (no torch).
 - `app/env.py` holds all runtime config, read from environment / `.env`.
 - `app/interleave.py`: **interleaved generation, needs an interleave-trained LM** (`interleave_id` on `/v1/audio/speech`,
   aliases `request_id`/`context_id`, header `X-Interleave-Id`/`X-Context-Id`). Requests sharing

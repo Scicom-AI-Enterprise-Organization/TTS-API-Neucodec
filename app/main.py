@@ -18,7 +18,7 @@ import tempfile
 from tqdm import tqdm
 from torch.nn.utils.rnn import pad_sequence
 from fastapi import FastAPI, Request, HTTPException, File, Form
-from fastapi.responses import StreamingResponse, FileResponse, Response
+from fastapi.responses import StreamingResponse, FileResponse, Response, JSONResponse
 from pydantic import BaseModel, Field, AliasChoices
 from huggingface_hub import hf_hub_download
 from app.normalizer import load as load_normalizer, to_cardinal
@@ -28,6 +28,7 @@ from app.spoken_normalizer import normalize as spoken_normalize
 from app import tracing
 from app.fade import fade_in_pcm16
 from app import lm_inprocess  # LM_BACKEND=inprocess only; imports vllm lazily
+from app import speech_tokens  # response_format=tokens
 from app.interleave import (
     make_store, RequestInterleave, build_prompt, fit_interleave, select_voice,
     seconds_to_tokens, total_tokens,
@@ -1455,7 +1456,10 @@ class NormalizeRequest(BaseModel):
 class TTSRequest(NormalizeRequest):
     voice: str = DEFAULT_SPEAKER
     model: str = MODEL_NAME
-    response_format: Literal["pcm", "wav"] = "pcm"
+    # "tokens": no audio -- JSON with the LM's speech-token ids (app/speech_tokens.py)
+    response_format: Literal["pcm", "wav", "tokens"] = "pcm"
+    # response_format=tokens only: also return the exact prompt the LM saw (interleave history included)
+    return_prompt: bool = False
     # "audio" = raw audio bytes (default, back-compat); "sse" = OpenAI-style
     # Server-Sent Events with base64 PCM deltas (required by livekit openai TTS plugin).
     stream_format: Literal["audio", "sse"] = "audio"
@@ -1777,6 +1781,39 @@ async def delete_interleave(interleave_id: str):
     return {'interleave_id': interleave_id, 'deleted': interleave_store.delete(interleave_id)}
 
 
+async def speech_tokens_response(data, prompt, max_tokens, interleave, normalized):
+    """response_format=tokens: the same prompt and sampling as an audio request, the LM's speech tokens back as
+    JSON, no codec. A clean finish (not `length`) is committed to the interleave store like an audio turn, so the
+    next chunk of the reply keeps its context."""
+    body = {'model': data.model, 'prompt': prompt, 'max_tokens': max_tokens,
+            'temperature': data.temperature, 'repetition_penalty': data.repetition_penalty}
+    if DUMMY_TOKENS_FILE:
+        completion, finish = DUMMY_TOKENS, 'stop'
+    elif LM_BACKEND == 'inprocess':
+        completion, finish = await speech_tokens.collect(lm_inprocess.stream(prompt, {**body, 'stream': True}))
+    else:
+        headers = {'accept': 'application/json', 'Content-Type': 'application/json'}
+        if TTS_API_KEY:
+            headers['Authorization'] = f'Bearer {TTS_API_KEY}'
+        try:
+            async with aiohttp.ClientSession() as session:
+                completion, finish = await speech_tokens.collect(
+                    speech_tokens.http_deltas(session.post, TTS_API, headers, body))
+        except RuntimeError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+    ileave = None
+    if interleave is not None:
+        ids = speech_tokens.parse_ids(completion)
+        stored = interleave.commit(ids) if finish != 'length' else None
+        ileave = {'id': interleave.key, 'history_turns': len(interleave.turns),
+                  'stored': stored is not None}
+    return JSONResponse(
+        speech_tokens.response_body(model=data.model, voice=data.voice, text_in=data.input, normalized=normalized,
+                                    completion=completion, finish_reason=finish,
+                                    prompt=prompt if data.return_prompt else None, interleave=ileave),
+        headers=interleave.headers() if interleave is not None else None)
+
+
 @app.post('/v1/audio/speech')
 async def tts_stream(data: TTSRequest, request: Request = None):
     speaker = data.voice
@@ -1799,6 +1836,10 @@ async def tts_stream(data: TTSRequest, request: Request = None):
             # leaves "" and _post_normalize a ".". Given that, the LM makes up a phrase of its
             # own ("See ya!", "Did we get that right?": 3 of 12 takes, up to 4.7 s). An empty
             # response in the shape asked for; no LM call, nothing stored for interleave.
+            if data.response_format == 'tokens':
+                return JSONResponse(speech_tokens.response_body(
+                    model=data.model, voice=speaker, text_in=data.input, normalized=s, completion='',
+                    finish_reason=None, prompt='' if data.return_prompt else None))
             return await audio_response(_no_audio(), data.response_format, data.stream, data.stream_format)
         if interleave_key and interleave_store is not None:
             interleave, max_tokens = load_interleave(
@@ -1807,6 +1848,10 @@ async def tts_stream(data: TTSRequest, request: Request = None):
         # with no history this is exactly the plain single-turn prompt
         prompt = build_prompt(interleave.turns if interleave is not None else [], speaker, s)
         logging.info(f'prompt: {prompt_for_log(prompt)}')
+
+    if data.response_format == 'tokens':
+        return await speech_tokens_response(data, prompt, max_tokens, interleave,
+                                            normalized=s if not DUMMY_TOKENS_FILE else data.input)
 
     return await stream_speech(
         prompt=prompt,
