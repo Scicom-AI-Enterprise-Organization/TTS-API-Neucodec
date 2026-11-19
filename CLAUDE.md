@@ -148,6 +148,13 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   number shapes (RM120, RM180,000, 110 km/j, many 10/10) and the prompt already shows
   "seribu". Replayed over 19,040 stored replies it changed 224, all right; live, 200/200
   replies came back "seratus". A phrase the text itself wrote is left alone.
+  **Mail domains (`mail_words()`, 2026-11-19):** a "mail" glued into an email domain is
+  spelled "mel": "at yopmail dot com" -> "at yopmel dot com", `@hotmail.com` -> "at hotmel
+  dot com". The LM reads an unknown "yopmail" by its letters, "yop-ma-il". Done in code on the
+  reply (the LLM hands the domain back as written, 24/24 live) and on the `SKIP_PLAIN` path,
+  because an address the agent already spelled out never reaches the LLM. Prod TTS, 8 takes,
+  wav2vec2-espeak phonemes: Malay "mel" 1/8 -> 7/8, English 1/7 -> 6/7. `gmail` and `email` stay
+  (the LM knows them; "G mel" read "ji-ma" 3/8), and so does a spaced "yop mel" (5/8).
 - `app/spoken_normalizer/`: **rule-based replica of the LLM normalizer** (`mode: "spoken"`), pure Python,
   importable anywhere: `numbers.py` (cardinals/ordinals/years/digits for en, ms, zh, ta; Tamil with sandhi,
   lakhs below 10⁷, `ta_attach()` glues case suffixes: 2024ல் → …நான்கில்), `lang.py` (script → zh/ta;

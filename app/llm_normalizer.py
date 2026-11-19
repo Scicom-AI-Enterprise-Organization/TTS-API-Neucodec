@@ -376,6 +376,32 @@ def malay_hundreds(text, normalized):
     return normalized
 
 
+# An email domain with "mail" glued into it is not a word the TTS LM knows, so it reads it by
+# spelling: "yopmail" came back "yop-ma-il" (Malay grapheme rules; "Mail" is also a Malay
+# name, read ma-il). Spelled "mel", the Malay loan for mail ("emel") and how Malaysian English
+# says it, it reads as one syllable. Prod TTS, 8 takes each, phonemes by wav2vec2-espeak
+# (2026-11-19): "yopmail" in a Malay sentence 1/8 "mel", 5/8 two syllables; "yopmel" 7/8;
+# English 1/7 -> 6/7; "hotmail" English 3/6 -> 6/6. Spacing it off ("yop mel") is worse (5/8),
+# and "gmail" is left alone: the LM knows it ("ji-mel" 6/8) and "G mel" read "ji-ma" 3/8.
+# Only the domain right after "@" or a spelled "at", before "." / "dot" / "titik".
+_MAIL_DOMAIN = re.compile(
+    r'(?:@|(?<![A-Za-z])at\s+)([A-Za-z0-9-]*mail[A-Za-z0-9-]*)(?=(?:\.|\s+(?:dot|titik)\s+)[A-Za-z])',
+    re.IGNORECASE)
+_MAIL_KNOWN = {'mail', 'gmail', 'email'}
+
+
+def mail_words(normalized):
+    """"at yopmail dot com" -> "at yopmel dot com": a "mail" glued into an email domain is
+    spelled as it is said. Runs on the LLM's reply and on the text the LLM was skipped for."""
+    def domain(m):
+        label = m.group(1)
+        if label.lower() in _MAIL_KNOWN:
+            return m.group(0)
+        spoken = re.sub('(?i)mail', lambda w: {'MAIL': 'MEL', 'Mail': 'Mel'}.get(w.group(0), 'mel'), label)
+        return m.group(0)[:m.start(1) - m.start(0)] + spoken
+    return _MAIL_DOMAIN.sub(domain, normalized)
+
+
 def rejected_reason(text, normalized, prompt=None, keep=(), clocks=()):
     """Why the LLM's `normalized` reply to `text` must not be spoken, or None if it may.
 
@@ -466,7 +492,7 @@ async def llm_normalize(text, base_url=None, api_key=None, model=None, timeout=N
     normalized = parse_normalized(content)
     if normalized is None:
         raise LLMNormalizerError(f'unusable reply from model: {content[:500]!r}')
-    normalized = malay_hundreds(text, normalized)
+    normalized = mail_words(malay_hundreds(text, normalized))
     # a clock reading handed to the LLM must come back as given (clock_hint)
     reason = rejected_reason(text, normalized, prompt, keep, [s for _, s in clock_readings(text)])
     if reason:

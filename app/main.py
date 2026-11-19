@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field, AliasChoices
 from huggingface_hub import hf_hub_download
 from app.normalizer import load as load_normalizer, to_cardinal
 from app.normalizer.chinese import normalize_chinese, is_chinese_dominant, CJK_RE, KANA_RE
-from app.llm_normalizer import llm_normalize, needs_normalization, has_unspoken, LLMNormalizerError, NormalizerMode
+from app.llm_normalizer import llm_normalize, needs_normalization, has_unspoken, mail_words, LLMNormalizerError, NormalizerMode
 from app.spoken_normalizer import normalize as spoken_normalize
 from app import tracing
 from app.fade import fade_in_pcm16
@@ -1646,7 +1646,7 @@ async def normalize_request_text(data, fallback_to_rule=False):
                     # the caller what that reply would have become and save the ~0.55 s
                     # round trip -- which sat entirely in front of the first audio byte.
                     logging.info('llm normalizer skipped: nothing to normalize')
-                    s = _post_normalize(s)
+                    s = _post_normalize(mail_words(s))   # an email already spelled out
                     tracing.set_attributes(sp, {'normalizer.llm_skipped': True,
                                                 'normalizer.chars_out': len(s)})
                     return s

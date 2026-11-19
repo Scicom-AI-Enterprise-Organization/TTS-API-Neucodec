@@ -31,6 +31,7 @@ from app.llm_normalizer import (
     clock_hint,
     rejected_reason,
     malay_hundreds,
+    mail_words,
     LLMNormalizerError,
     NormalizerMode,
 )
@@ -333,6 +334,11 @@ class TestLLMNormalize:
         assert run(llm_normalize('Bayaran RM120.00.', base_url=fake_server, api_key='k', model='m')) \
             == 'Bayaran seratus dua puluh ringgit.'
 
+    def test_mail_domain_comes_back_mel(self, fake_server):
+        FakeOpenAI.reply_content = '{"normalized": "emel saya ali at yopmail dot com"}'
+        assert run(llm_normalize('emel saya ali@yopmail.com', base_url=fake_server, api_key='k',
+                                 model='m')) == 'emel saya ali at yopmel dot com'
+
     def test_chinese_numerals_for_english_text_raise(self, fake_server):
         FakeOpenAI.reply_content = '{"normalized": "八 八 零 一 二 三 四 五"}'
         with pytest.raises(LLMNormalizerError, match='Chinese'):
@@ -376,6 +382,29 @@ class TestMalayHundreds:
     def test_phrase_the_text_wrote_is_kept(self):
         assert malay_hundreds('satu ratus 20 orang', 'satu ratus dua puluh orang') \
             == 'satu ratus dua puluh orang'
+
+
+class TestMailWords:
+    @pytest.mark.parametrize('text,want', [
+        ('Tidak mengapa. tiran benar at yopmail dot com. Betul ke?',
+         'Tidak mengapa. tiran benar at yopmel dot com. Betul ke?'),
+        ('ali at hotmail dot com dot my', 'ali at hotmel dot com dot my'),
+        ('ali at Yopmail titik com', 'ali at Yopmel titik com'),
+        ('ali@yopmail.com', 'ali@yopmel.com'),
+        ('ali at mailinator dot com', 'ali at melinator dot com'),
+        ('ali at YOPMAIL dot com', 'ali at YOPMEL dot com'),
+        # known to the LM, or not glued: as written
+        ('ali at gmail dot com', 'ali at gmail dot com'),
+        ('ali at email dot com', 'ali at email dot com'),
+        ('ali at mail dot yahoo dot com', 'ali at mail dot yahoo dot com'),
+        # not an email domain
+        ('saya hantar ke hotmail tadi', 'saya hantar ke hotmail tadi'),
+        ('look at hotmail. Then sign in', 'look at hotmail. Then sign in'),
+        ('yopmail at site dot com', 'yopmail at site dot com'),
+        ('that hotmail dot com', 'that hotmail dot com'),
+    ])
+    def test_reply(self, text, want):
+        assert mail_words(text) == want
 
 
 class TestNormalizerMode:
