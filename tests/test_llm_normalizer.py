@@ -393,6 +393,10 @@ class TestMailWords:
         ('ali@yopmail.com', 'ali@yopmel.com'),
         ('ali at mailinator dot com', 'ali at melinator dot com'),
         ('ali at YOPMAIL dot com', 'ali at YOPMEL dot com'),
+        # Malay spelled "at"
+        ('d tiga empat tiga lapan kosong lima pada yopmail dot com. Betul?',
+         'd tiga empat tiga lapan kosong lima pada yopmel dot com. Betul?'),
+        ('ali di hotmail titik com', 'ali di hotmel titik com'),
         # known to the LM, or not glued: as written
         ('ali at gmail dot com', 'ali at gmail dot com'),
         ('ali at email dot com', 'ali at email dot com'),
@@ -402,6 +406,8 @@ class TestMailWords:
         ('look at hotmail. Then sign in', 'look at hotmail. Then sign in'),
         ('yopmail at site dot com', 'yopmail at site dot com'),
         ('that hotmail dot com', 'that hotmail dot com'),
+        ('padahotmail dot com', 'padahotmail dot com'),
+        ('saya pada hotmail tadi', 'saya pada hotmail tadi'),
     ])
     def test_reply(self, text, want):
         assert mail_words(text) == want

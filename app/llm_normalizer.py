@@ -383,9 +383,11 @@ def malay_hundreds(text, normalized):
 # (2026-11-19): "yopmail" in a Malay sentence 1/8 "mel", 5/8 two syllables; "yopmel" 7/8;
 # English 1/7 -> 6/7; "hotmail" English 3/6 -> 6/6. Spacing it off ("yop mel") is worse (5/8),
 # and "gmail" is left alone: the LM knows it ("ji-mel" 6/8) and "G mel" read "ji-ma" 3/8.
-# Only the domain right after "@" or a spelled "at", before "." / "dot" / "titik".
+# Only the domain right after "@" or a spelled "at" (English "at", Malay "pada"/"di": an agent
+# reading back in Malay writes "... lima pada yopmail dot com", 2026-11-20), before "." / "dot"
+# / "titik".
 _MAIL_DOMAIN = re.compile(
-    r'(?:@|(?<![A-Za-z])at\s+)([A-Za-z0-9-]*mail[A-Za-z0-9-]*)(?=(?:\.|\s+(?:dot|titik)\s+)[A-Za-z])',
+    r'(?:@|(?<![A-Za-z])(?:at|pada|di)\s+)([A-Za-z0-9-]*mail[A-Za-z0-9-]*)(?=(?:\.|\s+(?:dot|titik)\s+)[A-Za-z])',
     re.IGNORECASE)
 _MAIL_KNOWN = {'mail', 'gmail', 'email'}
 

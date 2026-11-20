@@ -1681,7 +1681,7 @@ async def normalize_request_text(data, fallback_to_rule=False):
                         raise HTTPException(status_code=502, detail=f'llm normalizer failed: {e}')
                     logging.warning(f'llm normalizer failed, falling back to the spoken normalizer: {e}')
                     tracing.set_attributes(sp, {'normalizer.fallback': 'error'})
-                    s = _post_normalize(spoken_normalize(s))
+                    s = _post_normalize(mail_words(spoken_normalize(s)))
                     tracing.set_attributes(sp, {'normalizer.chars_out': len(s)})
                     return s
         with tracing.span('normalize.rule'):

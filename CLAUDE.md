@@ -153,7 +153,9 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   dot com". The LM reads an unknown "yopmail" by its letters, "yop-ma-il". Done in code on the
   reply (the LLM hands the domain back as written, 24/24 live) and on the `SKIP_PLAIN` path,
   because an address the agent already spelled out never reaches the LLM. Prod TTS, 8 takes,
-  wav2vec2-espeak phonemes: Malay "mel" 1/8 -> 7/8, English 1/7 -> 6/7. `gmail` and `email` stay
+  wav2vec2-espeak phonemes: Malay "mel" 1/8 -> 7/8, English 1/7 -> 6/7. The spelled "at" may be
+  Malay: "lima pada yopmail dot com" (or "di") is matched too; the first fix only knew "at" and
+  missed a Malay read-back. Also run on the spoken fallback. `gmail` and `email` stay
   (the LM knows them; "G mel" read "ji-ma" 3/8), and so does a spaced "yop mel" (5/8).
 - `app/spoken_normalizer/`: **rule-based replica of the LLM normalizer** (`mode: "spoken"`), pure Python,
   importable anywhere: `numbers.py` (cardinals/ordinals/years/digits for en, ms, zh, ta; Tamil with sandhi,
