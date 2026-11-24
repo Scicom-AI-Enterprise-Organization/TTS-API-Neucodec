@@ -99,6 +99,15 @@ CALLER_PROMPT_HEADER = "Additional instructions from the caller for this text:"
 # (the two places the caller `prompt` goes, for the same reason). The reply must keep it.
 CLOCK_HINT_HEADER = "Read the clock times in this text exactly as given here (written -> spoken):"
 
+# Number language: llm_normalizer.number_language() decides from the text's words that its
+# numbers are read in Malay, and this line goes with the text the same two ways as the clock
+# hint. Without it a short Malay reply had its amount read in English: "Okay, 100 ringgit,
+# betul?" -> "one hundred ringgit" (gemma-4-31b, 10 of 10, 2026-11-24). The wording matters:
+# "write every number in it in Malay words" fixed the numbers but narrowed the job to numbers
+# ("5 GB" stayed "GB", "no." and "WXY" were left, 78/96 hinted truth rows against 83/82);
+# this one read all 18 hinted test lines in Malay 10 of 10 and kept the hinted rows at 82/84.
+NUMBER_LANGUAGE_HINT = "This text is Malay: normalize it as Malay text."
+
 # Strict schema for OpenAI `response_format`; guided decoding guarantees the reply
 # parses as {"normalized": str}, so the output can be fed directly to the TTS LM.
 JSON_SCHEMA = {

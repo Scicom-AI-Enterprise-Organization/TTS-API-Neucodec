@@ -157,6 +157,17 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   Malay: "lima pada yopmail dot com" (or "di") is matched too; the first fix only knew "at" and
   missed a Malay read-back. Also run on the spoken fallback. `gmail` and `email` stay
   (the LM knows them; "G mel" read "ji-ma" 3/8), and so does a spaced "yop mel" (5/8).
+  **Malay numbers (`number_language()`, 2026-11-24):** a short Malay reply had its amount read
+  in English: "Okay, 100 ringgit, betul?" -> "one hundred ringgit" 10/10, "100 ringgit,
+  boleh?" 6/10 to 10/10 ("ringgit" is both languages). When the marker words in
+  `spoken_normalizer/lang.py` make the text Malay (more Malay than English markers; "ok"/"okey"
+  do not count) and every number's neighbours (`local_lang`) say Malay too, the LLM gets
+  `NUMBER_LANGUAGE_HINT` in the same two places as the clock hint, and a reply with an English
+  number word the text did not have is rejected ("English numbers in Malay text"). Not with a
+  caller `prompt`; a clock time keeps its own reading. The wording matters: "write every number
+  in Malay words" fixed the numbers but narrowed the job ("5 GB" stayed "GB", 78/96 hinted truth
+  rows vs 83/82); "normalize it as Malay text" read 18/18 test lines in Malay 10/10 and kept the
+  hinted rows at 82/84. E2E (test instance, prod LM, phonemes): 12/12 Malay takes said "seratus".
 - `app/spoken_normalizer/`: **rule-based replica of the LLM normalizer** (`mode: "spoken"`), pure Python,
   importable anywhere: `numbers.py` (cardinals/ordinals/years/digits for en, ms, zh, ta; Tamil with sandhi,
   lakhs below 10⁷, `ta_attach()` glues case suffixes: 2024ல் → …நான்கில்), `lang.py` (script → zh/ta;

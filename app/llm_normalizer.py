@@ -13,13 +13,15 @@ import json
 import os
 import re
 import logging
+from collections import Counter
 from enum import Enum
 
 import aiohttp
 
 from app.env import OPENAI_BASE_URL, OPENAI_API_KEY, OPENAI_MODEL_NAME, OPENAI_TIMEOUT
-from app.prompt import SYSTEM_PROMPT, EXAMPLES, JSON_SCHEMA, CALLER_PROMPT_HEADER, CLOCK_HINT_HEADER
-from app.spoken_normalizer.lang import latin_scores
+from app.prompt import (SYSTEM_PROMPT, EXAMPLES, JSON_SCHEMA, CALLER_PROMPT_HEADER, CLOCK_HINT_HEADER,
+                        NUMBER_LANGUAGE_HINT)
+from app.spoken_normalizer.lang import latin_scores, local_lang
 from app.spoken_normalizer.numbers import en_cardinal, ms_cardinal, zh_cardinal
 
 
@@ -127,6 +129,11 @@ def _lexicon_lang(text):
 
 def clock_readings(text):
     """[(written, spoken)] for every clock time in `text`, in order. Empty for Tamil text."""
+    return [(m.group(0).strip(), spoken) for m, spoken in _clock_times(text)]
+
+
+def _clock_times(text):
+    """[(match, spoken)] for every clock time in `text`, in order."""
     if not text or re.search('[஀-௿]', text):
         return []
     out = []
@@ -172,8 +179,7 @@ def clock_readings(text):
                 period = 'a m' if h24 < 12 else 'p m'
                 words.append(period.upper() if ap and ap[0].isupper() and ap[-1].isupper() else period)
             spoken = ' '.join(words)
-        written = m.group(0).strip()
-        out.append((written, spoken))
+        out.append((m, spoken))
     return out
 
 
@@ -185,19 +191,65 @@ def clock_hint(text):
     return CLOCK_HINT_HEADER + '\n' + '\n'.join(f'{w} -> {s}' for w, s in readings)
 
 
+# The language a number is read in. A short Malay reply had its amount read in English:
+# "Okay, 100 ringgit, betul?" -> "Okay, one hundred ringgit, betul?" 10 of 10, "100 ringgit,
+# boleh?" 6 of 10 (gemma-4-31b, 2026-11-24). "ringgit" belongs to both languages, and the one
+# Malay word sits at the far end. The marker words the spoken normalizer uses decide it here:
+# the sentence's (more Malay than English, so a tie such as "Total 100 ringgit." is left to
+# the LLM), then each number's nearest neighbours (lang.local_lang). When every number is
+# Malay, the LLM is told (NUMBER_LANGUAGE_HINT) and a reply with English number words is
+# rejected. "ok" and
+# "okey" are Malay markers there but say nothing here ("RM100, ok?"), and a clock time keeps
+# the reading clock_hint gave it, even an English one ("call balik at 3pm").
+_DIGIT_RUN = re.compile(r'\d+(?:[.,:]\d+)*')
+_SHARED_WORD = re.compile(r'(?i)(?<![A-Za-z])(?:ok|okey|okay)(?![A-Za-z])')
+_EN_NUMBER_WORD = re.compile(
+    r'(?i)(?<![a-z])(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|'
+    r'(?:thir|four|fif|six|seven|eigh|nine)teen|(?:twen|thir|for|fif|six|seven|eigh|nine)ty|'
+    r'hundred|thousand|million|billion)(?![a-z])')
+
+
+def number_language(text):
+    """'ms' when `text` is Latin script and every number in it is read in Malay, else None."""
+    if not text or not re.search(r'\d', text) or _HAN_CHAR.search(text) or re.search('[஀-௿]', text):
+        return None
+    text = _SHARED_WORD.sub(lambda m: ' ' * len(m.group(0)), text)       # same offsets
+    ms, en = latin_scores(text)
+    if ms <= en:
+        return None
+    clocks = [m.span() for m, _ in _clock_times(text)]
+    numbers = [m for m in _DIGIT_RUN.finditer(text)
+               if not any(a <= m.start() < b for a, b in clocks)]
+    if not numbers or any(local_lang(text, m.start(), m.end(), 'ms') != 'ms' for m in numbers):
+        return None
+    return 'ms'
+
+
+def _english_numbers_added(text, normalized):
+    """The reply has an English number word the text did not already have."""
+    def count(s):
+        return Counter(w.lower() for w in _EN_NUMBER_WORD.findall(s))
+    return bool(count(normalized) - count(text))
+
+
 def build_messages(text, prompt=None):
     """`prompt` is the caller's extra context (the request's `prompt` field), put both at
     the end of the system prompt and in brackets above the text (why both: app/prompt.py);
     blank or None leaves the messages exactly as without it. A clock time in `text` adds its
-    reading (clock_hint) the same two ways; text without one gets the messages unchanged."""
+    reading (clock_hint) the same two ways, and so does NUMBER_LANGUAGE_HINT when every number
+    is read in Malay (number_language; not with a caller prompt, which decides that itself).
+    Other text gets the messages unchanged."""
     prompt = (prompt or '').strip()
     hint = clock_hint(text)
-    extra = [x for x in (prompt, hint) if x]
+    lang_hint = NUMBER_LANGUAGE_HINT if not prompt and number_language(text) == 'ms' else None
+    extra = [x for x in (prompt, hint, lang_hint) if x]
     system = SYSTEM_PROMPT
     if prompt:
         system = f'{system}\n\n{CALLER_PROMPT_HEADER}\n{prompt}'
     if hint:
         system = f'{system}\n\n{hint}'
+    if lang_hint:
+        system = f'{system}\n\n{lang_hint}'
     messages = [{'role': 'system', 'content': system}]
     for before, after in EXAMPLES:
         messages.append({'role': 'user', 'content': before})
@@ -404,10 +456,12 @@ def mail_words(normalized):
     return _MAIL_DOMAIN.sub(domain, normalized)
 
 
-def rejected_reason(text, normalized, prompt=None, keep=(), clocks=()):
+def rejected_reason(text, normalized, prompt=None, keep=(), clocks=(), number_lang=None):
     """Why the LLM's `normalized` reply to `text` must not be spoken, or None if it may.
 
     `clocks`: the clock_readings() handed to the LLM, each to come back whole.
+    `number_lang`: number_language(text); 'ms' rejects English number words the text did
+    not have.
     `keep`: phrases already spelled out (rules.product_names) that the reply
     must hand back unchanged. Skipped for Tamil (no digit-word list here). With a caller
     `prompt` the keep, Chinese and leftover-digit checks are off, since a prompt may ask for
@@ -432,6 +486,8 @@ def rejected_reason(text, normalized, prompt=None, keep=(), clocks=()):
         return 'digits left'
     if _HAN_CHAR.search(normalized) and not _CJK_TEXT.search(text):
         return 'Chinese numerals in non-Chinese text'
+    if number_lang == 'ms' and _english_numbers_added(' '.join((text, *clocks)), normalized):
+        return 'English numbers in Malay text'
     return None
 
 
@@ -495,8 +551,10 @@ async def llm_normalize(text, base_url=None, api_key=None, model=None, timeout=N
     if normalized is None:
         raise LLMNormalizerError(f'unusable reply from model: {content[:500]!r}')
     normalized = mail_words(malay_hundreds(text, normalized))
-    # a clock reading handed to the LLM must come back as given (clock_hint)
-    reason = rejected_reason(text, normalized, prompt, keep, [s for _, s in clock_readings(text)])
+    # a clock reading handed to the LLM must come back as given (clock_hint), and Malay
+    # numbers in Malay (number_language)
+    reason = rejected_reason(text, normalized, prompt, keep, [s for _, s in clock_readings(text)],
+                             number_language(text))
     if reason:
         raise LLMNormalizerError(f'rejected reply ({reason}): {normalized[:500]!r}')
     return normalized

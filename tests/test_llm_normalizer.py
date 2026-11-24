@@ -29,13 +29,15 @@ from app.llm_normalizer import (
     needs_normalization,
     clock_readings,
     clock_hint,
+    number_language,
     rejected_reason,
     malay_hundreds,
     mail_words,
     LLMNormalizerError,
     NormalizerMode,
 )
-from app.prompt import SYSTEM_PROMPT, EXAMPLES, JSON_SCHEMA, CALLER_PROMPT_HEADER, CLOCK_HINT_HEADER
+from app.prompt import (SYSTEM_PROMPT, EXAMPLES, JSON_SCHEMA, CALLER_PROMPT_HEADER, CLOCK_HINT_HEADER,
+                        NUMBER_LANGUAGE_HINT)
 
 
 class TestBuildMessages:
@@ -161,7 +163,66 @@ class TestClockTime:
         assert (rejected_reason('x 8:00', reply, clocks=[spoken]) != 'clock time changed') is kept
 
     def test_no_time_no_hint(self):
-        assert build_messages('baki saya RM50')[0]['content'] == SYSTEM_PROMPT
+        assert build_messages('my balance is RM50')[0]['content'] == SYSTEM_PROMPT
+
+
+class TestNumberLanguage:
+    """Malay text has its numbers read in Malay: the LLM is told, and a reply with English
+    number words is rejected. "Okay, 100 ringgit, betul?" came back "one hundred ringgit"
+    10 of 10 (gemma-4-31b, 2026-11-24)."""
+
+    @pytest.mark.parametrize('text', [
+        '100 ringgit, betul?', 'Okay, 100 ringgit, betul?', '100 ringgit, boleh?',
+        '250 ringgit sahaja.', 'RM89.90, betul?', '3 bulan, betul?',
+        'Encik perlu bayar 350 ringgit sebelum hujung bulan.',
+        'Baik, jumlahnya 100 ringgit, betul?',
+    ])
+    def test_malay(self, text):
+        assert number_language(text) == 'ms'
+
+    @pytest.mark.parametrize('text', [
+        '100 ringgit, right?', "That's 50 ringgit.", "Okay, so that's 100 ringgit, right?",
+        'RM50',                                 # no words: the caller's prompt decides
+        '100 ringgit.', 'Total 100 ringgit.',   # no marker word: left to the LLM
+        'RM100, ok?', '100 ringgit, ok?',       # "ok" is said in both
+        'Bil anda RM250 for this month',        # the amount sits in the English part
+        'Nanti saya call balik at 3pm ya',      # a clock time keeps its own reading
+        'apa khabar semua?',                    # no number
+        '余额还剩RM50', 'கூட்டம் 10 மணிக்கு',
+    ])
+    def test_not_malay(self, text):
+        assert number_language(text) is None
+
+    def test_hint_in_system_and_user_turn(self):
+        msgs = build_messages('100 ringgit, betul?')
+        assert msgs[0]['content'] == f'{SYSTEM_PROMPT}\n\n{NUMBER_LANGUAGE_HINT}'
+        assert msgs[-1]['content'] == f'[{NUMBER_LANGUAGE_HINT}]\n100 ringgit, betul?'
+        assert msgs[1:-1] == build_messages('x')[1:-1]
+
+    def test_no_hint_with_caller_prompt(self):
+        msgs = build_messages('100 ringgit, betul?', prompt='read it in English')
+        assert NUMBER_LANGUAGE_HINT not in msgs[0]['content'] + msgs[-1]['content']
+
+    def test_hint_after_clock_hint(self):
+        msgs = build_messages('Bayar 50 ringgit sebelum 17:00, boleh?')
+        hint = f'{CLOCK_HINT_HEADER}\n17:00 -> pukul lima petang'
+        assert msgs[0]['content'] == f'{SYSTEM_PROMPT}\n\n{hint}\n\n{NUMBER_LANGUAGE_HINT}'
+
+    @pytest.mark.parametrize('text,reply,rejected', [
+        ('Okay, 100 ringgit, betul?', 'Okay, one hundred ringgit, betul?', True),
+        ('250 ringgit sahaja.', 'two hundred fifty ringgit sahaja.', True),
+        ('100 ringgit, betul?', 'seratus ringgit, betul?', False),
+        ('Pelan One 100 ringgit, betul?', 'Pelan One seratus ringgit, betul?', False),   # the text's own "One"
+    ])
+    def test_reply_check(self, text, reply, rejected):
+        reason = rejected_reason(text, reply, number_lang=number_language(text))
+        assert (reason == 'English numbers in Malay text') is rejected
+
+    def test_english_clock_reading_passes(self):
+        text = 'Saya call balik at 3pm, nombor 2 ya?'
+        assert number_language(text) == 'ms'
+        reply = 'Saya call balik at three p m, nombor dua ya?'
+        assert rejected_reason(text, reply, clocks=['three p m'], number_lang='ms') is None
 
 
 class TestJsonSchema:
@@ -338,6 +399,17 @@ class TestLLMNormalize:
         FakeOpenAI.reply_content = '{"normalized": "emel saya ali at yopmail dot com"}'
         assert run(llm_normalize('emel saya ali@yopmail.com', base_url=fake_server, api_key='k',
                                  model='m')) == 'emel saya ali at yopmel dot com'
+
+    def test_english_numbers_for_malay_text_raise(self, fake_server):
+        FakeOpenAI.reply_content = '{"normalized": "Okay, one hundred ringgit, betul?"}'
+        with pytest.raises(LLMNormalizerError, match='English numbers in Malay text'):
+            run(llm_normalize('Okay, 100 ringgit, betul?', base_url=fake_server, api_key='k', model='m'))
+        assert NUMBER_LANGUAGE_HINT in FakeOpenAI.requests[-1]['body']['messages'][-1]['content']
+
+    def test_prompt_may_ask_for_english_numbers(self, fake_server):
+        FakeOpenAI.reply_content = '{"normalized": "one hundred ringgit, betul?"}'
+        assert run(llm_normalize('100 ringgit, betul?', base_url=fake_server, api_key='k', model='m',
+                                 prompt='read numbers in English')) == 'one hundred ringgit, betul?'
 
     def test_chinese_numerals_for_english_text_raise(self, fake_server):
         FakeOpenAI.reply_content = '{"normalized": "八 八 零 一 二 三 四 五"}'
@@ -581,6 +653,15 @@ class TestLive:
     ])
     def test_clock_time(self, text, want):
         assert run(llm_normalize(text)).rstrip('.') == want
+
+    # "100 ringgit, betul?" was spoken "one hundred ringgit" (2026-11-24)
+    @pytest.mark.parametrize('text,want', [
+        ('Okay, 100 ringgit, betul?', 'Okay, seratus ringgit, betul?'),
+        ('100 ringgit, boleh?', 'seratus ringgit, boleh?'),
+        ('100 ringgit, right?', 'one hundred ringgit, right?'),
+    ])
+    def test_number_language(self, text, want):
+        assert run(llm_normalize(text)) == want
 
     def test_passthrough(self):
         out = run(llm_normalize('apa khabar semua?'))
