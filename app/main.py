@@ -23,7 +23,8 @@ from pydantic import BaseModel, Field, AliasChoices
 from huggingface_hub import hf_hub_download
 from app.normalizer import load as load_normalizer, to_cardinal
 from app.normalizer.chinese import normalize_chinese, is_chinese_dominant, CJK_RE, KANA_RE
-from app.llm_normalizer import llm_normalize, needs_normalization, has_unspoken, mail_words, LLMNormalizerError, NormalizerMode
+from app.llm_normalizer import (llm_normalize, needs_normalization, has_unspoken, mail_words, LLMNormalizerError,
+                                NormalizerMode, fallback_language)
 from app.spoken_normalizer import normalize as spoken_normalize
 from app import tracing
 from app.fade import fade_in_pcm16
@@ -1607,11 +1608,12 @@ def normalize_malaysian_text(s, normalize_malaysian=False):
     return _post_normalize(s)
 
 
-async def normalize_request_text(data, fallback_to_rule=False):
+async def normalize_request_text(data, fallback_to_rule=False, context=()):
     """Dispatch on data.mode. llm mode keeps the same pre/post cleanup (markdown
     sanitization, replace mappings) around the LLM call. With fallback_to_rule
     (TTS path) an LLM failure degrades to the rule-based pipeline instead of
-    failing the whole speech request."""
+    failing the whole speech request. `context`: the texts of the call's earlier turns
+    (interleave_context), for a chunk whose own words cannot tell its language."""
     with tracing.span('tts.normalize', attrs={
         'normalizer.mode': data.mode.value,
         'normalizer.malaysian': data.normalize_malaysian,
@@ -1670,7 +1672,7 @@ async def normalize_request_text(data, fallback_to_rule=False):
                         'llm.timeout_s': OPENAI_TIMEOUT,
                         'llm.prompt_chars': len(prompt or ''),
                     }):
-                        s = await llm_normalize(s, prompt=prompt, keep=spans)
+                        s = await llm_normalize(s, prompt=prompt, keep=spans, context=context)
                     logging.info(f'out from llm normalizer: {s}'
                                  + (f' (prompt: {prompt!r})' if prompt else ''))
                     s = _post_normalize(s)
@@ -1681,7 +1683,8 @@ async def normalize_request_text(data, fallback_to_rule=False):
                         raise HTTPException(status_code=502, detail=f'llm normalizer failed: {e}')
                     logging.warning(f'llm normalizer failed, falling back to the spoken normalizer: {e}')
                     tracing.set_attributes(sp, {'normalizer.fallback': 'error'})
-                    s = _post_normalize(mail_words(spoken_normalize(s)))
+                    # a chunk that cannot tell its language takes the call's, as it did for the LLM
+                    s = _post_normalize(mail_words(spoken_normalize(s, fallback_language(s, context))))
                     tracing.set_attributes(sp, {'normalizer.chars_out': len(s)})
                     return s
         with tracing.span('normalize.rule'):
@@ -1705,6 +1708,18 @@ async def root():
 @app.get('/v1/audio/speaker')
 async def speaker():
     return SPEAKERS
+
+def interleave_context(key):
+    """The texts of an interleave id's stored turns, oldest first: the call's language for
+    the normalizer (llm_normalizer.number_language). Empty on any store error."""
+    if not key or interleave_store is None:
+        return ()
+    try:
+        return tuple(t.text for t in interleave_store.get(key))
+    except Exception as e:
+        logging.warning(f'interleave {key}: store read failed, normalizing without context: {e}')
+        return ()
+
 
 def load_interleave(key, voice, text, max_tokens, max_retain):
     """Read an interleave id's history and size it for this request (app/interleave.py).
@@ -1829,7 +1844,8 @@ async def tts_stream(data: TTSRequest, request: Request = None):
         # tokens are replayed from DUMMY_TOKENS_FILE; the prompt is unused.
         prompt = ''
     else:
-        s = await normalize_request_text(data, fallback_to_rule=True)
+        context = interleave_context(interleave_key) if data.mode == NormalizerMode.llm else ()
+        s = await normalize_request_text(data, fallback_to_rule=True, context=context)
         logging.info(f'normalized: {s}')
         if not re.search(r'\w', s):
             # Nothing left to say, e.g. a chunk that was only an agent's tool call: sanitizing

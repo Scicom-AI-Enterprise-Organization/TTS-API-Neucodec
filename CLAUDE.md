@@ -168,6 +168,25 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   in Malay words" fixed the numbers but narrowed the job ("5 GB" stayed "GB", 78/96 hinted truth
   rows vs 83/82); "normalize it as Malay text" read 18/18 test lines in Malay 10/10 and kept the
   hinted rows at 82/84. E2E (test instance, prod LM, phonemes): 12/12 Malay takes said "seratus".
+  **The call's language (`context_language()`, 2026-11-25):** an agent sends a reply
+  sentence by sentence, so a read-back address arrives alone: "21 Kondok Abu, Jalan Uptown,
+  60000 Kuala Lumpur." has no marker word, and prod read it "twenty one ... six zero zero zero
+  zero" in a Malay call ("Betul ke alamat ini?" was the next request). A text whose own
+  markers tie now takes the language of the newest earlier turn of its `interleave_id`
+  (`interleave_context()` in `main.py`; normalizer number words in stored turns do not vote),
+  for the number hint, the reply check and the spoken fallback (`fallback_language()`). Its
+  own words still win. No id, no change.
+  **Postcodes (`postcode_readings()`):** five digits before a place name, with an address word
+  in the text (the spoken normalizer's test), get their digit-by-digit reading handed to the
+  LLM (`POSTCODE_HINT`) and a reply without it is rejected ("postcode changed"). Why: with the
+  Malay hint a round postcode read as an amount, "60000" -> "enam puluh ribu" 5/10, "80000
+  Johor Bahru" 14/20. Only when the language is known (alone, a Malay-looking address is read
+  Malay by the LLM). The wording matters: the clock hint's "written -> spoken" list got 2/20 on
+  the prod address (the house number ran in: "dua satu kosong kosong kosong"), one sentence
+  per postcode got 140/140 over 7 Malay addresses. No truth-set row gets the hint. E2E (test
+  instance, prod LM, interleave on, phonemes): Malay call 6/6 "dua puluh satu ... enam kosong
+  kosong kosong kosong", English call 6/6 "twenty one ... six zero zero zero zero" (the LLM
+  answers in Malay there, the check rejects it, the fallback reads English).
 - `app/spoken_normalizer/`: **rule-based replica of the LLM normalizer** (`mode: "spoken"`), pure Python,
   importable anywhere: `numbers.py` (cardinals/ordinals/years/digits for en, ms, zh, ta; Tamil with sandhi,
   lakhs below 10⁷, `ta_attach()` glues case suffixes: 2024ல் → …நான்கில்), `lang.py` (script → zh/ta;

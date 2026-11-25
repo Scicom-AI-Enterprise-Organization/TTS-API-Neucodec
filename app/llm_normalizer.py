@@ -20,9 +20,10 @@ import aiohttp
 
 from app.env import OPENAI_BASE_URL, OPENAI_API_KEY, OPENAI_MODEL_NAME, OPENAI_TIMEOUT
 from app.prompt import (SYSTEM_PROMPT, EXAMPLES, JSON_SCHEMA, CALLER_PROMPT_HEADER, CLOCK_HINT_HEADER,
-                        NUMBER_LANGUAGE_HINT)
-from app.spoken_normalizer.lang import latin_scores, local_lang
-from app.spoken_normalizer.numbers import en_cardinal, ms_cardinal, zh_cardinal
+                        NUMBER_LANGUAGE_HINT, POSTCODE_HINT, POSTCODE_HINT_TAIL)
+from app.spoken_normalizer.core import _ADDRESS
+from app.spoken_normalizer.lang import _GENERATED, latin_scores, local_lang
+from app.spoken_normalizer.numbers import digits as spoken_digits, en_cardinal, ms_cardinal, zh_cardinal
 
 
 class NormalizerMode(str, Enum):
@@ -195,8 +196,8 @@ def clock_hint(text):
 # "Okay, 100 ringgit, betul?" -> "Okay, one hundred ringgit, betul?" 10 of 10, "100 ringgit,
 # boleh?" 6 of 10 (gemma-4-31b, 2026-11-24). "ringgit" belongs to both languages, and the one
 # Malay word sits at the far end. The marker words the spoken normalizer uses decide it here:
-# the sentence's (more Malay than English, so a tie such as "Total 100 ringgit." is left to
-# the LLM), then each number's nearest neighbours (lang.local_lang). When every number is
+# the sentence's (more Malay than English; a tie such as "Total 100 ringgit." takes the
+# call's earlier turns, context_language, and without them is left to the LLM), then each number's nearest neighbours (lang.local_lang). When every number is
 # Malay, the LLM is told (NUMBER_LANGUAGE_HINT) and a reply with English number words is
 # rejected. "ok" and
 # "okey" are Malay markers there but say nothing here ("RM100, ok?"), and a clock time keeps
@@ -209,20 +210,96 @@ _EN_NUMBER_WORD = re.compile(
     r'hundred|thousand|million|billion)(?![a-z])')
 
 
-def number_language(text):
-    """'ms' when `text` is Latin script and every number in it is read in Malay, else None."""
+def _marker_scores(text):
+    """latin_scores(text) without the words that say nothing about the language here: "ok"
+    and the number words a normalizer writes (a stored turn is normalized text, and its
+    "twenty one" is a misreading, not English)."""
+    words = re.findall(r"[A-Za-z][A-Za-z']*", _SHARED_WORD.sub(' ', text or ''))
+    return latin_scores(' '.join(w for w in words if w.lower() not in _GENERATED))
+
+
+def context_language(context):
+    """The conversation's language from `context` (the call's earlier turns, oldest first):
+    the newest turn whose marker words lean one way decides. None when none does."""
+    for turn in reversed(list(context or ())):
+        ms, en = _marker_scores(turn)
+        if ms != en:
+            return 'ms' if ms > en else 'en'
+    return None
+
+
+def sentence_language(text, context=()):
+    """'ms' or 'en' by `text`'s own marker words; a text that cannot tell (an address, a
+    bare amount) takes the conversation's (context_language). None when neither can."""
+    ms, en = latin_scores(_SHARED_WORD.sub(lambda m: ' ' * len(m.group(0)), text or ''))
+    if ms != en:
+        return 'ms' if ms > en else 'en'
+    return context_language(context)
+
+
+def fallback_language(text, context=()):
+    """The language to hand the spoken normalizer when the LLM fails: the conversation's
+    (context_language) for a Latin-script text whose own words cannot tell, else None (it
+    detects the language itself)."""
+    if not text or _HAN_CHAR.search(text) or re.search('[஀-௿]', text) or sentence_language(text):
+        return None
+    return context_language(context)
+
+
+def number_language(text, context=()):
+    """'ms' when `text` is Latin script and every number in it is read in Malay, else None.
+
+    `context`: the texts of the call's earlier turns (the interleave history). An agent
+    sends a reply sentence by sentence, so a read-back address comes alone:
+    "21 Kondok Abu, Jalan Uptown, 60000 Kuala Lumpur." has no marker word of either
+    language, and the LLM read it in English 10 of 10 in a Malay call (prod, 2026-11-24);
+    the question after it ("Betul ke alamat ini?") was the next request. Such a text takes
+    its language from the turns before it."""
     if not text or not re.search(r'\d', text) or _HAN_CHAR.search(text) or re.search('[஀-௿]', text):
         return None
-    text = _SHARED_WORD.sub(lambda m: ' ' * len(m.group(0)), text)       # same offsets
-    ms, en = latin_scores(text)
-    if ms <= en:
+    if sentence_language(text, context) != 'ms':
         return None
+    text = _SHARED_WORD.sub(lambda m: ' ' * len(m.group(0)), text)       # same offsets
     clocks = [m.span() for m, _ in _clock_times(text)]
     numbers = [m for m in _DIGIT_RUN.finditer(text)
                if not any(a <= m.start() < b for a, b in clocks)]
     if not numbers or any(local_lang(text, m.start(), m.end(), 'ms') != 'ms' for m in numbers):
         return None
     return 'ms'
+
+
+# Postcodes. Five digits before a place name, in a text with an address word (the spoken
+# normalizer's own test), are a postcode and read digit by digit. The LLM knows that, but a
+# round one in Malay looks like an amount: "60000 Kuala Lumpur" -> "enam puluh ribu" in 5 of
+# 10 hinted replies (gemma-4-31b, 2026-11-25; "47300", "53100" 10 of 10 digits). As with
+# clock times, the reading is worked out here, handed to the LLM (POSTCODE_HINT), and a
+# reply that does not keep it is rejected. Only when the language is known (the text's own
+# words or the call's): alone, "Lot 7, Kampung Baru, 20000 Kuala Terengganu" is read in
+# Malay by the LLM, and an English reading handed to it would only get that rejected.
+_POSTCODE = re.compile(r'(?<![A-Za-z0-9_.,])(\d{5})(?![A-Za-z0-9_])(?![.,]\d)(?=,?\s+[A-Z][a-z])')
+_MONEY_BEFORE = re.compile(r'(?i)(?:rm|myr|usd|sgd|\$)\s*$')
+
+
+def postcode_readings(text, context=()):
+    """[(written, spoken)] for every postcode in `text`, read digit by digit in the language
+    of its neighbours (the sentence's, or the conversation's when the sentence cannot tell).
+    Empty for Chinese and Tamil text, for text without an address word, and when neither
+    the text nor the call tells the language."""
+    if not text or _HAN_CHAR.search(text) or re.search('[஀-௿]', text) or not _ADDRESS.search(text):
+        return []
+    base = sentence_language(text, context)
+    if base is None:
+        return []
+    return [(m.group(1), spoken_digits(m.group(1), local_lang(text, m.start(), m.end(), base)))
+            for m in _POSTCODE.finditer(text) if not _MONEY_BEFORE.search(text[:m.start()])]
+
+
+def postcode_hint(text, context=()):
+    """The POSTCODE_HINT line for `text`, or None when it has no postcode."""
+    readings = postcode_readings(text, context)
+    if not readings:
+        return None
+    return ' '.join([*(POSTCODE_HINT.format(written=w, spoken=s) for w, s in readings), POSTCODE_HINT_TAIL])
 
 
 def _english_numbers_added(text, normalized):
@@ -232,22 +309,27 @@ def _english_numbers_added(text, normalized):
     return bool(count(normalized) - count(text))
 
 
-def build_messages(text, prompt=None):
+def build_messages(text, prompt=None, context=()):
     """`prompt` is the caller's extra context (the request's `prompt` field), put both at
     the end of the system prompt and in brackets above the text (why both: app/prompt.py);
     blank or None leaves the messages exactly as without it. A clock time in `text` adds its
     reading (clock_hint) the same two ways, and so does NUMBER_LANGUAGE_HINT when every number
-    is read in Malay (number_language; not with a caller prompt, which decides that itself).
+    is read in Malay (number_language; not with a caller prompt, which decides that itself),
+    and a postcode's digit-by-digit reading (postcode_hint; not with a caller prompt either).
+    `context` is the call's earlier turns, for a text whose words cannot tell its language.
     Other text gets the messages unchanged."""
     prompt = (prompt or '').strip()
     hint = clock_hint(text)
-    lang_hint = NUMBER_LANGUAGE_HINT if not prompt and number_language(text) == 'ms' else None
-    extra = [x for x in (prompt, hint, lang_hint) if x]
+    post = postcode_hint(text, context) if not prompt else None
+    lang_hint = NUMBER_LANGUAGE_HINT if not prompt and number_language(text, context) == 'ms' else None
+    extra = [x for x in (prompt, hint, post, lang_hint) if x]
     system = SYSTEM_PROMPT
     if prompt:
         system = f'{system}\n\n{CALLER_PROMPT_HEADER}\n{prompt}'
     if hint:
         system = f'{system}\n\n{hint}'
+    if post:
+        system = f'{system}\n\n{post}'
     if lang_hint:
         system = f'{system}\n\n{lang_hint}'
     messages = [{'role': 'system', 'content': system}]
@@ -456,10 +538,11 @@ def mail_words(normalized):
     return _MAIL_DOMAIN.sub(domain, normalized)
 
 
-def rejected_reason(text, normalized, prompt=None, keep=(), clocks=(), number_lang=None):
+def rejected_reason(text, normalized, prompt=None, keep=(), clocks=(), number_lang=None, postcodes=()):
     """Why the LLM's `normalized` reply to `text` must not be spoken, or None if it may.
 
     `clocks`: the clock_readings() handed to the LLM, each to come back whole.
+    `postcodes`: the postcode_readings() handed to the LLM, the same way.
     `number_lang`: number_language(text); 'ms' rejects English number words the text did
     not have.
     `keep`: phrases already spelled out (rules.product_names) that the reply
@@ -474,6 +557,9 @@ def rejected_reason(text, normalized, prompt=None, keep=(), clocks=(), number_la
         for spoken in clocks:
             if not _clock_kept(normalized, spoken):
                 return 'clock time changed'
+        for spoken in postcodes:
+            if not _clock_kept(normalized, spoken):
+                return 'postcode changed'
     if not re.search(r'\d', text) or re.search('[஀-௿]', text):
         return None
     if not re.search(r'\d', normalized) and not _NUMBER_WORD.search(normalized):
@@ -486,15 +572,16 @@ def rejected_reason(text, normalized, prompt=None, keep=(), clocks=(), number_la
         return 'digits left'
     if _HAN_CHAR.search(normalized) and not _CJK_TEXT.search(text):
         return 'Chinese numerals in non-Chinese text'
-    if number_lang == 'ms' and _english_numbers_added(' '.join((text, *clocks)), normalized):
+    if number_lang == 'ms' and _english_numbers_added(' '.join((text, *clocks, *postcodes)), normalized):
         return 'English numbers in Malay text'
     return None
 
 
 async def llm_normalize(text, base_url=None, api_key=None, model=None, timeout=None,
-                        prompt=None, keep=()):
+                        prompt=None, keep=(), context=()):
     """Normalize `text` via the OpenAI-compatible endpoint, with the caller's `prompt`
-    (see build_messages) if given. Raises LLMNormalizerError on any failure, including a
+    (see build_messages) if given. `context`: the texts of the call's earlier turns
+    (interleave history), for a text whose own words cannot tell its language. Raises LLMNormalizerError on any failure, including a
     reply rejected_reason() refuses (`keep` goes there); callers decide whether to fall back
     to the rule-based path."""
     base_url = (OPENAI_BASE_URL if base_url is None else base_url).rstrip('/')
@@ -507,7 +594,7 @@ async def llm_normalize(text, base_url=None, api_key=None, model=None, timeout=N
 
     payload = {
         'model': model,
-        'messages': build_messages(text, prompt),
+        'messages': build_messages(text, prompt, context),
         'temperature': 0,
         # verbalization expands the text (digits -> words); chars overestimate tokens,
         # so this cap is safe.
@@ -551,10 +638,11 @@ async def llm_normalize(text, base_url=None, api_key=None, model=None, timeout=N
     if normalized is None:
         raise LLMNormalizerError(f'unusable reply from model: {content[:500]!r}')
     normalized = mail_words(malay_hundreds(text, normalized))
-    # a clock reading handed to the LLM must come back as given (clock_hint), and Malay
-    # numbers in Malay (number_language)
+    # a clock or postcode reading handed to the LLM must come back as given (clock_hint,
+    # postcode_hint), and Malay numbers in Malay (number_language)
     reason = rejected_reason(text, normalized, prompt, keep, [s for _, s in clock_readings(text)],
-                             number_language(text))
+                             number_language(text, context),
+                             [s for _, s in postcode_readings(text, context)] if not prompt else ())
     if reason:
         raise LLMNormalizerError(f'rejected reply ({reason}): {normalized[:500]!r}')
     return normalized

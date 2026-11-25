@@ -108,6 +108,16 @@ CLOCK_HINT_HEADER = "Read the clock times in this text exactly as given here (wr
 # this one read all 18 hinted test lines in Malay 10 of 10 and kept the hinted rows at 82/84.
 NUMBER_LANGUAGE_HINT = "This text is Malay: normalize it as Malay text."
 
+# Postcodes: llm_normalizer.postcode_hint() writes one of these per postcode, with its
+# digit-by-digit reading, the same two places as the clock hint; the reply must keep it.
+# Why: a round postcode in Malay was read as an amount ("60000 Kuala Lumpur" -> "enam puluh
+# ribu", "80000 Johor Bahru" -> "lapan puluh ribu" 14 of 20). The wording matters: the
+# clock hint's "written -> spoken" list got 2 of 20 on the prod address (the house number
+# ran into it, "dua satu kosong kosong kosong") and 7 of 20 on another; this sentence got
+# 140 of 140 over 7 Malay addresses (gemma-4-31b, concurrency 20, 2026-11-25).
+POSTCODE_HINT = '{written} is a postcode: read it digit by digit, "{spoken}".'
+POSTCODE_HINT_TAIL = 'Read the other numbers as usual.'
+
 # Strict schema for OpenAI `response_format`; guided decoding guarantees the reply
 # parses as {"normalized": str}, so the output can be fed directly to the TTS LM.
 JSON_SCHEMA = {

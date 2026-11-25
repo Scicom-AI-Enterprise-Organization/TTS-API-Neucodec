@@ -30,6 +30,9 @@ from app.llm_normalizer import (
     clock_readings,
     clock_hint,
     number_language,
+    context_language,
+    fallback_language,
+    postcode_readings,
     rejected_reason,
     malay_hundreds,
     mail_words,
@@ -223,6 +226,115 @@ class TestNumberLanguage:
         assert number_language(text) == 'ms'
         reply = 'Saya call balik at three p m, nombor dua ya?'
         assert rejected_reason(text, reply, clocks=['three p m'], number_lang='ms') is None
+
+
+ADDRESS = '21 Kondok Abu, Jalan Uptown, 60000 Kuala Lumpur.'
+MALAY_CALL = ('Boleh berikan alamat pengebilan pada akaun?.',)
+
+
+class TestConversationLanguage:
+    """A chunk with no language words of its own takes the call's language from the turns
+    before it. Prod, 2026-11-24: an agent in a Malay call sent the read-back address alone
+    and it was spoken "twenty one ... six zero zero zero zero"."""
+
+    def test_address_alone_is_undecided(self):
+        assert number_language(ADDRESS) is None
+
+    def test_address_in_malay_call(self):
+        assert number_language(ADDRESS, MALAY_CALL) == 'ms'
+
+    def test_address_in_english_call(self):
+        assert number_language(ADDRESS, ('Could you give me your billing address?.',)) is None
+
+    def test_newest_turn_decides(self):
+        assert context_language(('Could you give me your address?.', 'Betul ke alamat ini?.')) == 'ms'
+        assert context_language(('Betul ke alamat ini?.', 'Could you give me your address?.')) == 'en'
+
+    def test_number_words_in_history_do_not_vote(self):
+        # a stored turn is normalized text; an earlier misreading says nothing about the call
+        assert context_language(('twenty one, Kondok Abu, six zero zero zero zero Kuala Lumpur.',)) is None
+        assert context_language(('twenty one, Kondok Abu.', 'Betul semua maklumat ini?.')) == 'ms'
+
+    def test_text_words_beat_history(self):
+        assert number_language('That is 100 ringgit, right?', MALAY_CALL) is None
+        assert number_language('100 ringgit, betul?', ('Could you confirm the amount?',)) == 'ms'
+
+    def test_hint_with_context(self):
+        msgs = build_messages(ADDRESS, context=MALAY_CALL)
+        assert NUMBER_LANGUAGE_HINT in msgs[0]['content']
+        assert NUMBER_LANGUAGE_HINT not in build_messages(ADDRESS)[0]['content']
+
+    def test_reply_check_with_context(self):
+        reply = 'twenty one Kondok Abu, Jalan Uptown, enam kosong kosong kosong kosong Kuala Lumpur.'
+        lang = number_language(ADDRESS, MALAY_CALL)
+        assert rejected_reason(ADDRESS, reply, number_lang=lang) == 'English numbers in Malay text'
+
+    @pytest.mark.parametrize('text,context,want', [
+        (ADDRESS, MALAY_CALL, 'ms'),
+        (ADDRESS, (), None),
+        ('100 ringgit, right?', MALAY_CALL, None),      # its own words decide
+        ('余额还剩RM50', MALAY_CALL, None),
+    ])
+    def test_fallback_language(self, text, context, want):
+        assert fallback_language(text, context) == want
+
+
+class TestPostcodes:
+    """A round postcode in Malay was read as an amount: "60000 Kuala Lumpur" -> "enam puluh
+    ribu" in 5 of 10 hinted replies (gemma-4-31b, 2026-11-25). Its digit-by-digit reading is
+    handed to the LLM and must come back."""
+
+    @pytest.mark.parametrize('text,context,want', [
+        (ADDRESS, MALAY_CALL, [('60000', 'enam kosong kosong kosong kosong')]),
+        (ADDRESS, ('Could you give me the billing address?.',), [('60000', 'six zero zero zero zero')]),
+        (ADDRESS, (), []),                              # language unknown: left to the LLM
+        ('21 Kondok Abu, Jalan Uptown, 60000 Kuala Lumpur. Betul ke alamat ni?', (),
+         [('60000', 'enam kosong kosong kosong kosong')]),
+        ('Your address is No 5, Jalan SS2/24, 47300 Petaling Jaya, Selangor, right?', (),
+         [('47300', 'four seven three zero zero')]),
+        ('Lot 12, Taman Melati, 53100 Kuala Lumpur.', MALAY_CALL, [('53100', 'lima tiga satu kosong kosong')]),
+        ('Alamat baru di 50450 Kuala Lumpur, betul?', (), [('50450', 'lima kosong empat lima kosong')]),
+    ])
+    def test_readings(self, text, context, want):
+        assert postcode_readings(text, context) == want
+
+    @pytest.mark.parametrize('text', [
+        'Saya ada 50000 Pelanggan.',                   # no address word
+        'Bayar RM 50000 Kuala Lumpur branch.',         # money
+        'Jalan 2, 50000 ringgit.',                     # no place name after it
+        'Jalan Ampang, 50,000 Kuala Lumpur.',          # grouped: an amount
+        'Jalan Ampang, 600000 Kuala Lumpur.',          # six digits
+        '吉隆坡 50000 Kuala Lumpur 邮编',
+    ])
+    def test_not_postcodes(self, text):
+        assert postcode_readings(text) == []
+
+    def test_hint_in_system_and_user_turn(self):
+        msgs = build_messages(ADDRESS, context=MALAY_CALL)
+        hint = ('60000 is a postcode: read it digit by digit, "enam kosong kosong kosong kosong". '
+                'Read the other numbers as usual.')
+        assert msgs[0]['content'] == f'{SYSTEM_PROMPT}\n\n{hint}\n\n{NUMBER_LANGUAGE_HINT}'
+        assert msgs[-1]['content'] == f'[{hint}]\n[{NUMBER_LANGUAGE_HINT}]\n{ADDRESS}'
+
+    def test_no_hint_with_caller_prompt(self):
+        msgs = build_messages(ADDRESS, prompt='read it in Chinese', context=MALAY_CALL)
+        assert 'postcode' not in msgs[0]['content'] + msgs[-1]['content']
+
+    def test_two_postcodes(self):
+        text = 'Pindah dari Jalan Ampang, 50450 Kuala Lumpur ke 47300 Petaling Jaya, boleh?'
+        msgs = build_messages(text)
+        assert ('50450 is a postcode: read it digit by digit, "lima kosong empat lima kosong". '
+                '47300 is a postcode: read it digit by digit, "empat tujuh tiga kosong kosong". '
+                'Read the other numbers as usual.') in msgs[0]['content']
+
+    @pytest.mark.parametrize('reply,rejected', [
+        ('dua puluh satu Kondok Abu, Jalan Uptown, enam puluh ribu Kuala Lumpur.', True),
+        ('dua puluh satu Kondok Abu, Jalan Uptown, enam kosong kosong kosong kosong Kuala Lumpur.', False),
+    ])
+    def test_reply_check(self, reply, rejected):
+        spoken = [s for _, s in postcode_readings(ADDRESS, MALAY_CALL)]
+        reason = rejected_reason(ADDRESS, reply, number_lang='ms', postcodes=spoken)
+        assert (reason == 'postcode changed') is rejected
 
 
 class TestJsonSchema:
