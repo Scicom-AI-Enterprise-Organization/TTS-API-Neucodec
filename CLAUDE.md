@@ -56,6 +56,16 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   CER unchanged. Costs ~30 ms more silence per join. `INTERLEAVE_FALLBACK` fired 0/518 (3/40 on the
   pre-interleave model).** Full write-up: `INTERLEAVE.md`.
 - `app/wrapper.py`: `CUDAGraphsWrapper` captures one CUDA graph per `(batch, token-length)` bucket.
+- `app/tiny_encoder.py`: **distilled encoder for the `/v1/audio/vc` reference clip** (`VC_ENCODER=S4` or `S2`, off by
+  default). Loads a [Tiny NeuCodec Encoder](https://huggingface.co/Scicom-intl/Tiny-NeuCodec-Encoder): w2v-BERT's layers
+  replaced by 4 or 2 retrained ones, NeuCodec's convolutional branch kept, so it writes NeuCodec's own codes and the LM
+  and decoder read them unchanged. About 2x faster per clip, and with `VC_ENCODER_FREE_TEACHER` (default on) w2v-BERT
+  leaves the GPU: 3.1 GB of weights become 1.3 GB per worker. `batch_encode()` in `main.py` branches on it and encodes
+  one clip per call (nothing padded). The same file ships in the model repository; it was checked code for code against
+  the encoder the published numbers were measured with (9,824 of 9,824). torch is imported inside the functions, so
+  `tests/test_tiny_encoder.py` (14) collects anywhere. Cloning through the LM, 194 reference clips, 1,304 takes each:
+  WER 8.4% NeuCodec, 8.5% S4 (+0.1, 95% interval -0.6 to +0.7), 9.0% S2; same voice, same level. **Not tested:
+  training an LM on these codes**, so do not encode training data with it.
 - `app/timestretch.py`: `WSOLA`, a streaming pitch-preserving time stretch behind the `speaking_rate`
   request field (alias `speed`; default `DEFAULT_SPEAKING_RATE=1.0`, range 0.5–2.0). The LM has no
   rate control, so this runs on the stitched PCM in `stream_speech()` (`time_stretch_pcm16`, after

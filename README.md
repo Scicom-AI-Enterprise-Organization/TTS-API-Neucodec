@@ -36,6 +36,7 @@ below follow the same order.
 | 4 | [PADDING_BUG.md](bench/PADDING_BUG.md) | The batcher padded windows and corrupted audio. Fixed. Graphs vs eager by load |
 | 4 | [FADE_IN.md](bench/FADE_IN.md) | ~1 response in 20 started mid-waveform with a click. 10 ms fade-in: clicks 3.3–3.8% → 0.0% |
 | 5 | [MEGAKERNEL.md](bench/MEGAKERNEL.md) | Precision/int8 do nothing; `torch.compile` fusion up to 2.27×, not enabled |
+| 5 | [Tiny-NeuCodec-Encoder](https://huggingface.co/Scicom-intl/Tiny-NeuCodec-Encoder) | Distilled encoder for the voice-cloning reference clip: NeuCodec's own codes, 2.2× faster, w2v-BERT out of GPU memory. `VC_ENCODER=S4` |
 | 6 | [PITCH_TONE_AB.md](bench/PITCH_TONE_AB.md) | "Loud and excited mid-sentence": which half is chunking, which is the model |
 | 6 | [INTERLEAVE_AB.md](bench/INTERLEAVE_AB.md) | `interleave_id` cuts the chunk-join jump ~25% |
 | 7 | [NORMALIZER.md](bench/NORMALIZER.md) | Rule vs LLM text normalization, 497 sentences |
@@ -226,6 +227,10 @@ Copy [.env_example](.env_example) to `.env` and adjust as needed. See [app/env.p
 | `MAX_BATCH_SIZE` | `16` | Max requests per batch |
 | `CUDA_GRAPH_BATCH` | `[]` (eager) | CUDA graph token-length buckets (seconds ×50). Must cover grown windows (`STREAM_MAX_CHUNK_S`+`STREAM_PAST_CONTEXT_S` ≈ 13.5 s) or oversize decodes fall back to eager, e.g. `[0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0, 10.0, 13.5]` |
 | `TORCH_COMPILE` | `false` | Use torch.compile instead of CUDA Graphs |
+| `VC_ENCODER` | ` ` (NeuCodec's own) | Encoder for the `/v1/audio/vc` reference clip. `S4` or `S2` loads a [Tiny NeuCodec Encoder](https://huggingface.co/Scicom-intl/Tiny-NeuCodec-Encoder): the same codes about 2x faster, and w2v-BERT leaves GPU memory. Also takes `org/name[/folder]` on Hugging Face or a local directory / `student.pt`. See [Faster reference encoder](#faster-reference-encoder-vc_encoder) |
+| `VC_ENCODER_REPO` | `Scicom-intl/Tiny-NeuCodec-Encoder` | Hugging Face repository a bare model name (`S4`) is looked up in |
+| `VC_ENCODER_BF16` | `true` | Run the distilled encoder's transformer in 16-bit floats (the setting it was measured with). CUDA only |
+| `VC_ENCODER_FREE_TEACHER` | `true` | With `VC_ENCODER` set, drop the w2v-BERT model NeuCodec loaded for its own encoder: 3.1 GB of weights on the GPU become 1.3 GB (S4) per worker |
 | `DEBUG_AUDIO` | `false` | Save intermediate audio chunks to disk |
 | `SENTRY_DSN` | ` ` | Sentry DSN for error tracking |
 | `ENABLE_TRACING_SPANS` | `true` | Hot-path spans: dynamic-batch wait, vLLM wait, codec decode. **Also needs an exporter configured** (`OTLP_ENDPOINT` etc.) or spans are not built at all. See [Tracing](#tracing-loki--tempo) |
@@ -916,6 +921,49 @@ curl -X POST 'http://localhost:9091/v1/audio/vc' \
   --output vc.wav
 ```
 
+#### Faster reference encoder (`VC_ENCODER`)
+
+```mermaid
+flowchart LR
+  R["reference clip"] --> E["encoder<br/>NeuCodec's own, or S4 / S2"]
+  E -->|"NeuCodec codes"| P["prompt"] --> LM["vLLM"] --> D["NeuCodec decode"]
+```
+
+The reference clip is encoded before the LM starts, so the encode is part of TTFB.
+`VC_ENCODER=S4` swaps NeuCodec's encoder for a distilled one,
+[Scicom-intl/Tiny-NeuCodec-Encoder](https://huggingface.co/Scicom-intl/Tiny-NeuCodec-Encoder).
+It writes NeuCodec's own codes, so the LM and the decoder are untouched.
+
+```bash
+VC_ENCODER=S4      # or S2. Empty (default) = NeuCodec's own encoder
+```
+
+| | NeuCodec's encoder | `S4` | `S2` |
+|---|---:|---:|---:|
+| parameters | 636M | 152M | 104M |
+| encode a 10-second clip on a GPU | 103 ms | 47.2 ms | 45.8 ms |
+| encoder and decoder weights on the GPU, per worker | 3.1 GB | 1.3 GB | 1.1 GB |
+| codes equal to NeuCodec's | 100% | 50 to 58% | 36 to 49% |
+| cloning word error rate (1,304 takes each) | 8.4% | 8.5% | 9.0% |
+| difference to NeuCodec, 95% interval | | -0.6 to +0.7 | -0.1 to +1.4 |
+| speaker similarity, difference | | +0.001 | -0.001 |
+
+Through this API, same GPU, same LM, 6.3 s reference clip, 24 requests each:
+
+| | NeuCodec's encoder | `S4` |
+|---|---:|---:|
+| TTFB of `/v1/audio/vc`, p50 | 276 ms | 247 ms |
+| TTFB, p90 | 281 ms | 253 ms |
+| transcript word error rate | 3.2% | 2.7% |
+
+- S4 was faster on 24 of 24 paired requests, by 28 ms at the median. `bench/vc_encoder_probe.py` reproduces it.
+- `S4` is the default pick: no cloning cost we could measure. `S2` is the smallest.
+- The codes are close to NeuCodec's, not equal. The cloned voice and its level are the same.
+- `/v1/audio/speech` does not use the encoder. It still gains the memory: w2v-BERT is dropped at startup (`VC_ENCODER_FREE_TEACHER`).
+- One clip per encode. A clip's codes do not depend on what it was batched with.
+- `VC_ENCODER` also takes `org/name[/folder]` on Hugging Face, or a local directory holding `student.pt`. Use a local directory when `HF_ENDPOINT` is a mirror that does not carry the repository: a model that cannot be loaded stops the app at startup.
+- Not tested: training an LM on these codes. Do not build LM training data with it.
+
 ## Gradio Demo
 
 `gradio_app.py` is a UI for poking at a running API instance, local or remote, without curl.
@@ -936,6 +984,7 @@ pytest tests/ -v                                   # everything (needs a live AP
 uv run --with pytest -- pytest tests/test_interleave.py -q        # no GPU, no deps
 uv run --with pytest -- pytest tests/test_decode_batching.py -q   # no GPU, no deps
 uv run --with pytest -- pytest tests/test_lm_inprocess.py -q      # no GPU, no vllm (fake engine)
+uv run --with pytest --with torch --with transformers --with numpy -- pytest tests/test_tiny_encoder.py -q   # no GPU, no weights
 ```
 
 | suite | count | needs |

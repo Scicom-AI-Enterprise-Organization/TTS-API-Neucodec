@@ -246,6 +246,17 @@ TOKEN_RE = re.compile(r'<\|s_(\d+)\|>')
 
 logging.info('done load audio encoder')
 
+# VC_ENCODER: a distilled encoder for the /v1/audio/vc reference clip (app/tiny_encoder.py). It writes NeuCodec's
+# own codes; the decoder and everything on the TTS path are untouched.
+tiny_encoder = None
+if VC_ENCODER:
+    from app.tiny_encoder import load_tiny_encoder
+    tiny_encoder, _tiny_info = load_tiny_encoder(
+        VC_ENCODER, codec, device, bf16=VC_ENCODER_BF16, free_teacher=VC_ENCODER_FREE_TEACHER,
+        repo=VC_ENCODER_REPO,
+    )
+    logging.info(f'VC encoder: {VC_ENCODER} {_tiny_info}')
+
 # Streams are only used by the dynamic-batching path (DYNAMIC_BATCHING=true). Guard so a
 # non-CUDA box (e.g. Ascend NPU with dev=torch.npu, or plain CPU) does not crash at import.
 if dev is not None:
@@ -1889,6 +1900,9 @@ async def tts_stream(data: TTSRequest, request: Request = None):
     )
 
 def batch_encode(ys):
+    if tiny_encoder is not None:
+        # one clip per call: nothing is padded, so a clip's codes do not depend on what it was batched with
+        return [tiny_encoder.encode_code(y).cpu() for y in ys]
     with torch.no_grad():
         ys_pt = [codec._prepare_audio(torch.tensor(ys[i])[None, None])[0, 0] for i in range(len(ys))]
         features = codec.feature_extractor(ys_pt, sampling_rate=16_000, return_tensors="pt")

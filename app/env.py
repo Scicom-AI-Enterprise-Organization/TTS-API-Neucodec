@@ -228,6 +228,15 @@ DISCONNECT_POLL_S = float(os.environ.get('DISCONNECT_POLL_S', '0.25'))
 # graph warmup and CUDA streams are skipped automatically (see app/main.py).
 DEVICE = os.environ.get('DEVICE', '')
 
+# Encoder for the reference clip of /v1/audio/vc. Empty = NeuCodec's own encoder. Set it to a Tiny NeuCodec Encoder
+# to use a distilled one (app/tiny_encoder.py): it writes NeuCodec's own codes about 2x faster, and w2v-BERT leaves
+# GPU memory (VC_ENCODER_FREE_TEACHER). Values: a model name, S4 or S2 (a folder of VC_ENCODER_REPO on Hugging Face),
+# org/name[/folder] for another repository, or a local directory / student.pt.
+VC_ENCODER = os.environ.get('VC_ENCODER', '')
+VC_ENCODER_REPO = os.environ.get('VC_ENCODER_REPO', 'Scicom-intl/Tiny-NeuCodec-Encoder')
+VC_ENCODER_BF16 = os.environ.get('VC_ENCODER_BF16', 'true').lower() == 'true'
+VC_ENCODER_FREE_TEACHER = os.environ.get('VC_ENCODER_FREE_TEACHER', 'true').lower() == 'true'
+
 # Dummy streaming-tokens mode: instead of streaming speech tokens from the vLLM LM,
 # replay a canned "<|s_N|>..." token string read from this file (e.g. tokens extracted
 # from a reference audio). Lets the decode/serving pipeline run without vLLM. Empty = off.
