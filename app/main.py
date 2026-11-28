@@ -246,6 +246,13 @@ TOKEN_RE = re.compile(r'<\|s_(\d+)\|>')
 
 logging.info('done load audio encoder')
 
+# CODEC_DECODER: another backbone for NeuCodec's decoder (app/tiny_decoder.py), loaded before any CUDA graph is
+# captured so every graph holds the new weights. Codebook, fc_post_a and the inverse STFT stay NeuCodec's.
+if CODEC_DECODER:
+    from app.tiny_decoder import load_decoder
+    load_decoder(codec, CODEC_DECODER, repo=CODEC_DECODER_REPO)
+    logging.info(f'codec decoder: {CODEC_DECODER} {codec.tiny_decoder}')
+
 # VC_ENCODER: a distilled encoder for the /v1/audio/vc reference clip (app/tiny_encoder.py). It writes NeuCodec's
 # own codes; the decoder and everything on the TTS path are untouched.
 tiny_encoder = None

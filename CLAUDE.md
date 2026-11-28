@@ -66,6 +66,15 @@ Both share one GPU: vLLM is capped with `--gpu-memory-utilization`; NeuCodec use
   `tests/test_tiny_encoder.py` (14) collects anywhere. Cloning through the LM, 194 reference clips, 1,304 takes each:
   WER 8.4% NeuCodec, 8.5% S4 (+0.1, 95% interval -0.6 to +0.7), 9.0% S2; same voice, same level. **Not tested:
   training an LM on these codes**, so do not encode training data with it.
+- `app/tiny_decoder.py`: **another backbone for NeuCodec's decoder** (`CODEC_DECODER=decoder-finetuned` or `decoder-conv`, off by
+  default; folders of [Scicom-intl/Tiny-NeuCodec](https://huggingface.co/Scicom-intl/Tiny-NeuCodec), `CODEC_DECODER_REPO`).
+  Loaded into `codec` right after NeuCodec, before any CUDA graph is captured. Only `generator.backbone` and
+  `generator.head.out` change; codebook, `fc_post_a` and the ISTFT stay NeuCodec's, so the LM, the encoder and the VC path read
+  the same codes. `decoder-finetuned` (NeuCodec's 12 transformer blocks trained further against recordings, dropout 0) keeps
+  size and speed; on prod LM tokens predicted MOS +0.107 [+0.091, +0.121] over NeuCodec, WER unchanged; on studio clips log-mel
+  to the recording 0.661 -> 0.433, MOS +0.21. `decoder-conv` (50M ConvNeXt) decodes 7.5 -> 3.1 ms per window and sounds like
+  NeuCodec. The same file as the hub's `tiny_decoder.py`; edit both. **No listening test yet, and not tried through the
+  streaming stitcher end to end:** run a test instance before turning it on in prod. `tests/test_tiny_decoder.py` (5).
 - `app/timestretch.py`: `WSOLA`, a streaming pitch-preserving time stretch behind the `speaking_rate`
   request field (alias `speed`; default `DEFAULT_SPEAKING_RATE=1.0`, range 0.5–2.0). The LM has no
   rate control, so this runs on the stitched PCM in `stream_speech()` (`time_stretch_pcm16`, after

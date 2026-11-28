@@ -231,6 +231,8 @@ Copy [.env_example](.env_example) to `.env` and adjust as needed. See [app/env.p
 | `VC_ENCODER_REPO` | `Scicom-intl/Tiny-NeuCodec-Encoder` | Hugging Face repository a bare model name (`S4`) is looked up in |
 | `VC_ENCODER_BF16` | `true` | Run the distilled encoder's transformer in 16-bit floats (the setting it was measured with). CUDA only |
 | `VC_ENCODER_FREE_TEACHER` | `true` | With `VC_ENCODER` set, drop the w2v-BERT model NeuCodec loaded for its own encoder: 3.1 GB of weights on the GPU become 1.3 GB (S4) per worker |
+| `CODEC_DECODER` | ` ` (NeuCodec's own) | Decoder backbone for every speech-token decode, from [Tiny NeuCodec](https://huggingface.co/Scicom-intl/Tiny-NeuCodec). `decoder-finetuned`: NeuCodec's backbone trained further on recordings, same size and speed, closer to the recording. `decoder-conv`: a 50M conv backbone, about 2.4x faster per decode, sounds like NeuCodec's. Both read NeuCodec's own codes. Also takes a local model folder. Not yet listening-tested in this API |
+| `CODEC_DECODER_REPO` | `Scicom-intl/Tiny-NeuCodec` | Hugging Face repository a bare decoder name is looked up in |
 | `DEBUG_AUDIO` | `false` | Save intermediate audio chunks to disk |
 | `SENTRY_DSN` | ` ` | Sentry DSN for error tracking |
 | `ENABLE_TRACING_SPANS` | `true` | Hot-path spans: dynamic-batch wait, vLLM wait, codec decode. **Also needs an exporter configured** (`OTLP_ENDPOINT` etc.) or spans are not built at all. See [Tracing](#tracing-loki--tempo) |

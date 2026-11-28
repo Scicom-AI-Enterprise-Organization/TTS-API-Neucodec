@@ -237,6 +237,13 @@ VC_ENCODER_REPO = os.environ.get('VC_ENCODER_REPO', 'Scicom-intl/Tiny-NeuCodec-E
 VC_ENCODER_BF16 = os.environ.get('VC_ENCODER_BF16', 'true').lower() == 'true'
 VC_ENCODER_FREE_TEACHER = os.environ.get('VC_ENCODER_FREE_TEACHER', 'true').lower() == 'true'
 
+# Decoder backbone for every speech-token decode (TTS and VC). Empty = NeuCodec's own. Set it to a folder of
+# CODEC_DECODER_REPO (app/tiny_decoder.py): `decoder-finetuned` is NeuCodec's backbone trained further on recordings
+# (same size and speed, closer to the recording), `decoder-conv` a 50M conv backbone (3 to 4.5x faster per decode,
+# sounds like the released decoder). Both read NeuCodec's own codes, so the LM and the encoder are untouched.
+CODEC_DECODER = os.environ.get('CODEC_DECODER', '')
+CODEC_DECODER_REPO = os.environ.get('CODEC_DECODER_REPO', 'Scicom-intl/Tiny-NeuCodec')
+
 # Dummy streaming-tokens mode: instead of streaming speech tokens from the vLLM LM,
 # replay a canned "<|s_N|>..." token string read from this file (e.g. tokens extracted
 # from a reference audio). Lets the decode/serving pipeline run without vLLM. Empty = off.
